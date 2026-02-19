@@ -2,14 +2,32 @@
 """
 openGrid 库存管理模块
 管理 openGrid tile 的库存，支持入库、扣库、撤销操作。
+
+用法:
+    python3 inventory.py list                  查看库存
+    python3 inventory.py add 7x5:6 10x5:3   入库
+    python3 inventory.py deduct 7x5:3         扣库
+    python3 inventory.py undo                 撤销上次操作
+
+    # 使用自定义库存文件
+    python3 inventory.py -f test.json list
+    python3 inventory.py --file test.json add 6x6:5
 """
 
 import json
 import os
 import sys
+import argparse
 from datetime import datetime
 
-INVENTORY_FILE = os.path.join(os.path.dirname(__file__), 'inventory.json')
+DEFAULT_INVENTORY_FILE = os.path.join(os.path.dirname(__file__), 'inventory.json')
+INVENTORY_FILE = DEFAULT_INVENTORY_FILE  # 可通过 -f 指定
+
+
+def set_inventory_file(path):
+    """设置当前使用的库存文件路径"""
+    global INVENTORY_FILE
+    INVENTORY_FILE = path
 
 
 def _load_data():
@@ -191,33 +209,57 @@ def parse_items(args):
 
 
 def main():
-    if len(sys.argv) < 2:
+    parser = argparse.ArgumentParser(
+        description="openGrid 库存管理",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  python3 inventory.py list                  查看库存
+  python3 inventory.py add 7x5:6 10x5:3   入库
+  python3 inventory.py deduct 7x5:3         扣库
+  python3 inventory.py undo                 撤销上次操作
+  python3 inventory.py -f test.json list     使用自定义库存文件
+        """
+    )
+    parser.add_argument('-f', '--file', type=str, default=None,
+                        help='指定库存文件路径 (默认: inventory.json)')
+    parser.add_argument('command', nargs='?', help='命令: list, add, deduct, undo')
+    parser.add_argument('args', nargs='*', help='命令参数')
+
+    args = parser.parse_args()
+
+    # 设置库存文件
+    if args.file:
+        set_inventory_file(args.file)
+
+    cmd = args.command
+
+    if cmd is None:
         print("用法:")
         print("  python3 inventory.py list              查看库存")
-        print("  python3 inventory.py add 7x5:6 10x5:3  入库")
+        print("  python3 inventory.py add 7x5:6 10x5:3 入库")
         print("  python3 inventory.py deduct 7x5:3       扣库")
-        print("  python3 inventory.py undo               撤销上次操作")
+        print("  python3 inventory.py undo              撤销上次操作")
+        print("  python3 inventory.py -f test.json list 使用自定义库存文件")
         sys.exit(1)
-
-    cmd = sys.argv[1]
 
     if cmd == "list":
         print_inventory()
     elif cmd == "add":
-        if len(sys.argv) < 3:
+        if not args.args:
             print("用法: python3 inventory.py add 7x5:6 10x5:3")
             sys.exit(1)
-        items = parse_items(sys.argv[2:])
+        items = parse_items(args.args)
         result = add_inventory(items, reason="手动入库")
         print("入库完成:")
         for key, count in items.items():
             print(f"  {key}: +{count}")
         print_inventory()
     elif cmd == "deduct":
-        if len(sys.argv) < 3:
+        if not args.args:
             print("用法: python3 inventory.py deduct 7x5:3")
             sys.exit(1)
-        items = parse_items(sys.argv[2:])
+        items = parse_items(args.args)
         try:
             result = deduct_inventory(items, reason="手动扣库")
             print("扣库完成:")

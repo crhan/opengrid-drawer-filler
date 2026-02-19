@@ -119,12 +119,16 @@ def format_batch_print_plan(batch_results, inventory, optimized_schemes=None):
     # 使用优化后的方案（如果提供）来计算库存使用
     schemes_to_use = optimized_schemes if optimized_schemes else [r.get('scheme', {}) for r in batch_results]
 
+    # 使用递减的库存计算（与批量优化逻辑一致）
+    remaining_inv = dict(inventory)
+
     for i, scheme in enumerate(schemes_to_use):
         drawer_name = f"抽屉{i+1}"
         tiles = scheme.get('tiles', [])
         grid = batch_results[i].get('grid', (0, 0)) if i < len(batch_results) else (0, 0)
+        copies = batch_results[i].get('copies', 1) if i < len(batch_results) else 1
 
-        lines.append(f"\n{drawer_name} ({grid[0]}x{grid[1]}格子):")
+        lines.append(f"\n{drawer_name} ({grid[0]}x{grid[1]}格子) x{copies}份:")
 
         tile_counts = {}
         for w, h in tiles:
@@ -134,12 +138,15 @@ def format_batch_print_plan(batch_results, inventory, optimized_schemes=None):
         from_inv = {}
         need_print = {}
         for key, count in tile_counts.items():
-            available = inventory.get(key, 0)
-            used = min(count, available)
+            # 需求数量 = 单份数量 × 份数
+            needed = count * copies
+            available = remaining_inv.get(key, 0)  # 使用剩余库存
+            used = min(needed, available)
             if used > 0:
                 from_inv[key] = used
                 total_from_inv[key] = total_from_inv.get(key, 0) + used
-            remaining = count - used
+                remaining_inv[key] = remaining_inv.get(key, 0) - used  # 更新剩余库存
+            remaining = needed - used
             if remaining > 0:
                 need_print[key] = remaining
                 total_need_print[key] = total_need_print.get(key, 0) + remaining
@@ -687,14 +694,16 @@ def scenario_4d():
     check1 = drawer1_cost == 0
     check2 = drawer2_cost > 0  # 抽屉2需要打印
     check3 = total_used <= 4  # 库存4个
-    check4 = inv2.get('6x9', 0) == 2  # 抽屉2使用2个库存
+    # 11x13格子最多只能包含1个6x9，所以抽屉2只能用1个库存
+    check4 = inv2.get('6x9', 0) >= 1  # 抽屉2至少使用1个库存
 
     print("验证项:")
     print(f'  [{"✓" if check1 else "✗"}] 抽屉1成本 = 0: {check1} (实际={drawer1_cost})')
     print(f'  [{"✓" if check2 else "✗"}] 抽屉2成本 > 0: {check2} (实际={drawer2_cost})')
     print(f'  [{"✓" if check3 else "✗"}] 库存使用不超过提供数量({total_used}<=4): {check3}')
-    print(f'  [{"✓" if check4 else "✗"}] 抽屉2使用2个库存: {check4} (实际={inv2.get("6x9", 0)})')
+    print(f'  [{"✓" if check4 else "✗"}] 抽屉2使用至少1个库存: {check4} (实际={inv2.get("6x9", 0)})')
     print()
+    print("注: 11x13格子最多只能包含1个6x9，剩余1个库存")
 
     result_final = all([check1, check2, check3, check4])
     print(f"最终判断: {'✓ 场景4d通过' if result_final else '✗ 场景4d失败'}")
@@ -728,7 +737,7 @@ def scenario_5():
     print(f"原方案成本(无库存): {cost_no_inv}")
     print()
 
-    result = replan_with_inventory(tiles, inventory, copies=1)
+    result = replan_with_inventory(tiles, inventory, copies=1, grid=grid)
 
     if result:
         print("重新规划结果:")
@@ -830,14 +839,25 @@ def scenario_6a():
     check3 = result['cost'] < cost_no_inv
     check4 = total_used <= 3  # 库存3个
 
+    # 格子数量一致性检查
+    drawer1_cells_consistent, drawer1_cells_before, drawer1_cells_after = check_cell_count_consistency(
+        scheme1['tiles'], result['schemes'][0]['tiles']
+    )
+    drawer2_cells_consistent, drawer2_cells_before, drawer2_cells_after = check_cell_count_consistency(
+        scheme2['tiles'], result['schemes'][1]['tiles']
+    )
+    all_cells_consistent = drawer1_cells_consistent and drawer2_cells_consistent
+    check5 = all_cells_consistent
+
     print("验证项:")
     print(f'  [{"✓" if check1 else "✗"}] 抽屉1成本 > 0（使用库存但仍需打印）: {check1} (实际={drawer1_cost})')
     print(f'  [{"✓" if check2 else "✗"}] 抽屉2成本 > 0: {check2} (实际={drawer2_cost})')
     print(f'  [{"✓" if check3 else "✗"}] 总成本 < 无库存成本: {check3}')
     print(f'  [{"✓" if check4 else "✗"}] 库存使用不超过提供数量({total_used}<=3): {check4}')
+    print(f'  [{"✓" if check5 else "✗"}] 格子数量一致: {check5} (抽屉1:{drawer1_cells_before}={drawer1_cells_after}, 抽屉2:{drawer2_cells_before}={drawer2_cells_after})')
     print()
 
-    result_final = all([check1, check2, check3, check4])
+    result_final = all([check1, check2, check3, check4, check5])
     print(f"最终判断: {'✓ 场景6a通过' if result_final else '✗ 场景6a失败'}")
     return result_final
 
@@ -989,13 +1009,13 @@ def scenario_7a():
     )
     check1 = drawer1_cost > 0  # 抽屉1使用库存但仍需打印
     check2 = result['cost'] < cost_no_inv  # 总成本降低
-    check3 = total_used <= 3  # 库存3个
+    check3 = total_used == 3  # 库存恰好使用3个
     check4 = all_cells_consistent  # 格子数量一致
 
     print("验证项:")
     print(f'  [{"✓" if check1 else "✗"}] 抽屉1成本 > 0（使用库存但仍需打印）: {check1} (实际={drawer1_cost})')
     print(f'  [{"✓" if check2 else "✗"}] 总成本 < 无库存成本: {check2}')
-    print(f'  [{"✓" if check3 else "✗"}] 库存使用不超过提供数量({total_used}<=3): {check3}')
+    print(f'  [{"✓" if check3 else "✗"}] 库存使用恰好3个({total_used}==3): {check3}')
     print(f'  [{"✓" if check4 else "✗"}] 格子数量一致: {check4} (抽屉1:{drawer1_cells_before}={drawer1_cells_after}, 抽屉2:{drawer2_cells_before}={drawer2_cells_after}, 抽屉3:{drawer3_cells_before}={drawer3_cells_after})')
     print()
 
@@ -1093,6 +1113,119 @@ def scenario_7b():
     return result_final
 
 
+def scenario_8():
+    """场景 8：6抽屉 + 双库存尺寸（8x8 和 6x7）"""
+    print("\n" + "="*60)
+    print("场景 8: 6抽屉 + 双库存尺寸")
+    print("="*60)
+    print("假设:")
+    print("  抽屉1: 265x360 × 2")
+    print("  抽屉2: 325x360 × 2")
+    print("  抽屉3: 315x360 × 2")
+    print("  库存: 8x8 有 5 个, 6x7 有 5 个")
+    print()
+
+    # 准备批量数据
+    batch_results = []
+    configs = [
+        (265, 360, 2),
+        (325, 360, 2),
+        (315, 360, 2),
+    ]
+
+    for w, d, copies in configs:
+        grid = get_grid_dimensions(w, d)
+        scheme = find_best_scheme(grid[0], grid[1], inventory=None, verbose=False)
+        batch_results.append({
+            'width': w,
+            'depth': d,
+            'grid': grid,
+            'scheme': scheme,
+            'copies': copies
+        })
+
+    inventory = {'8x8': 5, '6x7': 5}
+
+    # 无库存总成本
+    no_inv_cost = sum(
+        calculate_print_cost(r['scheme']['tiles'], {}, r['copies'])[0]
+        for r in batch_results
+    )
+    print(f"无库存总成本: {no_inv_cost}")
+    print()
+
+    # 批量优化
+    result = optimize_batch_global(batch_results, inventory=inventory)
+    print(f"优化后总成本: {result['cost']}")
+    print()
+
+    print(format_batch_print_plan(batch_results, inventory, optimized_schemes=result['schemes']))
+    print()
+
+    # 详细分析
+    drawer_costs = []
+    drawer_inv = []
+
+    # 按顺序计算每个抽屉的库存使用（模拟批量优化过程）
+    remaining_inv = dict(inventory)
+    for i, r in enumerate(batch_results):
+        scheme = result['schemes'][i]
+        # 使用剩余库存计算当前抽屉的库存使用
+        cost, from_inv, need_print = calculate_print_cost(scheme['tiles'], remaining_inv, r['copies'])
+        drawer_costs.append(cost)
+        drawer_inv.append(from_inv)
+        # 更新剩余库存
+        for k, v in from_inv.items():
+            remaining_inv[k] = remaining_inv.get(k, 0) - v
+        print(f"抽屉{i+1} ({r['width']}x{r['depth']} x{r['copies']}):")
+        print(f"  方案: {scheme['tiles']}")
+        print(f"  成本: {cost}")
+        print(f"  库存使用: {from_inv}")
+        print(f"  需要打印: {need_print}")
+        print()
+
+    # 汇总库存使用
+    total_inv = {}
+    for inv in drawer_inv:
+        for k, v in inv.items():
+            total_inv[k] = total_inv.get(k, 0) + v
+
+    print("--- 汇总 ---")
+    print(f"库存使用汇总: {total_inv}")
+    print(f"库存提供: {inventory}")
+    print(f"库存剩余: {{'8x8': {inventory['8x8'] - total_inv.get('8x8', 0)}, '6x7': {inventory['6x7'] - total_inv.get('6x7', 0)}}}")
+    print()
+
+    # 验证
+    check1 = result['cost'] < no_inv_cost  # 成本降低
+    check2 = total_inv.get('8x8', 0) <= inventory['8x8']  # 8x8不超库存
+    check3 = total_inv.get('6x7', 0) <= inventory['6x7']  # 6x7不超库存
+    check4 = all(c > 0 for c in drawer_costs)  # 所有抽屉都有打印成本
+
+    # 格子数量一致性检查
+    all_cells_consistent = True
+    cells_details = []
+    for i, r in enumerate(batch_results):
+        original_tiles = r['scheme']['tiles']
+        optimized_tiles = result['schemes'][i]['tiles']
+        consistent, before, after = check_cell_count_consistency(original_tiles, optimized_tiles)
+        all_cells_consistent = all_cells_consistent and consistent
+        cells_details.append(f"抽屉{i+1}:{before}={after}")
+    check5 = all_cells_consistent
+
+    print("验证项:")
+    print(f'  [{"✓" if check1 else "✗"}] 总成本降低: {check1} ({result["cost"]:.1f} < {no_inv_cost})')
+    print(f'  [{"✓" if check2 else "✗"}] 8x8库存不超限: {check2} ({total_inv.get("8x8", 0)} <= {inventory["8x8"]})')
+    print(f'  [{"✓" if check3 else "✗"}] 6x7库存不超限: {check3} ({total_inv.get("6x7", 0)} <= {inventory["6x7"]})')
+    print(f'  [{"✓" if check4 else "✗"}] 所有抽屉都有打印: {check4}')
+    print(f'  [{"✓" if check5 else "✗"}] 格子数量一致: {check5} ({", ".join(cells_details)})')
+    print()
+
+    result_final = check1 and check2 and check3 and check4 and check5
+    print(f"最终判断: {'✓ 场景8通过' if result_final else '✗ 场景8失败'}")
+    return result_final
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="库存感知评分系统 v2 验证脚本",
@@ -1129,12 +1262,13 @@ def main():
         '6b': ('场景6b: 批量+重新规划(5个)', scenario_6b),
         '7a': ('场景7a: 3抽屉+重新规划(3个)', scenario_7a),
         '7b': ('场景7b: 3抽屉+重新规划(5个)', scenario_7b),
+        '8': ('场景8: 6抽屉+双库存尺寸', scenario_8),
     }
 
     # 列出所有场景
     if args.list:
         print("可用场景:")
-        for key in ['1', '2', '3a', '3b', '3c', '4a', '4b', '4c', '4d', '5', '6a', '6b', '7a', '7b']:
+        for key in ['1', '2', '3a', '3b', '3c', '4a', '4b', '4c', '4d', '5', '6a', '6b', '7a', '7b', '8']:
             name, _ = all_scenarios[key]
             print(f"  {key}: {name}")
         return
@@ -1162,7 +1296,7 @@ def main():
     results = []
 
     # 按顺序运行场景
-    for key in ['1', '2', '3a', '3b', '3c', '4a', '4b', '4c', '4d', '5', '6a', '6b', '7a', '7b']:
+    for key in ['1', '2', '3a', '3b', '3c', '4a', '4b', '4c', '4d', '5', '6a', '6b', '7a', '7b', '8']:
         if key in scenarios_to_run:
             name, func = all_scenarios[key]
             passed = func()
