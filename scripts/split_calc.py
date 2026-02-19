@@ -1007,13 +1007,7 @@ def main():
         output_json(width, depth, scheme, copies, stats)
 
 if __name__ == "__main__":
-    # 检查初始化状态
-    from config import is_initialized, reload_config
-    if not is_initialized():
-        print("尚未初始化，正在启动初始化流程...")
-        import init
-        init.main()
-        # 重新加载配置
-        reload_config()
-
+    from config import ensure_initialized, reload_config
+    ensure_initialized()
+    reload_config()
     main()
