@@ -37,3 +37,6 @@ Thumbs.db
 
 # Worktrees
 .worktrees/
+
+# Inventory (user-specific data)
+scripts/inventory.json
