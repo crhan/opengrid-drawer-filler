@@ -145,21 +145,33 @@ def find_best_scheme(x, y, verbose=False):
         rotated = _find_best_scheme_impl(y, x, verbose)
         if rotated is not None:
             # 旋转结果：将 x_splits 和 y_splits 交换
+            # 同时规范化瓦片：如果 x 超过 MAX_X 但 y 在范围内，则交换
+            normalized_tiles = []
+            for w, h in rotated['tiles']:
+                if w > MAX_X and h <= MAX_Y:
+                    normalized_tiles.append((h, w))
+                else:
+                    normalized_tiles.append((w, h))
+
             rotated_swapped = {
                 'x_parts': rotated['y_parts'],
                 'y_parts': rotated['x_parts'],
                 'x_splits': rotated['y_splits'],
                 'y_splits': rotated['x_splits'],
-                'tiles': [(w, h) for h, w in rotated['tiles']],
+                'tiles': normalized_tiles,
                 'unique_sizes': rotated['unique_sizes'],
                 'tile_count': rotated['tile_count'],
                 'balance': rotated['balance']
             }
-            # 比较：独特尺寸少 > 瓦片数少 > 均衡度好
-            if best is None or \
+
+            # 验证规范化后的瓦片是否有效
+            rotated_valid = all(validate_tile(w, h) for w, h in normalized_tiles)
+
+            # 比较：只有当旋转结果更优且有效时才采用
+            if rotated_valid and (best is None or \
                rotated_swapped['unique_sizes'] < best['unique_sizes'] or \
                (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] < best['tile_count']) or \
-               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] == best['tile_count'] and rotated_swapped['balance'] < best['balance']):
+               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] == best['tile_count'] and rotated_swapped['balance'] < best['balance'])):
                 best = rotated_swapped
 
     return best

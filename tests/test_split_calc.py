@@ -446,6 +446,78 @@ class TestBatchMode:
         merged = merge_and_optimize([result, None])
         assert len(merged) > 0
 
+    def test_tile_sharing_optimization(self):
+        """测试瓦片共享优化：多个抽屉使用相同瓦片尺寸时应合并"""
+        # 325x365 和 315x365 都会产生 6x7 的瓦片
+        result1 = calculate_single(325, 365, copies=1)
+        result2 = calculate_single(315, 365, copies=1)
+
+        merged = merge_and_optimize([result1, result2])
+
+        # 找到 6x7 或类似的共享瓦片
+        shared_tiles = [(k, v) for k, v in merged.items() if len(v['by_drawer']) > 1]
+        # 如果有共享瓦片，验证它们被正确合并
+        for (w, h), info in merged.items():
+            # 验证 total = 所有 by_drawer 的 total 之和
+            calculated_total = sum(item['total'] for item in info['by_drawer'])
+            assert info['total'] == calculated_total
+
+    def test_print_count_with_multiple_copies(self):
+        """测试多份数时的打印次数计算"""
+        # 假设一个瓦片需要 3 stack，1 份 = 3 stacks
+        # 2 份 = 6 stacks
+        result1 = calculate_single(400, 400, copies=2)
+        merged = merge_and_optimize([result1])
+
+        # 验证份数正确应用
+        for (w, h), info in merged.items():
+            # 每份的瓦片数 * 份数 = total
+            tiles_per_copy = sum(item['tiles_per_copy'] for item in info['by_drawer'])
+            copies = info['by_drawer'][0]['copies']
+            assert info['total'] == tiles_per_copy * copies
+
+    def test_merge_result_tile_dimensions(self):
+        """测试合并结果的瓦片尺寸正确性"""
+        results = [
+            calculate_single(265, 365, copies=1),
+            calculate_single(325, 365, copies=1),
+            calculate_single(315, 365, copies=1),
+        ]
+
+        merged = merge_and_optimize(results)
+
+        # 验证所有瓦片尺寸都是有效的
+        for (w, h), info in merged.items():
+            assert validate_tile(w, h), f"Invalid tile size: {w}x{h}"
+
+    def test_all_drawers_included(self):
+        """测试所有抽屉都被包含在合并结果中"""
+        results = [
+            calculate_single(265, 365, copies=2),
+            calculate_single(325, 365, copies=3),
+            calculate_single(315, 365, copies=1),
+        ]
+
+        merged = merge_and_optimize(results)
+
+        # 统计所有来源抽屉
+        all_drawers = set()
+        for (w, h), info in merged.items():
+            for drawer_info in info['by_drawer']:
+                all_drawers.add(drawer_info['size'])
+
+        # 应该包含所有 3 个抽屉尺寸
+        assert len(all_drawers) == 3
+        assert "265×365" in all_drawers
+        assert "325×365" in all_drawers
+        assert "315×365" in all_drawers
+
+    def test_no_solution_for_too_small(self):
+        """测试太小尺寸无法生成方案"""
+        # 50mm = 1 格，小于最小瓦片 2x2
+        result = calculate_single(50, 50)
+        assert result is None
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
