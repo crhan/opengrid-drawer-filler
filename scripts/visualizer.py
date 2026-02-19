@@ -129,6 +129,49 @@ class Visualizer:
 
         return (int((r + m) * 255), int((g + m) * 255), int((b + m) * 255))
 
-    def generate_tiles_image(self, tiles_data):
+    def generate_tiles_image(self, tiles_data, title="瓦片清单"):
         """生成瓦片清单图"""
-        raise NotImplementedError
+        if not tiles_data:
+            return None
+
+        # 计算需要的网格
+        n_tiles = len(tiles_data)
+        cols = min(4, n_tiles)  # 最多4列
+        rows = (n_tiles + cols - 1) // cols
+
+        # 格子大小
+        cell_size = 120
+        padding = 30
+        label_height = 30
+
+        width = cols * cell_size + (cols + 1) * padding
+        height = rows * (cell_size + label_height) + 2 * padding + 50  # +50 for title
+
+        image = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(image)
+
+        # 获取所有尺寸用于颜色映射
+        all_sizes = [t["width"] * t["height"] for t in tiles_data]
+
+        # 绘制标题
+        draw.text((width // 2 - 30, 10), title, fill='black')
+
+        # 绘制每个瓦片
+        for i, tile in enumerate(tiles_data):
+            col = i % cols
+            row = i // cols
+
+            x = padding + col * (cell_size + padding)
+            y = 50 + padding + row * (cell_size + label_height + padding)
+
+            # 绘制瓦片方块
+            color = self._get_color_for_size(tile["width"], tile["height"], all_sizes)
+            color_rgb = self._hsl_to_rgb(color)
+
+            draw.rectangle([x, y, x + cell_size, y + cell_size], fill=color_rgb, outline='black')
+
+            # 绘制标签
+            label = f"{tile['width']}x{tile['height']}\n×{tile['count']}"
+            draw.text((x + 10, y + cell_size + 5), label, fill='black')
+
+        return image
