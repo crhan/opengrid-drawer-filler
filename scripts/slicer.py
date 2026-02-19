@@ -343,9 +343,102 @@ def open_in_slicer(stl_paths, slicer="bambu"):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='openGrid STL 生成和切片工具')
+    parser = argparse.ArgumentParser(
+        description='openGrid STL 生成和切片工具',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # 生成 STL
+  python3 scripts/slicer.py -g 7x5x3 10x5x3
+  python3 scripts/slicer.py --generate 7x5x3
+
+  # 切片 STL
+  python3 scripts/slicer.py --slice file1.stl file2.stl --slicer orca
+  python3 scripts/slicer.py -s file.stl --slicer bambu --output my_project
+
+  # 在 slicer 中打开
+  python3 scripts/slicer.py -o file.stl --slicer orca
+        """
+    )
+
+    parser.add_argument('-g', '--generate', nargs='*', metavar='DIMENSION',
+                        help='生成 STL，格式: WxHxS (如 7x5x3)')
+    parser.add_argument('-s', '--slice', nargs='+', metavar='FILE',
+                        help='切片 STL 文件')
+    parser.add_argument('-o', '--open', nargs='+', metavar='FILE',
+                        help='在 slicer 中打开 STL 文件')
+    parser.add_argument('--slicer', type=str, default='bambu',
+                        choices=['bambu', 'orca'], help='选择切片器')
+    parser.add_argument('--output', '-O', type=str,
+                        help='输出文件名（用于切片）')
+    parser.add_argument('-v', '--verbose', action='store_true', help='详细输出')
+    parser.add_argument('-f', '--force', action='store_true', help='强制重新生成')
+    parser.add_argument('--print-settings', type=str,
+                        help='Bambu Studio 打印设置文件')
+    parser.add_argument('--machine-settings', type=str,
+                        help='Bambu Studio 机器设置文件')
+
     args = parser.parse_args()
-    print("slicer.py 已创建")
+
+    if args.generate is None and args.slice is None and args.open is None:
+        parser.print_help()
+        return
+
+    verbose = args.verbose
+    force = args.force
+    slicer = args.slicer
+
+    # 处理生成请求
+    if args.generate:
+        for dim in args.generate:
+            # 解析维度: 支持 7x5x3 格式
+            if 'x' in dim:
+                parts = dim.split('x')
+                if len(parts) == 3:
+                    w, h, s = map(int, parts)
+                else:
+                    print(f"警告: 忽略无效格式 '{dim}'，期望 WxHxS")
+                    continue
+            else:
+                # 无效格式，跳过
+                print(f"警告: 忽略无效格式 '{dim}'，期望 WxHxS")
+                continue
+
+            print(f"生成: {w}x{h}, {s} stacks")
+            path, err = generate_stl(w, h, s, verbose, force)
+            if err and err != "exists":
+                print(f"  失败: {err}")
+            elif err == "exists":
+                print(f"  已存在（跳过）")
+            else:
+                print(f"  完成: {path}")
+
+    # 处理切片请求
+    if args.slice:
+        output_name = args.output or "opengrid_output"
+        print(f"切片: {len(args.slice)} 个文件 -> {output_name}")
+
+        if slicer == "orca":
+            result, err = slice_with_orca(args.slice, output_name, verbose)
+        else:
+            result, err = slice_with_bambu(
+                args.slice, output_name,
+                args.print_settings, args.machine_settings, verbose
+            )
+
+        if err:
+            print(f"切片失败: {err}")
+        else:
+            print(f"切片完成: {result}")
+
+    # 处理打开请求
+    if args.open:
+        print(f"在 {slicer} 中打开 {len(args.open)} 个文件")
+        success, err = open_in_slicer(args.open, slicer)
+        if success:
+            print("已打开")
+        else:
+            print(f"打开失败: {err}")
 
 
 if __name__ == "__main__":
