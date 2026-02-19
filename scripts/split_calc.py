@@ -253,6 +253,60 @@ def _find_best_scheme_impl(x, y, verbose=False):
     return best
 
 
+def find_all_schemes(x, y):
+    """生成某个抽屉的所有有效分割方案"""
+    # 先检查是否需要分割
+    if validate_tile(x, y):
+        return [{
+            'x_parts': 1,
+            'y_parts': 1,
+            'x_splits': [x],
+            'y_splits': [y],
+            'tiles': [(x, y)],
+        }]
+
+    all_schemes = []
+
+    # 遍历所有分割组合
+    for x_parts in range(2, 8):
+        for y_parts in range(1, 5):
+            total_tiles = x_parts * y_parts
+            if total_tiles > 20:
+                continue
+
+            x_splits = split_with_limit(x, x_parts, MAX_X)
+            if not x_splits:
+                continue
+
+            y_splits = split_with_limit(y, y_parts, MAX_Y)
+            if not y_splits:
+                continue
+
+            for xs in x_splits:
+                for ys in y_splits:
+                    tiles = []
+                    valid = True
+                    for xd in xs:
+                        for yd in ys:
+                            if not validate_tile(xd, yd):
+                                valid = False
+                                break
+                            tiles.append((xd, yd))
+
+                    if not valid:
+                        continue
+
+                    all_schemes.append({
+                        'x_parts': x_parts,
+                        'y_parts': y_parts,
+                        'x_splits': xs,
+                        'y_splits': ys,
+                        'tiles': tiles,
+                    })
+
+    return all_schemes
+
+
 def calculate_filament_and_time(cells, stacks):
     """计算耗材和打印时间"""
     main = cells * FILAMENT_MAIN_PER_CELL * stacks

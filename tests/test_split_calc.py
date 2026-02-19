@@ -15,6 +15,7 @@ from split_calc import (
     calc_balance,
     calc_scheme_balance,
     find_best_scheme,
+    find_all_schemes,
     calculate_single,
     merge_and_optimize,
     calculate_filament_and_time,
@@ -283,6 +284,28 @@ class TestFindBestScheme:
         scheme = find_best_scheme(17, 15)
         expected = scheme['x_parts'] * scheme['y_parts']
         assert scheme['tile_count'] == expected
+
+
+class TestFindAllSchemes:
+    """find_all_schemes 函数测试"""
+
+    def test_returns_list(self):
+        schemes = find_all_schemes(17, 15)
+        assert isinstance(schemes, list)
+        assert len(schemes) > 0
+
+    def test_all_schemes_valid(self):
+        schemes = find_all_schemes(17, 15)
+        for scheme in schemes:
+            for w, h in scheme['tiles']:
+                assert validate_tile(w, h)
+
+    def test_single_tile_no_split_needed(self):
+        # 10x10 fits within 10x11, no split needed
+        schemes = find_all_schemes(10, 10)
+        assert len(schemes) == 1
+        assert schemes[0]['x_parts'] == 1
+        assert schemes[0]['y_parts'] == 1
 
 
 class TestCalculateFilamentAndTime:
