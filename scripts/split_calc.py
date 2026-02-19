@@ -129,7 +129,11 @@ def calc_scheme_balance(xs, ys):
 def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """直接寻找最优方案，找到1种尺寸就停止
 
-    修复: 考虑旋转对称性，搜索两个方向并取最优解
+    Args:
+        x, y: 格子数
+        verbose: 是否打印详细信息
+        inventory: 库存字典 {"6x7": 3, ...}，None 表示不使用库存
+        copies: 打印份数
     """
     # 首先检查是否需要分割
     if validate_tile(x, y):
@@ -140,10 +144,130 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             'y_splits': [y],
             'tiles': [(x, y)],
             'unique_sizes': 1,
-            'tile_count': 1
+            'tile_count': 1,
+            # 添加库存信息
+            'cost': 0,
+            'from_inventory': {},
+            'need_print': {} if inventory is None else {f"{x}x{y}": 1}
         }
 
-    # 搜索原始方向
+    # 如果有库存，收集所有方案并评分
+    if inventory:
+        all_schemes = find_all_schemes(x, y)
+        scored_schemes = []
+
+        for scheme in all_schemes:
+            cost, from_inv, need_print = calculate_print_cost(
+                scheme['tiles'], inventory, copies
+            )
+
+            # 计算独特尺寸和瓦片数
+            unique_sizes = len(set(scheme['tiles']))
+            total_tiles = len(scheme['tiles'])
+
+            # 计算均衡度
+            balance = calc_scheme_balance(scheme['x_splits'], scheme['y_splits'])
+
+            scored_schemes.append({
+                'scheme': scheme,
+                'cost': cost,
+                'from_inventory': from_inv,
+                'need_print': need_print,
+                'unique_sizes': unique_sizes,
+                'total_tiles': total_tiles,
+                'balance': balance
+            })
+
+        # 多维度排序：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
+        scored_schemes.sort(key=lambda s: (
+            s['cost'],
+            s['unique_sizes'],
+            s['total_tiles'],
+            s['balance']
+        ))
+
+        best_scored = scored_schemes[0]
+        best = best_scored['scheme'].copy()
+        best['cost'] = best_scored['cost']
+        best['from_inventory'] = best_scored['from_inventory']
+        best['need_print'] = best_scored['need_print']
+        best['unique_sizes'] = best_scored['unique_sizes']
+        best['tile_count'] = best_scored['total_tiles']
+        best['balance'] = best_scored['balance']
+
+        # 旋转对称检查：当有库存时也需要考虑旋转
+        if x != y:
+            # 旋转输入，收集旋转后的所有方案
+            rotated_schemes = find_all_schemes(y, x)
+            scored_rotated = []
+
+            for scheme in rotated_schemes:
+                # 旋转瓦片
+                rotated_tiles = []
+                for w, h in scheme['tiles']:
+                    if w > MAX_X and h <= MAX_Y:
+                        rotated_tiles.append((h, w))
+                    else:
+                        rotated_tiles.append((w, h))
+
+                # 检查旋转后的瓦片是否有效
+                if not all(validate_tile(w, h) for w, h in rotated_tiles):
+                    continue
+
+                cost, from_inv, need_print = calculate_print_cost(
+                    rotated_tiles, inventory, copies
+                )
+
+                unique_sizes = len(set(rotated_tiles))
+                total_tiles = len(rotated_tiles)
+                balance = calc_scheme_balance(scheme['y_splits'], scheme['x_splits'])
+
+                scored_rotated.append({
+                    'scheme': scheme,
+                    'rotated_tiles': rotated_tiles,
+                    'cost': cost,
+                    'from_inventory': from_inv,
+                    'need_print': need_print,
+                    'unique_sizes': unique_sizes,
+                    'total_tiles': total_tiles,
+                    'balance': balance
+                })
+
+            if scored_rotated:
+                # 排序旋转后的方案
+                scored_rotated.sort(key=lambda s: (
+                    s['cost'],
+                    s['unique_sizes'],
+                    s['total_tiles'],
+                    s['balance']
+                ))
+
+                best_rotated = scored_rotated[0]
+
+                # 比较原方案和旋转方案
+                if (best_rotated['cost'] < best['cost'] or
+                    (best_rotated['cost'] == best['cost'] and best_rotated['unique_sizes'] < best['unique_sizes']) or
+                    (best_rotated['cost'] == best['cost'] and best_rotated['unique_sizes'] == best['unique_sizes'] and best_rotated['total_tiles'] < best['tile_count']) or
+                    (best_rotated['cost'] == best['cost'] and best_rotated['unique_sizes'] == best['unique_sizes'] and best_rotated['total_tiles'] == best['tile_count'] and best_rotated['balance'] < best['balance'])):
+
+                    # 使用旋转后的方案
+                    best = {
+                        'x_parts': scheme['y_parts'],
+                        'y_parts': scheme['x_parts'],
+                        'x_splits': scheme['y_splits'],
+                        'y_splits': scheme['x_splits'],
+                        'tiles': best_rotated['rotated_tiles'],
+                        'unique_sizes': best_rotated['unique_sizes'],
+                        'tile_count': best_rotated['total_tiles'],
+                        'balance': best_rotated['balance'],
+                        'cost': best_rotated['cost'],
+                        'from_inventory': best_rotated['from_inventory'],
+                        'need_print': best_rotated['need_print']
+                    }
+
+        return best
+
+    # 无库存时使用原始逻辑
     best = _find_best_scheme_impl(x, y, verbose)
 
     # 如果 x != y，搜索旋转后的方向并比较
