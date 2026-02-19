@@ -96,6 +96,30 @@ class TestFindBestScheme:
         expected = scheme['x_parts'] * scheme['y_parts']
         assert scheme['tile_count'] == expected
 
+    def test_15x15_square(self):
+        """测试 15x15 正方形"""
+        scheme = find_best_scheme(15, 15)
+        assert scheme is not None
+        assert scheme['tile_count'] > 0
+
+    def test_18x20_rectangle(self):
+        """测试 18x20 长方形"""
+        scheme = find_best_scheme(18, 20)
+        assert scheme is not None
+
+    def test_8x9_small(self):
+        """测试 8x9 小尺寸"""
+        scheme = find_best_scheme(8, 9)
+        assert scheme is not None
+
+    def test_all_tiles_valid_for_scheme(self):
+        """验证所有方案返回的瓦片都有效"""
+        test_sizes = [(10, 10), (15, 15), (17, 20), (20, 18), (8, 12)]
+        for x, y in test_sizes:
+            scheme = find_best_scheme(x, y)
+            for w, h in scheme['tiles']:
+                assert validate_tile(w, h)
+
 
 class TestFindAllSchemes:
     """find_all_schemes 函数测试"""
