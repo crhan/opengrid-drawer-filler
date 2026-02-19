@@ -799,14 +799,14 @@ def parse_batch_input(input_str):
     return items
 
 
-def calculate_single(width, depth, copies=1, verbose=False):
+def calculate_single(width, depth, copies=1, verbose=False, inventory=None):
     """计算单个尺寸的分割方案"""
     x, y = get_grid_dimensions(width, depth)
 
     if x < MIN_TILE or y < MIN_TILE:
         return None
 
-    scheme = find_best_scheme(x, y, verbose)
+    scheme = find_best_scheme(x, y, verbose, inventory=inventory, copies=copies)
 
     if not scheme:
         return None
@@ -863,7 +863,7 @@ def merge_and_optimize(batch_results):
     return all_tiles
 
 
-def print_batch_plan(batch_results, merged_tiles):
+def print_batch_plan(batch_results, merged_tiles, inventory=None):
     """打印批量打印计划"""
     print("=" * 70)
     print("openGrid 批量打印计划 - 合并优化版")
@@ -959,6 +959,32 @@ def print_batch_plan(batch_results, merged_tiles):
     print(f"总打印次数: {total_prints}次")
     print(f"总打印时间: ~{format_time(total_time)}")
 
+    # 显示库存利用情况
+    if inventory:
+        print("\n" + "=" * 70)
+        print("--- 库存利用 ---")
+        print("=" * 70)
+        total_from_inv = 0
+        deduct_items = {}
+        for (w, h), info in sorted_tiles:
+            key = f"{w}x{h}"
+            needed = info['total']
+            available = inventory.get(key, 0)
+            used = min(needed, available)
+            if used > 0:
+                deduct_items[key] = used
+                total_from_inv += used
+                remaining_print = needed - used
+                print(f"  {key}: 需要 {needed}，库存取用 {used}，需新打印 {remaining_print}")
+            else:
+                print(f"  {key}: 需要 {needed}，全部需新打印")
+
+        if deduct_items:
+            confirm = input("\n接受方案并扣除库存？(y/n): ").strip().lower()
+            if confirm == 'y':
+                deduct_inventory(deduct_items, reason="批量方案")
+                print("库存已更新")
+
     return {
         'total_main': total_main,
         'total_support': total_support,
@@ -968,7 +994,7 @@ def print_batch_plan(batch_results, merged_tiles):
     }
 
 
-def batch_mode(input_str, verbose=False):
+def batch_mode(input_str, verbose=False, use_inventory=True):
     """批量计算模式"""
     import re
 
@@ -1015,10 +1041,15 @@ def batch_mode(input_str, verbose=False):
         print(f"  {w}×{d}mm × {c}份")
     print()
 
+    # 加载库存
+    inv = {}
+    if HAS_INVENTORY and use_inventory:
+        inv = load_inventory()
+
     # 计算每个尺寸的分割方案
     batch_results = []
     for width, depth, copies in items:
-        result = calculate_single(width, depth, copies, verbose)
+        result = calculate_single(width, depth, copies, verbose, inventory=inv if inv else None)
         if result:
             batch_results.append(result)
         else:
@@ -1032,7 +1063,7 @@ def batch_mode(input_str, verbose=False):
     merged = merge_and_optimize(batch_results)
 
     # 打印计划
-    stats = print_batch_plan(batch_results, merged)
+    stats = print_batch_plan(batch_results, merged, inventory=inv if inv else None)
 
     return stats
 
@@ -1114,7 +1145,7 @@ def main():
 
     # 批量模式处理
     if args.batch:
-        batch_mode(args.batch, args.verbose)
+        batch_mode(args.batch, args.verbose, use_inventory=not args.no_inventory)
         return
 
     # 列出预设
