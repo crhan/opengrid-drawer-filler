@@ -114,3 +114,87 @@ def undo_last():
     data["log"] = log
     _save_data(data)
     return inv
+
+
+def print_inventory():
+    """打印当前库存"""
+    inv = load_inventory()
+    if not inv:
+        print("库存为空")
+        return
+    print("当前库存:")
+    for key in sorted(inv.keys()):
+        w, h = key.split('x')
+        count = inv[key]
+        print(f"  {w}×{h}: {count} stack")
+    total = sum(inv.values())
+    print(f"\n共 {len(inv)} 种尺寸, {total} stack")
+
+
+def parse_items(args):
+    """解析 '7x5:6 10x5:3' 格式"""
+    import re
+    items = {}
+    for arg in args:
+        match = re.match(r'(\d+)x(\d+):(\d+)', arg)
+        if match:
+            key = f"{match.group(1)}x{match.group(2)}"
+            items[key] = int(match.group(3))
+        else:
+            print(f"格式错误: {arg} (应为 WxH:N，如 7x5:6)")
+            sys.exit(1)
+    return items
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("用法:")
+        print("  python3 inventory.py list              查看库存")
+        print("  python3 inventory.py add 7x5:6 10x5:3  入库")
+        print("  python3 inventory.py deduct 7x5:3       扣库")
+        print("  python3 inventory.py undo               撤销上次操作")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "list":
+        print_inventory()
+    elif cmd == "add":
+        if len(sys.argv) < 3:
+            print("用法: python3 inventory.py add 7x5:6 10x5:3")
+            sys.exit(1)
+        items = parse_items(sys.argv[2:])
+        result = add_inventory(items, reason="手动入库")
+        print("入库完成:")
+        for key, count in items.items():
+            print(f"  {key}: +{count}")
+        print_inventory()
+    elif cmd == "deduct":
+        if len(sys.argv) < 3:
+            print("用法: python3 inventory.py deduct 7x5:3")
+            sys.exit(1)
+        items = parse_items(sys.argv[2:])
+        try:
+            result = deduct_inventory(items, reason="手动扣库")
+            print("扣库完成:")
+            for key, count in items.items():
+                print(f"  {key}: -{count}")
+            print_inventory()
+        except ValueError as e:
+            print(f"错误: {e}")
+            sys.exit(1)
+    elif cmd == "undo":
+        try:
+            result = undo_last()
+            print("已撤销上次操作")
+            print_inventory()
+        except ValueError as e:
+            print(f"错误: {e}")
+            sys.exit(1)
+    else:
+        print(f"未知命令: {cmd}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
