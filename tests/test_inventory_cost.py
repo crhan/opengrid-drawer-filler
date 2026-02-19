@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from split_calc import calculate_print_cost, calculate_filament_and_time, get_grid_dimensions, find_best_scheme, replan_with_inventory
+from split_calc import calculate_print_cost, calculate_filament_and_time, get_grid_dimensions, find_best_scheme, replan_with_inventory, optimize_batch_global
 
 
 class TestCalculatePrintCost:
@@ -133,6 +133,44 @@ class TestReplanWithInventory:
             # 如果成功重新规划，比较成本
             original_cost, _, _ = calculate_print_cost(tiles, {}, copies=1)
             assert result['cost'] < original_cost, "Replanned cost should be lower"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+
+class TestBatchOptimizationWithInventory:
+    """测试批量优化与库存集成"""
+
+    def test_optimize_batch_with_inventory(self):
+        """批量优化时考虑库存成本"""
+        # 模拟两个抽屉的结果
+        batch_results = [
+            {'grid': (9, 12), 'scheme': {'tiles': [(6, 9)], 'tile_count': 1}, 'copies': 1},
+            {'grid': (11, 13), 'scheme': {'tiles': [(6, 11)], 'tile_count': 1}, 'copies': 1},
+        ]
+
+        # 有库存时，应该使用库存成本进行优化
+        inventory = {'6x9': 1, '6x11': 1}
+
+        result = optimize_batch_global(batch_results, inventory=inventory)
+
+        assert result is not None
+        assert 'schemes' in result
+        assert 'cost' in result  # 应该有成本信息
+
+    def test_optimize_batch_without_inventory(self):
+        """无库存时使用原始逻辑"""
+        batch_results = [
+            {'grid': (9, 12), 'scheme': {'tiles': [(6, 9)], 'tile_count': 1}, 'copies': 1},
+            {'grid': (11, 13), 'scheme': {'tiles': [(6, 11)], 'tile_count': 1}, 'copies': 1},
+        ]
+
+        result = optimize_batch_global(batch_results)  # 无 inventory
+
+        assert result is not None
+        assert 'schemes' in result
+        assert 'total_prints' in result
 
 
 if __name__ == "__main__":

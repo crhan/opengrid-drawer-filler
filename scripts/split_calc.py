@@ -940,16 +940,39 @@ def calculate_total_prints(batch_results, schemes):
     return total_prints, details
 
 
-def optimize_batch_global(batch_results):
-    """贪心 + 局部搜索优化"""
+def optimize_batch_global(batch_results, inventory=None):
+    """贪心 + 局部搜索优化
+
+    Args:
+        batch_results: 批量计算结果列表
+        inventory: 可选库存字典 {"6x7": 3, ...}
+    """
     if not batch_results:
         return None
 
-    # 步骤1：各自找最优作为初始解
-    initial_schemes = [r['scheme'] if r else None for r in batch_results]
+    # 步骤1：各自找最优作为初始解（如果有库存，传入库存）
+    initial_schemes = []
+    for r in batch_results:
+        if r is None:
+            initial_schemes.append(None)
+            continue
+        x, y = r['grid']
+        # 如果有库存，使用 find_best_scheme 获取最优方案
+        if inventory:
+            scheme = find_best_scheme(x, y, inventory=inventory)
+            initial_schemes.append(scheme)
+        else:
+            initial_schemes.append(r['scheme'] if r else None)
 
-    # 计算初始解的打印次数
-    initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
+    # 计算初始解的成本（打印次数或库存成本）
+    if inventory:
+        initial_cost = sum(
+            calculate_print_cost(s['tiles'], inventory, 1)[0]
+            for s in initial_schemes if s
+        )
+    else:
+        initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
+        initial_cost = initial_total
 
     # 步骤2：为每个抽屉生成所有方案
     all_options = []
@@ -962,10 +985,10 @@ def optimize_batch_global(batch_results):
         all_options.append(schemes)
 
     # 步骤3：找最优组合
-    best_schemes = initial_schemes
-    best_total = initial_total
+    best_schemes = initial_schemes.copy()
+    best_cost = initial_cost
 
-    # 对每个抽屉，尝试其他方案，看能否减少打印次数
+    # 对每个抽屉，尝试其他方案，看能否减少成本
     for i, options in enumerate(all_options):
         if len(options) <= 1:
             continue
@@ -979,17 +1002,27 @@ def optimize_batch_global(batch_results):
             if None in test_schemes:
                 continue
 
-            total, _ = calculate_total_prints(batch_results, test_schemes)
-            if total < best_total:
+            # 计算新组合的成本
+            if inventory:
+                total = sum(
+                    calculate_print_cost(s['tiles'], inventory, 1)[0]
+                    for s in test_schemes if s
+                )
+            else:
+                total, _ = calculate_total_prints(batch_results, test_schemes)
+
+            if total < best_cost:
                 best_schemes = test_schemes
-                best_total = total
+                best_cost = total
 
     # 返回优化结果
     return {
         'schemes': best_schemes,
-        'total_prints': best_total,
-        'initial_prints': initial_total,
-        'improved': best_total < initial_total
+        'total_prints': best_cost if not inventory else None,
+        'cost': best_cost if inventory else None,
+        'initial_prints': initial_cost if not inventory else None,
+        'initial_cost': initial_cost if inventory else None,
+        'improved': best_cost < initial_cost
     }
 
 
