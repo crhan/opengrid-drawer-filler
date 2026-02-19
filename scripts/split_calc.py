@@ -12,6 +12,12 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+try:
+    from inventory import load_inventory, deduct_inventory, get_inventory_match
+    HAS_INVENTORY = True
+except ImportError:
+    HAS_INVENTORY = False
+
 TILE_SIZE = 28    # mm
 MAX_X = 10        # 最大X方向格数
 MAX_Y = 11        # 最大Y方向格数
@@ -556,7 +562,7 @@ def generate_all_stls(scheme, copies, verbose=False, force=False):
     return results
 
 
-def print_plan(width, depth, scheme, copies=1, verbose=False):
+def print_plan(width, depth, scheme, copies=1, verbose=False, inventory_match=None):
     """打印分割方案"""
     x, y = get_grid_dimensions(width, depth)
 
@@ -652,6 +658,24 @@ def print_plan(width, depth, scheme, copies=1, verbose=False):
             total_support += support_g
             total_time += time_min
             total_prints += 1
+
+    # 显示库存利用情况
+    if inventory_match and (inventory_match['from_inventory'] or inventory_match['need_print']):
+        print()
+        print("--- 库存利用 ---")
+        for size_key in sorted(set(
+            list(inventory_match['from_inventory'].keys()) +
+            list(inventory_match['need_print'].keys())
+        )):
+            from_inv = inventory_match['from_inventory'].get(size_key, 0)
+            need = inventory_match['need_print'].get(size_key, 0)
+            total = from_inv + need
+            if from_inv > 0 and need > 0:
+                print(f"{size_key}: 需要 {total}，库存取用 {from_inv}，需新打印 {need}")
+            elif from_inv > 0:
+                print(f"{size_key}: 需要 {total}，全部从库存取用")
+            else:
+                print(f"{size_key}: 需要 {total}，全部需新打印")
 
     print()
     print("--- 耗材估算 ---")
@@ -1084,6 +1108,7 @@ def main():
     parser.add_argument('--print-settings', type=str, help='Bambu Studio 打印设置文件 (.json)')
     parser.add_argument('--machine-settings', type=str, help='Bambu Studio 机器/耗材设置文件 (.json)')
     parser.add_argument('-v', '--verbose', action='store_true', help='详细输出')
+    parser.add_argument('--no-inventory', action='store_true', help='不使用库存')
     parser.add_argument('--list-presets', action='store_true', help='列出所有预设')
     args = parser.parse_args()
 
@@ -1136,7 +1161,18 @@ def main():
         print("错误: 抽屉尺寸太小，无法放置最小瓦片")
         sys.exit(1)
 
-    scheme = find_best_scheme(x, y, args.verbose)
+    # 加载库存
+    inv = {}
+    inventory_match = None
+    if HAS_INVENTORY and not args.no_inventory:
+        inv = load_inventory()
+        if inv:
+            scheme = find_best_scheme(x, y, args.verbose, inventory=inv, copies=copies)
+            inventory_match = get_inventory_match(scheme['tiles'], copies, inv)
+        else:
+            scheme = find_best_scheme(x, y, args.verbose)
+    else:
+        scheme = find_best_scheme(x, y, args.verbose)
 
     if not scheme:
         print("错误: 无法生成有效方案!")
@@ -1145,7 +1181,20 @@ def main():
     print(f"最优: {scheme['unique_sizes']}种尺寸, {scheme['tile_count']}块瓦片")
     print()
 
-    stats = print_plan(width, depth, scheme, copies, args.verbose)
+    stats = print_plan(width, depth, scheme, copies, args.verbose, inventory_match)
+
+    # 交互确认扣库
+    if inventory_match and inventory_match['from_inventory'] and not args.json:
+        confirm = input("\n接受此方案并扣除库存？(y/n): ").strip().lower()
+        if confirm == 'y':
+            deduct_inventory(
+                inventory_match['from_inventory'],
+                reason=f"用于 {width}x{depth}mm 抽屉 x{copies}"
+            )
+            print("库存已更新")
+        else:
+            print("已取消，库存未变更")
+            return
 
     if args.json:
         output_json(width, depth, scheme, copies, stats)
