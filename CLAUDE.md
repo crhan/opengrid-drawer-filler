@@ -27,13 +27,13 @@ cd {skill_dir}
 pytest
 
 # Run specific test file
-pytest tests/test_split_calc.py
+pytest tests/test_scheme.py
 
 # Run specific test class
-pytest tests/test_split_calc.py::TestFindBestScheme
+pytest tests/test_scheme.py::TestFindBestScheme
 
 # Run specific test
-pytest tests/test_split_calc.py::TestFindBestScheme::test_no_split_needed
+pytest tests/test_scheme.py::TestFindBestScheme::test_no_split_needed
 
 # Run split calculator (interactive mode)
 python3 scripts/split_calc.py
@@ -65,8 +65,17 @@ python3 scripts/split_calc.py 485 425 -j
 **Key Functions:**
 - `get_grid_dimensions(width_mm, depth_mm)` - Calculate available grid cells
 - `find_best_scheme(x, y)` - Find optimal split scheme using priority: minimize unique sizes → minimize total tiles → maximize balance
+- `find_all_schemes(x, y)` - Generate all valid split schemes for a drawer size
 - `split_with_limit(n, parts, max_val)` - Generate valid splits with pruning
 - `validate_tile(w, h)` - Validate tile dimensions
+- `calculate_single(width, depth, copies)` - Calculate scheme for single drawer
+- `merge_and_optimize(results)` - Merge multiple drawer results, optimize shared tiles
+- `optimize_batch_global(results)` - Global optimization across all drawers to minimize print count
+
+**Batch Mode:**
+- Supports multiple drawer sizes with copies
+- Automatically merges shared tile sizes across drawers
+- `optimize_batch_global()` considers cross-drawer optimization to reduce total print count
 
 **Rotation Symmetry:**
 - Algorithm considers both original and rotated orientations (x,y vs y,x)
@@ -105,3 +114,11 @@ Tests use pytest. Test files are organized by domain:
 - `tests/test_integration.py` - End-to-end tests with real drawer sizes
 - `tests/test_batch.py` - Batch calculation and merge optimization
 - `tests/test_inventory.py` - Inventory management (if present)
+
+## Project Files
+
+- `SKILL.md` - Skill definition file (used by Claude Code skill system)
+- `scripts/split_calc.py` - Core calculation logic (main entry point)
+- `scripts/slicer.py` - STL generation using OpenSCAD
+- `scripts/inventory.py` - Inventory management for tile tracking
+- `scripts/3mf_utils.py` - 3MF project file utilities
