@@ -145,6 +145,30 @@ def main():
         else:
             output_text(plan_data)
 
+    # 如果有多个文件且指定了批量模式
+    if len(args.files) > 1 and (args.png or args.html):
+        # 生成合并的瓦片清单图
+        all_tiles = []
+        for filepath in args.files:
+            if not os.path.exists(filepath):
+                continue
+            plan_data = load_plan_from_file(filepath)
+            tiles = plan_data.get("scheme", {}).get("tiles", [])
+            drawer = plan_data.get("drawer", {})
+            for tile in tiles:
+                tile_copy = tile.copy()
+                tile_copy["source"] = f"{drawer.get('width', 0)}×{drawer.get('depth', 0)}"
+                all_tiles.append(tile_copy)
+
+        merged_dir = os.path.join(args.output, "merged")
+        os.makedirs(merged_dir, exist_ok=True)
+
+        v = Visualizer()
+        merged_img = v.generate_tiles_image(all_tiles, title="合并瓦片清单")
+        merged_path = os.path.join(merged_dir, "merged_tiles.png")
+        merged_img.save(merged_path)
+        print(f"已保存: {merged_path}")
+
 
 if __name__ == "__main__":
     main()
