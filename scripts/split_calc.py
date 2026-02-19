@@ -321,6 +321,63 @@ def calculate_filament_and_time(cells, stacks):
     return main, support, time_min
 
 
+# 换料惩罚时间（分钟）
+SWAP_PENALTY = 60
+
+
+def calculate_print_cost(tiles: list[tuple[int, int]], inventory: dict[str, int], copies: int = 1) -> tuple[int, dict, dict]:
+    """
+    计算打印成本及库存匹配情况
+
+    Args:
+        tiles: 瓦片列表 [(w,h), ...]
+        inventory: 库存字典 {"6x7": 3, ...}
+        copies: 打印份数
+
+    Returns: (cost, from_inventory, need_print)
+        - cost: 总成本（分钟），0 表示完全使用库存
+        - from_inventory: 从库存取的瓦片 {"6x7": 2, ...}
+        - need_print: 需要新打印的瓦片 {"6x7": 1, ...}
+    """
+    # 统计每种尺寸的需求
+    tile_counts = {}
+    for w, h in tiles:
+        key = f"{w}x{h}"
+        tile_counts[key] = tile_counts.get(key, 0) + 1
+
+    from_inventory = {}
+    need_print = {}
+
+    # 计算库存匹配
+    for key, count_per_copy in tile_counts.items():
+        needed = count_per_copy * copies
+        available = inventory.get(key, 0)
+        used = min(needed, available)
+
+        if used > 0:
+            from_inventory[key] = used
+        remaining = needed - used
+        if remaining > 0:
+            need_print[key] = remaining
+
+    # 计算需打印部分的成本
+    total_time = 0
+    total_prints = sum(need_print.values())
+
+    for key, count in need_print.items():
+        if count > 0:
+            w, h = map(int, key.split('x'))
+            cells = w * h
+            _, _, time_min = calculate_filament_and_time(cells, count)
+            total_time += time_min
+
+    # 加上换料惩罚（每次打印间隔惩罚）
+    if total_prints > 1:
+        total_time += (total_prints - 1) * SWAP_PENALTY
+
+    return total_time, from_inventory, need_print
+
+
 def format_time(minutes):
     """格式化打印时间"""
     hours = int(minutes // 60)
