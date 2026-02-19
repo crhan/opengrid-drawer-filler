@@ -198,7 +198,6 @@ def generate_all_stls(scheme, copies, verbose=False, force=False):
 
     return results
 
-
 def slice_with_bambu(stl_paths, output_name, print_settings=None, machine_settings=None, verbose=False):
     """使用 Bambu Studio 切片 STL 文件
 
@@ -328,6 +327,9 @@ def open_in_slicer(stl_paths, slicer="bambu"):
     Returns:
         (success, error): 成功时返回(True, None)，失败时返回(False, error)
     """
+    if not stl_paths:
+        return False, "No STL files provided"
+
     if slicer == "orca":
         cmd = [ORCA_SLICER_PATH] + list(stl_paths)
     else:
