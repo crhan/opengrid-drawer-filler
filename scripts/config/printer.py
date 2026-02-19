@@ -8,7 +8,7 @@ PRINTER_PRESETS = {
     "p1s": {"bed_x": 256, "bed_y": 256, "max_z": 256},
     "x1c": {"bed_x": 256, "bed_y": 256, "max_z": 256},
     "x1e": {"bed_x": 256, "bed_y": 256, "max_z": 256},
-    "h2d": {"bed_x": 300, "bed_y": 300, "max_z": 300},
+    "h2d": {"bed_x": 300, "bed_y": 320, "max_z": 325},
 }
 
 PRINTER_NAMES = {

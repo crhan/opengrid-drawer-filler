@@ -29,7 +29,7 @@ _config = None
 
 def get_config_path():
     """Get config file path"""
-    skill_dir = Path(__file__).parent.parent
+    skill_dir = Path(__file__).parent.parent.parent
     return skill_dir / "config.yaml"
 
 
