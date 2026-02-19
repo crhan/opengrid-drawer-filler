@@ -10,20 +10,20 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
 ## 快速开始
 
 ```bash
-# 方式 1：交互式（推荐）
-python3 scripts/split_calc.py
+# 方式 1：交互式工作流（推荐）
+python3 scripts/interactive.py
 
 # 方式 2：指定尺寸
-python3 scripts/split_calc.py 485 425
+python3 scripts/interactive.py 485x425
 
 # 方式 3：指定份数
-python3 scripts/split_calc.py 485 425 -c 3
+python3 scripts/interactive.py 485x425x2
 
-# 方式 4：批量计算（自动合并优化）
-python3 scripts/split_calc.py -b "265x365:2 325x365:2 315x365:2"
+# 方式 4：传统方式（split_calc）
+python3 scripts/split_calc.py
 
-# 方式 5：生成 STL（使用 slicer.py）
-python3 scripts/slicer.py -g 7x5x3 10x5x3 --force
+# 方式 5：指定尺寸（传统）
+python3 scripts/split_calc.py 485 425
 ```
 
 ## 初始化
@@ -44,6 +44,40 @@ python3 scripts/slicer.py -g 7x5x3 10x5x3 --force
 3. 编辑 config.yaml，设置 `initialized: true` 和打印机型号
 
 未配置时运行会显示详细步骤。
+
+## 交互式工作流
+
+交互式工作流会自动：
+1. 展示当前配置（打印机、库存、输出路径）
+2. 生成多方案对比（纯数学、库存感知、打印次数约束）
+3. 用户确认后自动生成 STL 和 HTML 打印计划
+4. HTML 打开时提示库存扣减
+
+### 使用方式
+
+```bash
+# 交互模式
+python3 scripts/interactive.py
+
+# 指定尺寸
+python3 scripts/interactive.py 485x425
+
+# 指定尺寸和份数
+python3 scripts/interactive.py 485x425x2
+```
+
+### 配置项目目录
+
+在 `config.yaml` 中设置项目根目录：
+
+```yaml
+projects_dir: "~/opengrid_projects/"
+```
+
+项目会自动创建在 `~/opengrid_projects/YYYY-MM-DD-项目名/` 目录下，包含：
+- `project.yaml` - 项目配置
+- `plan.html` - 打印计划
+- `stl/` - STL 文件链接
 
 ## 批量计算模式
 

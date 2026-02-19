@@ -9,6 +9,7 @@ from pathlib import Path
 DEFAULTS = {
     "initialized": False,
     "output": {"stl_dir": "~/3D打印/opengrid/"},
+    "projects_dir": "~/opengrid_projects/",  # 新增
     "printer": {"model": "p1p"},
     "opengrid": {
         "tile_type": "Full",
@@ -75,6 +76,12 @@ def get_printer_config():
     if model == "custom":
         return printer.get("custom", PRINTER_PRESETS["p1p"])
     return PRINTER_PRESETS.get(model, PRINTER_PRESETS["p1p"])
+
+
+def get_projects_dir():
+    """获取项目根目录"""
+    config = load_config()
+    return Path(config.get("projects_dir", "~/opengrid_projects/")).expanduser()
 
 
 def reload_config():
