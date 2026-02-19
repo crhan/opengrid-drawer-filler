@@ -127,52 +127,55 @@ Y方向: 15 = 5 + 5 + 5
 
 ## 端到端工作流
 
-### 方式 1：自动生成 STL
+### 方式 1：计算方案
 
 ```bash
-python3 scripts/split_calc.py 485 425 -g
+python3 scripts/split_calc.py 485 425 -j
 ```
 
-这将：
-1. 计算最优分割方案
-2. 自动调用 opengrid-stl-generator 生成每个尺寸的 STL
-3. 输出保存路径
+### 方式 2：生成 STL（使用 slicer.py）
 
-### 方式 2：分步执行
+根据上一步输出的方案，生成对应的 STL：
 
-1. **计算方案**
-   ```bash
-   python3 scripts/split_calc.py 485 425 -j
-   ```
+```bash
+# 假设方案输出 7x5:3 和 10x5:3
+python3 scripts/slicer.py -g 7x5x3 10x5x3
+```
 
-2. **查看 JSON 输出**
-   ```json
-   {
-     "drawer": { "width": 485, "depth": 425 },
-     "grid": { "x": 17, "y": 15 },
-     "scheme": {
-       "x_parts": 2,
-       "y_parts": 3,
-       "x_splits": [7, 10],
-       "y_splits": [5, 5, 5],
-       "tiles": [
-         {"width": 7, "height": 5, "count": 3},
-         {"width": 10, "height": 5, "count": 3}
-       ]
-     },
-     "stats": {
-       "unique_sizes": 2,
-       "total_tiles": 6,
-       "total_filament_g": 307,
-       "total_time_min": 211
-     }
-   }
-   ```
+### 方式 3：在 slicer 中打开或切片
 
-3. **手动生成 STL**
-   对每个独特尺寸调用 opengrid-stl-generator：
-   - 7×5: Board_Width=7, Board_Height=5, Stack_Count=3
-   - 10×5: Board_Width=10, Board_Height=5, Stack_Count=3
+```bash
+# 在 Orca Slicer 中打开
+python3 scripts/slicer.py -o path/to/file.stl --slicer orca
+
+# 或者切片
+python3 scripts/slicer.py -s path/to/file.stl --slicer orca --output my_project
+```
+
+### JSON 输出示例
+
+```json
+{
+  "drawer": { "width": 485, "depth": 425 },
+  "grid": { "x": 17, "y": 15 },
+  "scheme": {
+    "x_parts": 2,
+    "y_parts": 3,
+    "x_splits": [7, 10],
+    "y_splits": [5, 5, 5],
+    "tiles": [
+      {"width": 7, "height": 5, "count": 3},
+      {"width": 10, "height": 5, "count": 3}
+    ]
+  },
+  "stats": {
+    "unique_sizes": 2,
+    "total_tiles": 6,
+    "total_filament_g": 307,
+    "total_time_min": 211
+  }
+}
+```
 
 ## 算法规则
 
