@@ -15,10 +15,13 @@ from split_calc import (
     calc_balance,
     calc_scheme_balance,
     find_best_scheme,
+    find_all_schemes,
     calculate_single,
     merge_and_optimize,
     calculate_filament_and_time,
     format_time,
+    calculate_total_prints,
+    optimize_batch_global,
     TILE_SIZE,
     MAX_X,
     MAX_Y,
@@ -285,47 +288,26 @@ class TestFindBestScheme:
         assert scheme['tile_count'] == expected
 
 
-class TestInventoryAwareScheme:
-    """库存感知分割测试"""
+class TestFindAllSchemes:
+    """find_all_schemes 函数测试"""
 
-    @pytest.mark.skip(reason="Inventory feature not implemented yet")
-    def test_no_inventory_same_as_before(self):
-        """无库存时行为不变"""
-        scheme_no_inv = find_best_scheme(17, 15)
-        scheme_with_empty = find_best_scheme(17, 15, inventory={})
-        assert scheme_no_inv['x_splits'] == scheme_with_empty['x_splits']
-        assert scheme_no_inv['y_splits'] == scheme_with_empty['y_splits']
+    def test_returns_list(self):
+        schemes = find_all_schemes(17, 15)
+        assert isinstance(schemes, list)
+        assert len(schemes) > 0
 
-    @pytest.mark.skip(reason="Inventory feature not implemented yet")
-    def test_inventory_biases_toward_stocked_sizes(self):
-        """库存应影响方案选择"""
-        # 20x10: 不用库存时选 10x10 * 2（1种尺寸）
-        scheme_no_inv = find_best_scheme(20, 10)
-        assert scheme_no_inv['x_splits'] == [10, 10]
-        assert scheme_no_inv['y_splits'] == [10]
+    def test_all_schemes_valid(self):
+        schemes = find_all_schemes(17, 15)
+        for scheme in schemes:
+            for w, h in scheme['tiles']:
+                assert validate_tile(w, h)
 
-        # 有 5x10 库存时，20x10 可以分为 4个5x10，同样1种尺寸
-        # 但如果只有2个5x10库存，方案 [5,5,10]x[10] 可利用2个库存
-        # 而 [10,10]x[10] 利用0个
-        inv = {"5x10": 2}
-        scheme_inv = find_best_scheme(20, 10, inventory=inv, copies=1)
-        # 有库存时应倾向于使用有库存的尺寸
-        # 不过如果两个方案的 unique_sizes 差异大，unique_sizes 仍然优先
-        # 这里 [10,10]x[10]=1种, [5,5,10]x[10]=2种
-        # 由于库存优先级最高，应选择能利用库存的方案
-        assert scheme_inv is not None
-        # 验证方案中包含 5x10 的瓦片
-        tile_keys = set()
-        for w, h in scheme_inv['tiles']:
-            tile_keys.add(f"{w}x{h}")
-        assert "5x10" in tile_keys
-
-    @pytest.mark.skip(reason="Inventory feature not implemented yet")
-    def test_inventory_none_fallback(self):
-        """inventory=None 时退回原始行为"""
-        scheme = find_best_scheme(17, 15, inventory=None)
-        assert scheme is not None
-        assert scheme['unique_sizes'] >= 1
+    def test_single_tile_no_split_needed(self):
+        # 10x10 fits within 10x11, no split needed
+        schemes = find_all_schemes(10, 10)
+        assert len(schemes) == 1
+        assert schemes[0]['x_parts'] == 1
+        assert schemes[0]['y_parts'] == 1
 
 
 class TestCalculateFilamentAndTime:
@@ -560,6 +542,118 @@ class TestBatchMode:
         # 50mm = 1 格，小于最小瓦片 2x2
         result = calculate_single(50, 50)
         assert result is None
+
+
+class TestCalculateTotalPrints:
+    """calculate_total_prints 函数测试"""
+
+    def test_calculate_total_prints_basic(self):
+        # 模拟两个抽屉，各一个瓦片
+        batch_results = [
+            {'width': 400, 'depth': 400, 'copies': 1, 'scheme': {'tiles': [(10, 10)]}},
+        ]
+        schemes = [batch_results[0]['scheme']]
+
+        total, details = calculate_total_prints(batch_results, schemes)
+        assert total >= 1
+        assert isinstance(details, dict)
+
+    def test_calculate_total_prints_shared(self):
+        # 两个抽屉共享瓦片尺寸
+        batch_results = [
+            {'width': 400, 'depth': 400, 'copies': 1, 'scheme': {'tiles': [(10, 10)]}},
+            {'width': 280, 'depth': 280, 'copies': 1, 'scheme': {'tiles': [(10, 10)]}},
+        ]
+        schemes = [r['scheme'] for r in batch_results]
+
+        total, details = calculate_total_prints(batch_results, schemes)
+        # 共享瓦片应该只打印一次 (2 stacks fit in 1 print with max_stacks=45)
+        assert details[(10, 10)]['print_count'] == 1
+
+
+class TestOptimizeBatchGlobal:
+    """optimize_batch_global 函数测试"""
+
+    def test_basic_functionality(self):
+        results = [
+            calculate_single(265, 365, copies=1),
+            calculate_single(325, 365, copies=1),
+        ]
+        optimized = optimize_batch_global(results)
+        assert optimized is not None
+        assert 'schemes' in optimized
+        assert 'total_prints' in optimized
+
+    def test_print_count_reduced_or_equal(self):
+        # 优化后的打印次数应该 <= 优化前
+        results = [
+            calculate_single(265, 365, copies=2),
+            calculate_single(325, 365, copies=2),
+            calculate_single(315, 365, copies=2),
+        ]
+
+        # 计算优化前的打印次数
+        _, before_details = calculate_total_prints(
+            results,
+            [r['scheme'] for r in results]
+        )
+        before_total = sum(d['print_count'] for d in before_details.values())
+
+        # 优化后
+        optimized = optimize_batch_global(results)
+        after_total = optimized['total_prints']
+
+        assert after_total <= before_total
+
+    def test_same_as_original_when_already_optimal(self):
+        # 如果独立最优就是全局最优，应该返回相同方案
+        results = [calculate_single(400, 400, copies=1)]
+
+        optimized = optimize_batch_global(results)
+        assert optimized['total_prints'] == 1
+
+    def test_optimize_empty_batch(self):
+        """测试空批次"""
+        result = optimize_batch_global([])
+        assert result is None
+
+    def test_optimize_single_drawer(self):
+        """测试单个抽屉"""
+        results = [calculate_single(400, 400, copies=1)]
+        optimized = optimize_batch_global(results)
+        assert optimized['total_prints'] == 1
+        assert optimized['improved'] is False
+
+    def test_optimize_with_none_in_batch(self):
+        """测试批次中包含 None"""
+        results = [
+            calculate_single(265, 365, copies=1),
+            None,
+            calculate_single(325, 365, copies=1),
+        ]
+        optimized = optimize_batch_global(results)
+        assert optimized is not None
+
+    def test_optimize_returns_schemes(self):
+        """测试优化后返回正确的方案"""
+        results = [
+            calculate_single(265, 365, copies=1),
+            calculate_single(325, 365, copies=1),
+        ]
+        optimized = optimize_batch_global(results)
+        assert len(optimized['schemes']) == 2
+
+    def test_optimize_improvement_flag(self):
+        """测试改进标志正确设置"""
+        # 创建一个场景：独立最优不是全局最优
+        results = [
+            calculate_single(265, 365, copies=2),
+            calculate_single(325, 365, copies=2),
+            calculate_single(315, 365, copies=2),
+        ]
+        optimized = optimize_batch_global(results)
+        # improved 可以是 True 或 False，取决于是否能改进
+        assert isinstance(optimized['improved'], bool)
 
 
 if __name__ == "__main__":

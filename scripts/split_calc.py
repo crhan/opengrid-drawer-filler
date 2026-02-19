@@ -233,6 +233,60 @@ def _find_best_scheme_impl(x, y, verbose=False):
     return best
 
 
+def find_all_schemes(x, y):
+    """生成某个抽屉的所有有效分割方案"""
+    # 先检查是否需要分割
+    if validate_tile(x, y):
+        return [{
+            'x_parts': 1,
+            'y_parts': 1,
+            'x_splits': [x],
+            'y_splits': [y],
+            'tiles': [(x, y)],
+        }]
+
+    all_schemes = []
+
+    # 遍历所有分割组合
+    for x_parts in range(2, 8):
+        for y_parts in range(1, 5):
+            total_tiles = x_parts * y_parts
+            if total_tiles > 20:
+                continue
+
+            x_splits = split_with_limit(x, x_parts, MAX_X)
+            if not x_splits:
+                continue
+
+            y_splits = split_with_limit(y, y_parts, MAX_Y)
+            if not y_splits:
+                continue
+
+            for xs in x_splits:
+                for ys in y_splits:
+                    tiles = []
+                    valid = True
+                    for xd in xs:
+                        for yd in ys:
+                            if not validate_tile(xd, yd):
+                                valid = False
+                                break
+                            tiles.append((xd, yd))
+
+                    if not valid:
+                        continue
+
+                    all_schemes.append({
+                        'x_parts': x_parts,
+                        'y_parts': y_parts,
+                        'x_splits': xs,
+                        'y_splits': ys,
+                        'tiles': tiles,
+                    })
+
+    return all_schemes
+
+
 def calculate_filament_and_time(cells, stacks):
     """计算耗材和打印时间"""
     main = cells * FILAMENT_MAIN_PER_CELL * stacks
@@ -531,6 +585,97 @@ def merge_and_optimize(batch_results):
             })
 
     return all_tiles
+
+
+def calculate_total_prints(batch_results, schemes):
+    """计算给定方案组合的总打印次数
+
+    Args:
+        batch_results: 批量计算结果列表，每个元素包含 width, depth, copies, scheme
+        schemes: 对应的分割方案列表
+
+    Returns:
+        (total_prints, details): 总打印次数和每个尺寸的详细信息
+    """
+    # 合并所有瓦片
+    all_tiles = {}
+    for result, scheme in zip(batch_results, schemes):
+        if result is None or scheme is None:
+            continue
+        copies = result['copies']
+        for w, h in scheme['tiles']:
+            key = (w, h)
+            if key not in all_tiles:
+                all_tiles[key] = 0
+            all_tiles[key] += copies
+
+    # 计算每个尺寸的打印次数
+    max_stacks = get_max_stacks()
+    total_prints = 0
+    details = {}
+
+    for (w, h), stacks in all_tiles.items():
+        prints_needed = (stacks + max_stacks - 1) // max_stacks
+        total_prints += prints_needed
+        details[(w, h)] = {
+            'stacks': stacks,
+            'print_count': prints_needed
+        }
+
+    return total_prints, details
+
+
+def optimize_batch_global(batch_results):
+    """贪心 + 局部搜索优化"""
+    if not batch_results:
+        return None
+
+    # 步骤1：各自找最优作为初始解
+    initial_schemes = [r['scheme'] if r else None for r in batch_results]
+
+    # 计算初始解的打印次数
+    initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
+
+    # 步骤2：为每个抽屉生成所有方案
+    all_options = []
+    for result in batch_results:
+        if result is None:
+            all_options.append([None])
+            continue
+        x, y = result['grid']
+        schemes = find_all_schemes(x, y)
+        all_options.append(schemes)
+
+    # 步骤3：找最优组合
+    best_schemes = initial_schemes
+    best_total = initial_total
+
+    # 对每个抽屉，尝试其他方案，看能否减少打印次数
+    for i, options in enumerate(all_options):
+        if len(options) <= 1:
+            continue
+
+        for option in options:
+            # 构建新组合
+            test_schemes = best_schemes.copy()
+            test_schemes[i] = option
+
+            # 检查是否有效（不能有 None）
+            if None in test_schemes:
+                continue
+
+            total, _ = calculate_total_prints(batch_results, test_schemes)
+            if total < best_total:
+                best_schemes = test_schemes
+                best_total = total
+
+    # 返回优化结果
+    return {
+        'schemes': best_schemes,
+        'total_prints': best_total,
+        'initial_prints': initial_total,
+        'improved': best_total < initial_total
+    }
 
 
 def print_batch_plan(batch_results, merged_tiles):
