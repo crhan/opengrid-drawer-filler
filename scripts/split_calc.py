@@ -126,10 +126,48 @@ def calc_scheme_balance(xs, ys):
     return max(x_balance, y_balance)
 
 
+# 方案排序键：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
+SCHEME_SORT_KEY = lambda s: (s['cost'], s['unique_sizes'], s['total_tiles'], s['balance'])
+
+
+def normalize_tiles(tiles):
+    """规范化瓦片：如果瓦片宽度超过 MAX_X 但高度在范围内，则旋转该瓦片
+
+    Args:
+        tiles: 瓦片列表 [(w, h), ...]
+
+    Returns:
+        规范化后的瓦片列表
+    """
+    normalized = []
+    for w, h in tiles:
+        if w > MAX_X and h <= MAX_Y:
+            normalized.append((h, w))
+        else:
+            normalized.append((w, h))
+    return normalized
+
+
+def validate_tiles(tiles):
+    """验证所有瓦片是否合法
+
+    Args:
+        tiles: 瓦片列表 [(w, h), ...]
+
+    Returns:
+        True 如果所有瓦片都合法
+    """
+    return all(validate_tile(w, h) for w, h in tiles)
+
+
 def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """直接寻找最优方案，找到1种尺寸就停止
 
-    修复: 考虑旋转对称性，搜索两个方向并取最优解
+    Args:
+        x, y: 格子数
+        verbose: 是否打印详细信息
+        inventory: 库存字典 {"6x7": 3, ...}，None 表示不使用库存
+        copies: 打印份数
     """
     # 首先检查是否需要分割
     if validate_tile(x, y):
@@ -140,24 +178,123 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             'y_splits': [y],
             'tiles': [(x, y)],
             'unique_sizes': 1,
-            'tile_count': 1
+            'tile_count': 1,
+            # 添加库存信息
+            'cost': 0,
+            'from_inventory': {},
+            'need_print': {} if inventory is None else {f"{x}x{y}": 1}
         }
 
-    # 搜索原始方向
+    # 如果有库存，收集所有方案并评分
+    if inventory:
+        all_schemes = find_all_schemes(x, y)
+        scored_schemes = []
+
+        for scheme in all_schemes:
+            cost, from_inv, need_print = calculate_print_cost(
+                scheme['tiles'], inventory, copies
+            )
+
+            # 计算独特尺寸和瓦片数
+            unique_sizes = len(set(scheme['tiles']))
+            total_tiles = len(scheme['tiles'])
+
+            # 计算均衡度
+            balance = calc_scheme_balance(scheme['x_splits'], scheme['y_splits'])
+
+            scored_schemes.append({
+                'scheme': scheme,
+                'cost': cost,
+                'from_inventory': from_inv,
+                'need_print': need_print,
+                'unique_sizes': unique_sizes,
+                'total_tiles': total_tiles,
+                'balance': balance
+            })
+
+        # 多维度排序：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
+        scored_schemes.sort(key=SCHEME_SORT_KEY)
+
+        best_scored = scored_schemes[0]
+        best = best_scored['scheme'].copy()
+        best['cost'] = best_scored['cost']
+        best['from_inventory'] = best_scored['from_inventory']
+        best['need_print'] = best_scored['need_print']
+        best['unique_sizes'] = best_scored['unique_sizes']
+        best['tile_count'] = best_scored['total_tiles']
+        best['balance'] = best_scored['balance']
+
+        # 旋转对称检查：当有库存时也需要考虑旋转
+        if x != y:
+            # 旋转输入，收集旋转后的所有方案
+            rotated_schemes = find_all_schemes(y, x)
+            scored_rotated = []
+
+            for scheme in rotated_schemes:
+                # 规范化瓦片
+                normalized = normalize_tiles(scheme['tiles'])
+
+                # 检查旋转后的瓦片是否有效
+                if not validate_tiles(normalized):
+                    continue
+
+                cost, from_inv, need_print = calculate_print_cost(
+                    normalized, inventory, copies
+                )
+
+                unique_sizes = len(set(normalized))
+                total_tiles = len(normalized)
+                balance = calc_scheme_balance(scheme['y_splits'], scheme['x_splits'])
+
+                scored_rotated.append({
+                    'scheme': scheme,
+                    'rotated_tiles': normalized,
+                    'cost': cost,
+                    'from_inventory': from_inv,
+                    'need_print': need_print,
+                    'unique_sizes': unique_sizes,
+                    'total_tiles': total_tiles,
+                    'balance': balance
+                })
+
+            if scored_rotated:
+                # 排序旋转后的方案
+                scored_rotated.sort(key=SCHEME_SORT_KEY)
+
+                best_rotated = scored_rotated[0]
+
+                # 比较原方案和旋转方案
+                if (best_rotated['cost'] < best['cost'] or
+                    (best_rotated['cost'] == best['cost'] and best_rotated['unique_sizes'] < best['unique_sizes']) or
+                    (best_rotated['cost'] == best['cost'] and best_rotated['unique_sizes'] == best['unique_sizes'] and best_rotated['total_tiles'] < best['tile_count']) or
+                    (best_rotated['cost'] == best['cost'] and best_rotated['unique_sizes'] == best['unique_sizes'] and best_rotated['total_tiles'] == best['tile_count'] and best_rotated['balance'] < best['balance'])):
+
+                    # 使用旋转后的方案
+                    best = {
+                        'x_parts': scheme['y_parts'],
+                        'y_parts': scheme['x_parts'],
+                        'x_splits': scheme['y_splits'],
+                        'y_splits': scheme['x_splits'],
+                        'tiles': best_rotated['rotated_tiles'],
+                        'unique_sizes': best_rotated['unique_sizes'],
+                        'tile_count': best_rotated['total_tiles'],
+                        'balance': best_rotated['balance'],
+                        'cost': best_rotated['cost'],
+                        'from_inventory': best_rotated['from_inventory'],
+                        'need_print': best_rotated['need_print']
+                    }
+
+        return best
+
+    # 无库存时使用原始逻辑
     best = _find_best_scheme_impl(x, y, verbose)
 
     # 如果 x != y，搜索旋转后的方向并比较
     if x != y:
         rotated = _find_best_scheme_impl(y, x, verbose)
         if rotated is not None:
-            # 旋转结果：将 x_splits 和 y_splits 交换
-            # 同时规范化瓦片：如果 x 超过 MAX_X 但 y 在范围内，则交换
-            normalized_tiles = []
-            for w, h in rotated['tiles']:
-                if w > MAX_X and h <= MAX_Y:
-                    normalized_tiles.append((h, w))
-                else:
-                    normalized_tiles.append((w, h))
+            # 规范化瓦片
+            normalized_tiles = normalize_tiles(rotated['tiles'])
 
             rotated_swapped = {
                 'x_parts': rotated['y_parts'],
@@ -171,7 +308,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             }
 
             # 验证规范化后的瓦片是否有效
-            rotated_valid = all(validate_tile(w, h) for w, h in normalized_tiles)
+            rotated_valid = validate_tiles(normalized_tiles)
 
             # 比较：只有当旋转结果更优且有效时才采用
             if rotated_valid and (best is None or \
@@ -321,6 +458,158 @@ def calculate_filament_and_time(cells, stacks):
     return main, support, time_min
 
 
+# 换料惩罚时间（分钟）
+SWAP_PENALTY = 60
+
+
+def calculate_print_cost(tiles: list[tuple[int, int]], inventory: dict[str, int], copies: int = 1) -> tuple[int, dict, dict]:
+    """
+    计算打印成本及库存匹配情况
+
+    Args:
+        tiles: 瓦片列表 [(w,h), ...]
+        inventory: 库存字典 {"6x7": 3, ...}
+        copies: 打印份数
+
+    Returns: (cost, from_inventory, need_print)
+        - cost: 总成本（分钟），0 表示完全使用库存
+        - from_inventory: 从库存取的瓦片 {"6x7": 2, ...}
+        - need_print: 需要新打印的瓦片 {"6x7": 1, ...}
+    """
+    # 统计每种尺寸的需求
+    tile_counts = {}
+    for w, h in tiles:
+        key = f"{w}x{h}"
+        tile_counts[key] = tile_counts.get(key, 0) + 1
+
+    from_inventory = {}
+    need_print = {}
+
+    # 计算库存匹配
+    for key, count_per_copy in tile_counts.items():
+        needed = count_per_copy * copies
+        available = inventory.get(key, 0)
+        used = min(needed, available)
+
+        if used > 0:
+            from_inventory[key] = used
+        remaining = needed - used
+        if remaining > 0:
+            need_print[key] = remaining
+
+    # 计算需打印部分的成本
+    total_time = 0
+    total_prints = sum(need_print.values())
+
+    for key, count in need_print.items():
+        if count > 0:
+            w, h = map(int, key.split('x'))
+            cells = w * h
+            _, _, time_min = calculate_filament_and_time(cells, count)
+            total_time += time_min
+
+    # 加上换料惩罚（每次打印间隔惩罚）
+    if total_prints > 1:
+        total_time += (total_prints - 1) * SWAP_PENALTY
+
+    return total_time, from_inventory, need_print
+
+
+def replan_with_inventory(tiles: list[tuple[int, int]], inventory: dict[str, int], copies: int = 1):
+    """
+    边缘情况5：当库存尺寸不匹配时，重新规划方案以最大化利用库存
+
+    Args:
+        tiles: 原始瓦片需求
+        inventory: 可用库存
+        copies: 打印份数
+
+    Returns:
+        重新规划后的方案，包含:
+        - tiles: 新的瓦片列表
+        - from_inventory: 从库存取的瓦片
+        - need_print: 需要新打印的瓦片
+        - cost: 总成本
+        或 None（如果不需要重新规划）
+    """
+    # 先尝试直接匹配
+    direct_cost, from_inventory, need_print = calculate_print_cost(tiles, inventory, copies)
+
+    # 如果直接匹配成本为 0，不需要重新规划
+    if direct_cost == 0:
+        return None
+
+    # 如果 need_print 为空但 cost > 0，说明库存不足但无法拆分
+    if not need_print:
+        return None
+
+    # 计算原始成本（无库存）
+    original_cost, _, _ = calculate_print_cost(tiles, {}, copies)
+
+    # 找到可用的库存尺寸
+    available_sizes = {k: v for k, v in inventory.items() if v > 0}
+
+    if not available_sizes:
+        return None
+
+    # 记录当前最佳方案（原始方案）
+    best_plan = {
+        'cost': direct_cost,
+        'from_inventory': from_inventory,
+        'need_print': need_print,
+        'tiles': tiles,
+    }
+
+    # 遍历每种库存尺寸，尝试用它来拆分需求
+    for inv_key, inv_count in available_sizes.items():
+        inv_w, inv_h = map(int, inv_key.split('x'))
+
+        # 尝试用库存瓦片替换部分需求
+        used_from_inv = 0
+
+        # 计算可以用库存满足多少需求
+        for _, (w, h) in enumerate(tiles):
+            if used_from_inv >= inv_count * copies:
+                break
+            # 检查库存尺寸是否 <= 需求尺寸（可以拆分），包括旋转情况
+            if (inv_w <= w and inv_h <= h) or (inv_h <= w and inv_w <= h):
+                used_from_inv += 1
+
+        # 如果成功使用了库存，重新计算成本
+        if used_from_inv > 0:
+            # 构建新的瓦片列表
+            new_tiles = []
+            used = 0
+
+            for w, h in tiles:
+                if used < used_from_inv and ((inv_w <= w and inv_h <= h) or (inv_h <= w and inv_w <= h)):
+                    # 用库存瓦片
+                    new_tiles.append((inv_w, inv_h))
+                    used += 1
+                else:
+                    # 原瓦片
+                    new_tiles.append((w, h))
+
+            # 计算新成本
+            new_cost, new_from_inv, new_need = calculate_print_cost(
+                new_tiles, inventory, copies
+            )
+
+            if new_cost < best_plan['cost']:
+                best_plan = {
+                    'cost': new_cost,
+                    'from_inventory': new_from_inv,
+                    'need_print': new_need,
+                    'tiles': new_tiles,
+                }
+
+    # 如果没有改进，返回 None
+    if best_plan['cost'] >= original_cost:
+        return None
+
+    return best_plan
+
+
 def format_time(minutes):
     """格式化打印时间"""
     hours = int(minutes // 60)
@@ -330,7 +619,7 @@ def format_time(minutes):
     return f"{mins}m"
 
 
-def print_plan(width, depth, scheme, copies=1, verbose=False, inventory_match=None):
+def print_plan(width, depth, scheme, copies=1, verbose=False):
     """打印分割方案"""
     x, y = get_grid_dimensions(width, depth)
 
@@ -436,6 +725,33 @@ def print_plan(width, depth, scheme, copies=1, verbose=False, inventory_match=No
     print()
     print("--- 打印时间估算 ---")
     print(f"预计总时间: ~{format_time(total_time)} ({total_prints}次打印)")
+
+    # 如果有库存信息，显示库存利用情况
+    if 'cost' in scheme and scheme['cost'] is not None:
+        print()
+        print("--- 库存利用 ---")
+
+        # 显示从库存取的瓦片
+        from_inv = scheme.get('from_inventory', {})
+        if from_inv:
+            parts = []
+            for key in sorted(from_inv.keys()):
+                w, h = key.split('x')
+                count = from_inv[key]
+                parts.append(f"{w}×{h} ×{count}")
+            print(f"从库存: {', '.join(parts)}")
+
+        # 显示需要打印的瓦片
+        need_print = scheme.get('need_print', {})
+        if need_print:
+            parts = []
+            for key in sorted(need_print.keys()):
+                w, h = key.split('x')
+                count = need_print[key]
+                parts.append(f"{w}×{h} ×{count}")
+            print(f"需打印: {', '.join(parts)} (成本: {format_time(scheme['cost'])})")
+        else:
+            print("需打印: 无 (成本: 0)")
 
     print()
     print("--- 安装说明 ---")
@@ -651,16 +967,42 @@ def calculate_total_prints(batch_results, schemes):
     return total_prints, details
 
 
-def optimize_batch_global(batch_results):
-    """贪心 + 局部搜索优化"""
+def optimize_batch_global(batch_results, inventory=None):
+    """贪心 + 局部搜索优化
+
+    Args:
+        batch_results: 批量计算结果列表
+        inventory: 可选库存字典 {"6x7": 3, ...}
+    """
     if not batch_results:
         return None
 
-    # 步骤1：各自找最优作为初始解
-    initial_schemes = [r['scheme'] if r else None for r in batch_results]
+    # 步骤1：各自找最优作为初始解（如果有库存，传入库存）
+    initial_schemes = []
+    for i, r in enumerate(batch_results):
+        if r is None:
+            initial_schemes.append(None)
+            continue
+        x, y = r['grid']
+        copies = r.get('copies', 1)
+        # 如果有库存，使用 find_best_scheme 获取最优方案
+        if inventory:
+            scheme = find_best_scheme(x, y, inventory=inventory, copies=copies)
+            initial_schemes.append(scheme)
+        else:
+            initial_schemes.append(r['scheme'] if r else None)
 
-    # 计算初始解的打印次数
-    initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
+    # 计算初始解的成本（打印次数或库存成本）
+    if inventory:
+        initial_cost = sum(
+            calculate_print_cost(
+                s['tiles'], inventory, batch_results[i].get('copies', 1)
+            )[0]
+            for i, s in enumerate(initial_schemes) if s
+        )
+    else:
+        initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
+        initial_cost = initial_total
 
     # 步骤2：为每个抽屉生成所有方案
     all_options = []
@@ -673,10 +1015,10 @@ def optimize_batch_global(batch_results):
         all_options.append(schemes)
 
     # 步骤3：找最优组合
-    best_schemes = initial_schemes
-    best_total = initial_total
+    best_schemes = initial_schemes.copy()
+    best_cost = initial_cost
 
-    # 对每个抽屉，尝试其他方案，看能否减少打印次数
+    # 对每个抽屉，尝试其他方案，看能否减少成本
     for i, options in enumerate(all_options):
         if len(options) <= 1:
             continue
@@ -690,17 +1032,29 @@ def optimize_batch_global(batch_results):
             if None in test_schemes:
                 continue
 
-            total, _ = calculate_total_prints(batch_results, test_schemes)
-            if total < best_total:
+            # 计算新组合的成本
+            if inventory:
+                total = sum(
+                    calculate_print_cost(
+                        s['tiles'], inventory, batch_results[i].get('copies', 1)
+                    )[0]
+                    for s in test_schemes if s
+                )
+            else:
+                total, _ = calculate_total_prints(batch_results, test_schemes)
+
+            if total < best_cost:
                 best_schemes = test_schemes
-                best_total = total
+                best_cost = total
 
     # 返回优化结果
     return {
         'schemes': best_schemes,
-        'total_prints': best_total,
-        'initial_prints': initial_total,
-        'improved': best_total < initial_total
+        'total_prints': best_cost if not inventory else None,
+        'cost': best_cost if inventory else None,
+        'initial_prints': initial_cost if not inventory else None,
+        'initial_cost': initial_cost if inventory else None,
+        'improved': best_cost < initial_cost
     }
 
 
