@@ -22,8 +22,8 @@ python3 scripts/split_calc.py 485 425 -c 3
 # 方式 4：批量计算（自动合并优化）
 python3 scripts/split_calc.py -b "265x365:2 325x365:2 315x365:2"
 
-# 方式 5：使用 Orca Slicer 打开
-python3 scripts/split_calc.py 485 425 -g -o --slicer orca
+# 方式 5：生成 STL（使用 slicer.py）
+python3 scripts/slicer.py -g 7x5x3 10x5x3 --force
 ```
 
 ## 批量计算模式
@@ -80,11 +80,6 @@ python3 scripts/split_calc.py 485 425 -g -o --slicer orca
 | -b, --batch | 批量计算（自动合并优化） | 无 |
 | -p, --preset | 预设尺寸 | 无 |
 | -j, --json | JSON 格式输出 | false |
-| -g, --generate | 自动生成 STL | false |
-| -s, --slice | 切片 STL 文件 | false |
-| --slicer | 切片器选择 (bambu/orca) | bambu |
-| -o, --open | 在切片器中打开 STL | false |
-| -f, --force | 强制重新生成已存在 STL | false |
 | -v, --verbose | 详细输出 | false |
 
 ## 预设尺寸
@@ -132,52 +127,55 @@ Y方向: 15 = 5 + 5 + 5
 
 ## 端到端工作流
 
-### 方式 1：自动生成 STL
+### 方式 1：计算方案
 
 ```bash
-python3 scripts/split_calc.py 485 425 -g
+python3 scripts/split_calc.py 485 425 -j
 ```
 
-这将：
-1. 计算最优分割方案
-2. 自动调用 opengrid-stl-generator 生成每个尺寸的 STL
-3. 输出保存路径
+### 方式 2：生成 STL（使用 slicer.py）
 
-### 方式 2：分步执行
+根据上一步输出的方案，生成对应的 STL：
 
-1. **计算方案**
-   ```bash
-   python3 scripts/split_calc.py 485 425 -j
-   ```
+```bash
+# 假设方案输出 7x5:3 和 10x5:3
+python3 scripts/slicer.py -g 7x5x3 10x5x3
+```
 
-2. **查看 JSON 输出**
-   ```json
-   {
-     "drawer": { "width": 485, "depth": 425 },
-     "grid": { "x": 17, "y": 15 },
-     "scheme": {
-       "x_parts": 2,
-       "y_parts": 3,
-       "x_splits": [7, 10],
-       "y_splits": [5, 5, 5],
-       "tiles": [
-         {"width": 7, "height": 5, "count": 3},
-         {"width": 10, "height": 5, "count": 3}
-       ]
-     },
-     "stats": {
-       "unique_sizes": 2,
-       "total_tiles": 6,
-       "total_filament_g": 307,
-       "total_time_min": 211
-     }
-   }
-   ```
+### 方式 3：在 slicer 中打开或切片
 
-3. **手动生成 STL**
-   对每个独特尺寸调用 opengrid-stl-generator：
-   - 7×5: Board_Width=7, Board_Height=5, Stack_Count=3
-   - 10×5: Board_Width=10, Board_Height=5, Stack_Count=3
+```bash
+# 在 Orca Slicer 中打开
+python3 scripts/slicer.py -o path/to/file.stl --slicer orca
+
+# 或者切片
+python3 scripts/slicer.py -s path/to/file.stl --slicer orca --output my_project
+```
+
+### JSON 输出示例
+
+```json
+{
+  "drawer": { "width": 485, "depth": 425 },
+  "grid": { "x": 17, "y": 15 },
+  "scheme": {
+    "x_parts": 2,
+    "y_parts": 3,
+    "x_splits": [7, 10],
+    "y_splits": [5, 5, 5],
+    "tiles": [
+      {"width": 7, "height": 5, "count": 3},
+      {"width": 10, "height": 5, "count": 3}
+    ]
+  },
+  "stats": {
+    "unique_sizes": 2,
+    "total_tiles": 6,
+    "total_filament_g": 307,
+    "total_time_min": 211
+  }
+}
+```
 
 ## 算法规则
 
@@ -241,3 +239,55 @@ python3 scripts/split_calc.py 485 425 -g
 1. **直接打开 STL**: 使用 `-o` 选项在 OrcaSlicer/BambuStudio 中打开生成的 STL
 2. **手动排版**: 在 slicer 中手动排列模型并选择预设
 3. **使用 3MF 模板**: 手动创建包含预设的 3MF 项目，后续复用
+
+## STL 生成工具 (slicer.py)
+
+`scripts/slicer.py` 负责 STL 文件生成和切片。
+
+### 使用方式
+
+```bash
+# 生成单个 STL
+python3 scripts/slicer.py -g 7x5x3          # 格式: 宽x高x层数
+python3 scripts/slicer.py -g 7x5x3 --force  # 强制重新生成
+
+# 批量生成多个 STL
+python3 scripts/slicer.py -g 7x5x3 10x5x3 5x5x1
+
+# 在 slicer 中打开 STL
+python3 scripts/slicer.py -o file.stl --slicer orca
+python3 scripts/slicer.py -o file1.stl file2.stl --slicer bambu
+
+# 切片 STL 文件
+python3 scripts/slicer.py -s file.stl --slicer orca --output my_project
+```
+
+### Python 模块调用
+
+```python
+from scripts.slicer import (
+    generate_stl,
+    generate_all_stls,
+    slice_with_bambu,
+    slice_with_orca,
+    open_in_slicer,
+)
+
+# 生成单个 STL
+path, err = generate_stl(7, 5, 3, verbose=True, force=False)
+
+# 批量生成
+stl_files = generate_all_stls(scheme, copies=2, verbose=True)
+
+# 切片
+result, err = slice_with_orca(stl_files, "my_project")
+
+# 在 slicer 中打开
+open_in_slicer(stl_files, slicer="orca")
+```
+
+### 分步工作流
+
+1. **计算分割方案** → `scripts/split_calc.py`
+2. **生成 STL** → `scripts/slicer.py -g`
+3. **切片或打开** → `scripts/slicer.py -s` 或 `scripts/slicer.py -o`
