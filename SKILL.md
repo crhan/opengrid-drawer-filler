@@ -26,6 +26,25 @@ python3 scripts/split_calc.py -b "265x365:2 325x365:2 315x365:2"
 python3 scripts/slicer.py -g 7x5x3 10x5x3 --force
 ```
 
+## 初始化
+
+首次使用前完成配置：
+
+1. 运行 setup.sh：
+   ```bash
+   cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
+   ./scripts/setup.sh
+   ```
+
+2. 复制配置文件：
+   ```bash
+   cp config.example.yaml config.yaml
+   ```
+
+3. 编辑 config.yaml，设置 `initialized: true` 和打印机型号
+
+未配置时运行会显示详细步骤。
+
 ## 批量计算模式
 
 支持一次输入多个尺寸和份数，系统会自动：
