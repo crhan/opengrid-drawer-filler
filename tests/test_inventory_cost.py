@@ -95,13 +95,15 @@ class TestReplanWithInventory:
 
     def test_replan_uses_partial_inventory(self):
         """当库存尺寸不完全匹配时，拆分方案使用部分库存"""
-        # 需求: 6x9 (需要 1 个 6x9)
+        # 需求: 9x12 格子，抽屉可以分割成 2个6x9
         # 库存: 6x6 有 2 个
-        # 方案: 使用 1 个 6x6 库存，剩余空间打印
-        tiles = [(6, 9)]
+        # 方案: 使用 2 个 6x6 库存，剩余空间打印 3x6
+        tiles = [(6, 9), (6, 9)]
         inventory = {'6x6': 2}
+        # 需要传入grid参数才能正确重新规划
+        grid = (9, 12)
 
-        result = replan_with_inventory(tiles, inventory)
+        result = replan_with_inventory(tiles, inventory, grid=grid)
 
         # 应该返回重新规划后的方案
         assert result is not None, "Should replan when partial inventory available"
