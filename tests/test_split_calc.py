@@ -21,6 +21,7 @@ from split_calc import (
     calculate_filament_and_time,
     format_time,
     calculate_total_prints,
+    optimize_batch_global,
     TILE_SIZE,
     MAX_X,
     MAX_Y,
@@ -568,6 +569,48 @@ class TestCalculateTotalPrints:
         total, details = calculate_total_prints(batch_results, schemes)
         # 共享瓦片应该只打印一次 (2 stacks fit in 1 print with max_stacks=45)
         assert details[(10, 10)]['print_count'] == 1
+
+
+class TestOptimizeBatchGlobal:
+    """optimize_batch_global 函数测试"""
+
+    def test_basic_functionality(self):
+        results = [
+            calculate_single(265, 365, copies=1),
+            calculate_single(325, 365, copies=1),
+        ]
+        optimized = optimize_batch_global(results)
+        assert optimized is not None
+        assert 'schemes' in optimized
+        assert 'total_prints' in optimized
+
+    def test_print_count_reduced_or_equal(self):
+        # 优化后的打印次数应该 <= 优化前
+        results = [
+            calculate_single(265, 365, copies=2),
+            calculate_single(325, 365, copies=2),
+            calculate_single(315, 365, copies=2),
+        ]
+
+        # 计算优化前的打印次数
+        _, before_details = calculate_total_prints(
+            results,
+            [r['scheme'] for r in results]
+        )
+        before_total = sum(d['print_count'] for d in before_details.values())
+
+        # 优化后
+        optimized = optimize_batch_global(results)
+        after_total = optimized['total_prints']
+
+        assert after_total <= before_total
+
+    def test_same_as_original_when_already_optimal(self):
+        # 如果独立最优就是全局最优，应该返回相同方案
+        results = [calculate_single(400, 400, copies=1)]
+
+        optimized = optimize_batch_global(results)
+        assert optimized['total_prints'] == 1
 
 
 if __name__ == "__main__":

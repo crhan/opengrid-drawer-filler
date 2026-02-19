@@ -909,6 +909,59 @@ def calculate_total_prints(batch_results, schemes):
     return total_prints, details
 
 
+def optimize_batch_global(batch_results):
+    """贪心 + 局部搜索优化"""
+    if not batch_results:
+        return None
+
+    # 步骤1：各自找最优作为初始解
+    initial_schemes = [r['scheme'] if r else None for r in batch_results]
+
+    # 计算初始解的打印次数
+    initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
+
+    # 步骤2：为每个抽屉生成所有方案
+    all_options = []
+    for result in batch_results:
+        if result is None:
+            all_options.append([None])
+            continue
+        x, y = result['grid']
+        schemes = find_all_schemes(x, y)
+        all_options.append(schemes)
+
+    # 步骤3：找最优组合
+    best_schemes = initial_schemes
+    best_total = initial_total
+
+    # 对每个抽屉，尝试其他方案，看能否减少打印次数
+    for i, options in enumerate(all_options):
+        if len(options) <= 1:
+            continue
+
+        for option in options:
+            # 构建新组合
+            test_schemes = best_schemes.copy()
+            test_schemes[i] = option
+
+            # 检查是否有效（不能有 None）
+            if None in test_schemes:
+                continue
+
+            total, _ = calculate_total_prints(batch_results, test_schemes)
+            if total < best_total:
+                best_schemes = test_schemes
+                best_total = total
+
+    # 返回优化结果
+    return {
+        'schemes': best_schemes,
+        'total_prints': best_total,
+        'initial_prints': initial_total,
+        'improved': best_total < initial_total
+    }
+
+
 def print_batch_plan(batch_results, merged_tiles):
     """打印批量打印计划"""
     print("=" * 70)
