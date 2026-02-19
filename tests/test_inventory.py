@@ -52,3 +52,57 @@ class TestLoadSave:
         )
         data = json.loads(tmp_inventory.read_text())
         assert len(data["log"]) == 2
+
+
+class TestAddInventory:
+    def test_add_new_items(self, tmp_inventory):
+        result = inventory.add_inventory({"7x5": 6, "10x5": 3}, reason="打印完成")
+        assert result == {"7x5": 6, "10x5": 3}
+
+    def test_add_to_existing(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {"7x5": 3},
+            "log": []
+        }))
+        result = inventory.add_inventory({"7x5": 3}, reason="追加")
+        assert result == {"7x5": 6}
+
+    def test_add_logs_operation(self, tmp_inventory):
+        inventory.add_inventory({"7x5": 6}, reason="test add")
+        data = json.loads(tmp_inventory.read_text())
+        assert data["log"][-1]["action"] == "add"
+        assert data["log"][-1]["items"] == {"7x5": 6}
+
+
+class TestDeductInventory:
+    def test_deduct_basic(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {"7x5": 6, "10x5": 3},
+            "log": []
+        }))
+        result = inventory.deduct_inventory({"7x5": 3}, reason="用于抽屉")
+        assert result == {"7x5": 3, "10x5": 3}
+
+    def test_deduct_exact(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {"7x5": 3},
+            "log": []
+        }))
+        result = inventory.deduct_inventory({"7x5": 3}, reason="全部用完")
+        assert result == {}  # 0 的 key 应被移除
+
+    def test_deduct_insufficient_raises(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {"7x5": 2},
+            "log": []
+        }))
+        with pytest.raises(ValueError, match="库存不足"):
+            inventory.deduct_inventory({"7x5": 5}, reason="超出")
+
+    def test_deduct_missing_key_raises(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {},
+            "log": []
+        }))
+        with pytest.raises(ValueError, match="库存不足"):
+            inventory.deduct_inventory({"7x5": 1}, reason="不存在")
