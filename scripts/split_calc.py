@@ -619,7 +619,7 @@ def format_time(minutes):
     return f"{mins}m"
 
 
-def print_plan(width, depth, scheme, copies=1, verbose=False, inventory_match=None):
+def print_plan(width, depth, scheme, copies=1, verbose=False):
     """打印分割方案"""
     x, y = get_grid_dimensions(width, depth)
 
