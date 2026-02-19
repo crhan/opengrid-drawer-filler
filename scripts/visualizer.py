@@ -175,3 +175,134 @@ class Visualizer:
             draw.text((x + 10, y + cell_size + 5), label, fill='black')
 
         return image
+
+    def generate_assembly_svg(self, scheme_data):
+        """生成拼接图 SVG 代码"""
+        x_splits = scheme_data["x_splits"]
+        y_splits = scheme_data["y_splits"]
+
+        all_sizes = [t["width"] * t["height"] for t in scheme_data["tiles"]]
+
+        cell_size = 40
+        padding = 20
+
+        total_x = sum(x_splits)
+        total_y = sum(y_splits)
+
+        width = total_x * cell_size + 2 * padding
+        height = total_y * cell_size + 2 * padding
+
+        svg_parts = []
+        svg_parts.append(f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">')
+
+        x_offset = padding
+        for x_dim in x_splits:
+            y_offset = padding
+            for y_dim in y_splits:
+                color = self._get_color_for_size(x_dim, y_dim, all_sizes)
+
+                rect = f'''  <rect x="{x_offset}" y="{y_offset}"
+                      width="{x_dim * cell_size - 2}" height="{y_dim * cell_size - 2}"
+                      fill="{color}" stroke="black" stroke-width="1">
+                  <title>{x_dim}x{y_dim}</title>
+              </rect>'''
+                svg_parts.append(rect)
+
+                if x_dim >= 3 and y_dim >= 3:
+                    text_x = x_offset + x_dim * cell_size // 2
+                    text_y = y_offset + y_dim * cell_size // 2
+                    label = f'{x_dim}x{y_dim}'
+                    text = f'  <text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle">{label}</text>'
+                    svg_parts.append(text)
+
+                y_offset += y_dim * cell_size
+            x_offset += x_dim * cell_size
+
+        svg_parts.append('</svg>')
+        return '\n'.join(svg_parts)
+
+    def generate_html(self, plan_data, output_path):
+        """生成 HTML 报告"""
+        from jinja2 import Template
+
+        scheme = plan_data.get("scheme", {})
+        drawer = plan_data.get("drawer", {})
+        stats = plan_data.get("stats", {})
+
+        svg = self.generate_assembly_svg(scheme)
+
+        tiles = scheme.get("tiles", [])
+        all_sizes = [t["width"] * t["height"] for t in tiles]
+        for tile in tiles:
+            tile["color"] = self._get_color_for_size(tile["width"], tile["height"], all_sizes)
+
+        template = '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>openGrid 打印计划</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        .info { background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; }
+        .assembly { text-align: center; margin: 20px 0; }
+        .tiles { display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0; }
+        .tile { border: 1px solid #ccc; border-radius: 8px; padding: 10px; text-align: center; }
+        .tile-color { width: 60px; height: 60px; border-radius: 4px; margin: 0 auto 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <h1>openGrid 打印计划</h1>
+
+    <div class="info">
+        <p><strong>抽屉尺寸:</strong> {{ drawer.width }}mm x {{ drawer.depth }}mm</p>
+        <p><strong>分割方案:</strong> {{ scheme.x_parts }}x{{ scheme.y_parts }}</p>
+        <p><strong>瓦片数量:</strong> {{ stats.total_tiles }} 块 ({{ stats.unique_sizes }} 种尺寸)</p>
+        <p><strong>打印次数:</strong> {{ stats.total_prints }} 次</p>
+    </div>
+
+    <h2>拼接示意图</h2>
+    <div class="assembly">
+        {{ svg | safe }}
+    </div>
+
+    <h2>瓦片清单</h2>
+    <div class="tiles">
+        {% for tile in tiles %}
+        <div class="tile">
+            <div class="tile-color" style="background: {{ tile.color }};"></div>
+            <div>{{ tile.width }}x{{ tile.height }}</div>
+            <div>x{{ tile.count }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <h2>详细统计</h2>
+    <table>
+        <tr><th>尺寸</th><th>数量</th><th>单片耗材</th><th>打印次数</th></tr>
+        {% for tile in tiles %}
+        <tr>
+            <td>{{ tile.width }}x{{ tile.height }}</td>
+            <td>{{ tile.count }}</td>
+            <td>约 {{ (tile.width * tile.height * 1.19) | round(1) }}g</td>
+            <td>1</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>'''
+
+        t = Template(template)
+        html = t.render(
+            drawer=drawer,
+            scheme=scheme,
+            stats=stats,
+            tiles=tiles,
+            svg=svg
+        )
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html)

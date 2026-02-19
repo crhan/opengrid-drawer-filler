@@ -78,6 +78,21 @@ def output_png(plan_data, output_dir):
         print(f"已保存: {tiles_path}")
 
 
+def output_html(plan_data, output_dir):
+    """生成 HTML 报告"""
+    v = Visualizer()
+
+    drawer = plan_data.get("drawer", {})
+    width = drawer.get("width", 0)
+    depth = drawer.get("depth", 0)
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    html_path = os.path.join(output_dir, "assembly.html")
+    v.generate_html(plan_data, html_path)
+    print(f"已保存: {html_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description='openGrid 打印计划输出工具')
     parser.add_argument('files', nargs='*', help='JSON 方案文件路径')
@@ -95,7 +110,7 @@ def main():
         if args.png:
             output_png(plan_data, args.output)
         elif args.html:
-            print("HTML 输出尚未实现")
+            output_html(plan_data, args.output)
         else:
             output_text(plan_data)
         return
@@ -126,7 +141,7 @@ def main():
         if args.png:
             output_png(plan_data, output_dir)
         elif args.html:
-            print("HTML 输出尚未实现")
+            output_html(plan_data, output_dir)
         else:
             output_text(plan_data)
 
