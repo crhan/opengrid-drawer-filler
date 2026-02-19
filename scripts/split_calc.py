@@ -515,6 +515,101 @@ def calculate_print_cost(tiles: list[tuple[int, int]], inventory: dict[str, int]
     return total_time, from_inventory, need_print
 
 
+def replan_with_inventory(tiles: list[tuple[int, int]], inventory: dict[str, int], copies: int = 1):
+    """
+    边缘情况5：当库存尺寸不匹配时，重新规划方案以最大化利用库存
+
+    Args:
+        tiles: 原始瓦片需求
+        inventory: 可用库存
+        copies: 打印份数
+
+    Returns:
+        重新规划后的方案，包含:
+        - tiles: 新的瓦片列表
+        - from_inventory: 从库存取的瓦片
+        - need_print: 需要新打印的瓦片
+        - cost: 总成本
+        或 None（如果不需要重新规划）
+    """
+    # 先尝试直接匹配
+    direct_cost, from_inv, need_print = calculate_print_cost(tiles, inventory, copies)
+
+    # 如果直接匹配成本为 0，不需要重新规划
+    if direct_cost == 0:
+        return None
+
+    # 如果 need_print 为空但 cost > 0，说明库存不足但无法拆分
+    if not need_print:
+        return None
+
+    # 计算原始成本（无库存）
+    original_cost, _, _ = calculate_print_cost(tiles, {}, copies)
+
+    # 找到可用的库存尺寸
+    available_sizes = {k: v for k, v in inventory.items() if v > 0}
+
+    if not available_sizes:
+        return None
+
+    # 记录当前最佳方案（原始方案）
+    best_plan = {
+        'cost': direct_cost,
+        'from_inventory': from_inv,
+        'need_print': need_print,
+        'tiles': tiles,
+    }
+
+    # 遍历每种库存尺寸，尝试用它来拆分需求
+    for inv_key, inv_count in available_sizes.items():
+        inv_w, inv_h = map(int, inv_key.split('x'))
+
+        # 尝试用库存瓦片替换部分需求
+        used_from_inv = 0
+
+        # 计算可以用库存满足多少需求
+        for i, (w, h) in enumerate(tiles):
+            if used_from_inv >= inv_count * copies:
+                break
+            # 检查库存尺寸是否 <= 需求尺寸（可以拆分）
+            if inv_w <= w and inv_h <= h:
+                used_from_inv += 1
+
+        # 如果成功使用了库存，重新计算成本
+        if used_from_inv > 0:
+            # 构建新的瓦片列表
+            new_tiles = []
+            used = 0
+
+            for w, h in tiles:
+                if used < used_from_inv and inv_w <= w and inv_h <= h:
+                    # 用库存瓦片
+                    new_tiles.append((inv_w, inv_h))
+                    used += 1
+                else:
+                    # 原瓦片
+                    new_tiles.append((w, h))
+
+            # 计算新成本
+            new_cost, new_from_inv, new_need = calculate_print_cost(
+                new_tiles, inventory, copies
+            )
+
+            if new_cost < best_plan['cost']:
+                best_plan = {
+                    'cost': new_cost,
+                    'from_inventory': new_from_inv,
+                    'need_print': new_need,
+                    'tiles': new_tiles,
+                }
+
+    # 如果没有改进，返回 None
+    if best_plan['cost'] >= original_cost:
+        return None
+
+    return best_plan
+
+
 def format_time(minutes):
     """格式化打印时间"""
     hours = int(minutes // 60)

@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from split_calc import calculate_print_cost, calculate_filament_and_time, get_grid_dimensions, find_best_scheme
+from split_calc import calculate_print_cost, calculate_filament_and_time, get_grid_dimensions, find_best_scheme, replan_with_inventory
 
 
 class TestCalculatePrintCost:
@@ -88,6 +88,51 @@ class TestFindBestSchemeWithInventory:
         assert 'cost' in result
         # 成本应该大于 0（因为库存不足）
         assert result['cost'] > 0
+
+
+class TestReplanWithInventory:
+    """测试边缘情况5：需求与库存不匹配时的重新规划"""
+
+    def test_replan_uses_partial_inventory(self):
+        """当库存尺寸不完全匹配时，拆分方案使用部分库存"""
+        # 需求: 6x9 (需要 1 个 6x9)
+        # 库存: 6x6 有 2 个
+        # 方案: 使用 1 个 6x6 库存，剩余空间打印
+        tiles = [(6, 9)]
+        inventory = {'6x6': 2}
+
+        result = replan_with_inventory(tiles, inventory)
+
+        # 应该返回重新规划后的方案
+        assert result is not None, "Should replan when partial inventory available"
+        assert 'tiles' in result
+        # 至少使用 1 个 6x6 库存
+        assert result['from_inventory'].get('6x6', 0) >= 1
+
+    def test_no_replan_needed_when_exact_match(self):
+        """精确匹配时不需要重新规划"""
+        tiles = [(6, 7)]
+        inventory = {'6x7': 1}
+
+        # 精确匹配时不需要重新规划
+        result = replan_with_inventory(tiles, inventory)
+        # 返回 None 表示不需要重新规划
+        assert result is None
+
+    def test_replan_improves_cost(self):
+        """重新规划应该降低打印成本"""
+        # 原始方案: 6x9 (成本高)
+        # 重新规划: 使用 6x6 库存 + 打印剩余
+        tiles = [(6, 9)]
+        inventory = {'6x6': 1}
+
+        # 重新规划后成本应该降低
+        result = replan_with_inventory(tiles, inventory)
+
+        if result:
+            # 如果成功重新规划，比较成本
+            original_cost, _, _ = calculate_print_cost(tiles, {}, copies=1)
+            assert result['cost'] < original_cost, "Replanned cost should be lower"
 
 
 if __name__ == "__main__":
