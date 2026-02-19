@@ -121,7 +121,10 @@ def calc_scheme_balance(xs, ys):
 
 
 def find_best_scheme(x, y, verbose=False):
-    """直接寻找最优方案，找到1种尺寸就停止"""
+    """直接寻找最优方案，找到1种尺寸就停止
+
+    修复: 考虑旋转对称性，搜索两个方向并取最优解
+    """
     # 首先检查是否需要分割
     if validate_tile(x, y):
         return {
@@ -134,6 +137,36 @@ def find_best_scheme(x, y, verbose=False):
             'tile_count': 1
         }
 
+    # 搜索原始方向
+    best = _find_best_scheme_impl(x, y, verbose)
+
+    # 如果 x != y，搜索旋转后的方向并比较
+    if x != y:
+        rotated = _find_best_scheme_impl(y, x, verbose)
+        if rotated is not None:
+            # 旋转结果：将 x_splits 和 y_splits 交换
+            rotated_swapped = {
+                'x_parts': rotated['y_parts'],
+                'y_parts': rotated['x_parts'],
+                'x_splits': rotated['y_splits'],
+                'y_splits': rotated['x_splits'],
+                'tiles': [(w, h) for h, w in rotated['tiles']],
+                'unique_sizes': rotated['unique_sizes'],
+                'tile_count': rotated['tile_count'],
+                'balance': rotated['balance']
+            }
+            # 比较：独特尺寸少 > 瓦片数少 > 均衡度好
+            if best is None or \
+               rotated_swapped['unique_sizes'] < best['unique_sizes'] or \
+               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] < best['tile_count']) or \
+               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] == best['tile_count'] and rotated_swapped['balance'] < best['balance']):
+                best = rotated_swapped
+
+    return best
+
+
+def _find_best_scheme_impl(x, y, verbose=False):
+    """find_best_scheme 的实际实现"""
     best = None
     candidates_checked = 0
 

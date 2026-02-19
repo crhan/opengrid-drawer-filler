@@ -15,6 +15,8 @@ from split_calc import (
     calc_balance,
     calc_scheme_balance,
     find_best_scheme,
+    calculate_single,
+    merge_and_optimize,
     calculate_filament_and_time,
     format_time,
     TILE_SIZE,
@@ -364,6 +366,85 @@ class TestIntegration:
 
         scheme = find_best_scheme(x, y)
         assert scheme is not None
+
+
+class TestBatchMode:
+    """批量计算相关函数测试"""
+
+    def test_calculate_single_basic(self):
+        """测试 calculate_single 基本功能"""
+        result = calculate_single(400, 400, copies=1)
+        assert result is not None
+        assert result['width'] == 400
+        assert result['depth'] == 400
+        assert result['copies'] == 1
+        assert 'scheme' in result
+        assert 'grid' in result
+
+    def test_calculate_single_with_copies(self):
+        """测试 calculate_single 带份数"""
+        result = calculate_single(400, 400, copies=3)
+        assert result is not None
+        assert result['copies'] == 3
+
+    def test_calculate_single_small_drawer(self):
+        """测试小尺寸抽屉"""
+        result = calculate_single(100, 100)
+        # 100mm = 3 格，应该返回有效结果
+        assert result is not None
+
+    def test_merge_and_optimize_single(self):
+        """测试单个尺寸的合并优化"""
+        result = calculate_single(400, 400, copies=1)
+        merged = merge_and_optimize([result])
+
+        # 应该返回瓦片统计
+        assert len(merged) > 0
+
+        # 验证合并后的数据结构
+        for (w, h), info in merged.items():
+            assert 'total' in info
+            assert 'by_drawer' in info
+            assert info['total'] > 0
+
+    def test_merge_and_optimize_multiple(self):
+        """测试多个尺寸的合并优化"""
+        results = [
+            calculate_single(265, 365, copies=2),
+            calculate_single(325, 365, copies=2),
+            calculate_single(315, 365, copies=2),
+        ]
+
+        merged = merge_and_optimize(results)
+
+        # 应该合并共同尺寸的瓦片
+        assert len(merged) > 0
+
+        # 验证总数正确
+        for (w, h), info in merged.items():
+            expected_total = sum(item['total'] for item in info['by_drawer'])
+            assert info['total'] == expected_total
+
+    def test_merge_and_optimize_same_size(self):
+        """测试相同尺寸不同份数的合并"""
+        result1 = calculate_single(400, 400, copies=1)
+        result2 = calculate_single(400, 400, copies=2)
+
+        merged = merge_and_optimize([result1, result2])
+
+        # 相同瓦片尺寸应该合并
+        assert len(merged) > 0
+
+    def test_merge_and_optimize_empty(self):
+        """测试空输入"""
+        merged = merge_and_optimize([])
+        assert merged == {}
+
+    def test_merge_and_optimize_with_none(self):
+        """测试包含 None 的输入"""
+        result = calculate_single(400, 400, copies=1)
+        merged = merge_and_optimize([result, None])
+        assert len(merged) > 0
 
 
 if __name__ == "__main__":
