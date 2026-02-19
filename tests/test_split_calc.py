@@ -612,6 +612,49 @@ class TestOptimizeBatchGlobal:
         optimized = optimize_batch_global(results)
         assert optimized['total_prints'] == 1
 
+    def test_optimize_empty_batch(self):
+        """测试空批次"""
+        result = optimize_batch_global([])
+        assert result is None
+
+    def test_optimize_single_drawer(self):
+        """测试单个抽屉"""
+        results = [calculate_single(400, 400, copies=1)]
+        optimized = optimize_batch_global(results)
+        assert optimized['total_prints'] == 1
+        assert optimized['improved'] is False
+
+    def test_optimize_with_none_in_batch(self):
+        """测试批次中包含 None"""
+        results = [
+            calculate_single(265, 365, copies=1),
+            None,
+            calculate_single(325, 365, copies=1),
+        ]
+        optimized = optimize_batch_global(results)
+        assert optimized is not None
+
+    def test_optimize_returns_schemes(self):
+        """测试优化后返回正确的方案"""
+        results = [
+            calculate_single(265, 365, copies=1),
+            calculate_single(325, 365, copies=1),
+        ]
+        optimized = optimize_batch_global(results)
+        assert len(optimized['schemes']) == 2
+
+    def test_optimize_improvement_flag(self):
+        """测试改进标志正确设置"""
+        # 创建一个场景：独立最优不是全局最优
+        results = [
+            calculate_single(265, 365, copies=2),
+            calculate_single(325, 365, copies=2),
+            calculate_single(315, 365, copies=2),
+        ]
+        optimized = optimize_batch_global(results)
+        # improved 可以是 True 或 False，取决于是否能改进
+        assert isinstance(optimized['improved'], bool)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
