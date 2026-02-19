@@ -6,6 +6,7 @@ from pathlib import Path
 
 # 默认配置
 DEFAULTS = {
+    "initialized": False,
     "output": {"stl_dir": "~/3D打印/opengrid/"},
     "printer": {"model": "p1p"},
     "opengrid": {
@@ -80,6 +81,16 @@ def reload_config():
     global _config
     _config = None
     return load_config()
+
+
+def is_initialized():
+    """检查是否已初始化"""
+    config_path = get_config_path()
+    if not config_path.exists():
+        return False
+    with open(config_path) as f:
+        config = yaml.safe_load(f) or {}
+    return config.get("initialized", False)
 
 
 # 测试

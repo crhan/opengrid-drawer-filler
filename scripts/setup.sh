@@ -25,3 +25,57 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "=== opengrid-drawer-filler 安装 ==="
+
+# 检查 Homebrew
+check_brew() {
+    if ! command -v brew &> /dev/null; then
+        echo -e "${RED}错误: 需要安装 Homebrew${NC}"
+        echo "访问: https://brew.sh"
+        exit 1
+    fi
+    echo -e "${GREEN}Homebrew 已安装${NC}"
+}
+
+# 1. 安装 OpenSCAD
+install_openscad() {
+    echo "1/3 安装 OpenSCAD@snapshot..."
+    if ! brew list --cask openscad@snapshot &> /dev/null; then
+        brew install --cask openscad@snapshot
+        echo -e "${GREEN}OpenSCAD@snapshot 安装完成${NC}"
+    else
+        echo -e "${YELLOW}OpenSCAD@snapshot 已安装${NC}"
+    fi
+}
+
+# 2. 克隆 QuackWorks
+install_quackworks() {
+    echo "2/3 克隆 QuackWorks..."
+    mkdir -p "$VENDOR_DIR"
+    if [ ! -d "$QUACKWORKS_DIR" ]; then
+        git clone https://github.com/AndyLevesque/QuackWorks "$QUACKWORKS_DIR"
+        echo -e "${GREEN}QuackWorks 克隆完成${NC}"
+    else
+        echo -e "${YELLOW}QuackWorks 已存在${NC}"
+    fi
+}
+
+# 3. 安装 BOSL2
+install_bosl2() {
+    echo "3/3 安装 BOSL2..."
+    mkdir -p "$BOSL2_DIR"
+    if [ ! -d "$BOSL2_DIR/.git" ]; then
+        git clone https://github.com/revarwin/BOSL2 "$BOSL2_DIR"
+        echo -e "${GREEN}BOSL2 安装完成${NC}"
+    else
+        echo -e "${YELLOW}BOSL2 已安装${NC}"
+    fi
+}
+
+# 运行安装
+check_brew
+install_openscad
+install_quackworks
+install_bosl2
+
+echo ""
+echo -e "${GREEN}=== 安装完成 ===${NC}"
