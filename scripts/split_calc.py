@@ -126,6 +126,40 @@ def calc_scheme_balance(xs, ys):
     return max(x_balance, y_balance)
 
 
+# 方案排序键：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
+SCHEME_SORT_KEY = lambda s: (s['cost'], s['unique_sizes'], s['total_tiles'], s['balance'])
+
+
+def normalize_tiles(tiles):
+    """规范化瓦片：如果瓦片宽度超过 MAX_X 但高度在范围内，则旋转该瓦片
+
+    Args:
+        tiles: 瓦片列表 [(w, h), ...]
+
+    Returns:
+        规范化后的瓦片列表
+    """
+    normalized = []
+    for w, h in tiles:
+        if w > MAX_X and h <= MAX_Y:
+            normalized.append((h, w))
+        else:
+            normalized.append((w, h))
+    return normalized
+
+
+def validate_tiles(tiles):
+    """验证所有瓦片是否合法
+
+    Args:
+        tiles: 瓦片列表 [(w, h), ...]
+
+    Returns:
+        True 如果所有瓦片都合法
+    """
+    return all(validate_tile(w, h) for w, h in tiles)
+
+
 def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """直接寻找最优方案，找到1种尺寸就停止
 
@@ -179,12 +213,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             })
 
         # 多维度排序：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
-        scored_schemes.sort(key=lambda s: (
-            s['cost'],
-            s['unique_sizes'],
-            s['total_tiles'],
-            s['balance']
-        ))
+        scored_schemes.sort(key=SCHEME_SORT_KEY)
 
         best_scored = scored_schemes[0]
         best = best_scored['scheme'].copy()
@@ -202,29 +231,24 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             scored_rotated = []
 
             for scheme in rotated_schemes:
-                # 旋转瓦片
-                rotated_tiles = []
-                for w, h in scheme['tiles']:
-                    if w > MAX_X and h <= MAX_Y:
-                        rotated_tiles.append((h, w))
-                    else:
-                        rotated_tiles.append((w, h))
+                # 规范化瓦片
+                normalized = normalize_tiles(scheme['tiles'])
 
                 # 检查旋转后的瓦片是否有效
-                if not all(validate_tile(w, h) for w, h in rotated_tiles):
+                if not validate_tiles(normalized):
                     continue
 
                 cost, from_inv, need_print = calculate_print_cost(
-                    rotated_tiles, inventory, copies
+                    normalized, inventory, copies
                 )
 
-                unique_sizes = len(set(rotated_tiles))
-                total_tiles = len(rotated_tiles)
+                unique_sizes = len(set(normalized))
+                total_tiles = len(normalized)
                 balance = calc_scheme_balance(scheme['y_splits'], scheme['x_splits'])
 
                 scored_rotated.append({
                     'scheme': scheme,
-                    'rotated_tiles': rotated_tiles,
+                    'rotated_tiles': normalized,
                     'cost': cost,
                     'from_inventory': from_inv,
                     'need_print': need_print,
@@ -235,12 +259,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
 
             if scored_rotated:
                 # 排序旋转后的方案
-                scored_rotated.sort(key=lambda s: (
-                    s['cost'],
-                    s['unique_sizes'],
-                    s['total_tiles'],
-                    s['balance']
-                ))
+                scored_rotated.sort(key=SCHEME_SORT_KEY)
 
                 best_rotated = scored_rotated[0]
 
@@ -274,14 +293,8 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     if x != y:
         rotated = _find_best_scheme_impl(y, x, verbose)
         if rotated is not None:
-            # 旋转结果：将 x_splits 和 y_splits 交换
-            # 同时规范化瓦片：如果 x 超过 MAX_X 但 y 在范围内，则交换
-            normalized_tiles = []
-            for w, h in rotated['tiles']:
-                if w > MAX_X and h <= MAX_Y:
-                    normalized_tiles.append((h, w))
-                else:
-                    normalized_tiles.append((w, h))
+            # 规范化瓦片
+            normalized_tiles = normalize_tiles(rotated['tiles'])
 
             rotated_swapped = {
                 'x_parts': rotated['y_parts'],
@@ -295,7 +308,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             }
 
             # 验证规范化后的瓦片是否有效
-            rotated_valid = all(validate_tile(w, h) for w, h in normalized_tiles)
+            rotated_valid = validate_tiles(normalized_tiles)
 
             # 比较：只有当旋转结果更优且有效时才采用
             if rotated_valid and (best is None or \
