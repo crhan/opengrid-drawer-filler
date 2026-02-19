@@ -38,6 +38,163 @@ def get_max_stacks():
     return int(MAX_Z // FULL_THICKNESS)
 
 
+def generate_stl(width, height, stacks, verbose=False, force=False):
+    """生成单个 STL 文件
+
+    Args:
+        width: 瓦片宽度（格数）
+        height: 瓦片高度（格数）
+        stacks: 堆叠层数
+        verbose: 是否输出详细信息
+        force: 是否强制重新生成
+
+    Returns:
+        (output_path, error): 成功时返回文件路径和None，失败时返回None和错误信息
+    """
+    filename = f"opengrid_{width}x{height}_Full_s{stacks}.stl"
+    output_dir = os.path.join(OUTPUT_DIR, f"{width}x{height}_Full/")
+    output_path = os.path.join(output_dir, filename)
+
+    # 检查文件是否已存在
+    if os.path.exists(output_path) and not force:
+        return output_path, "exists"
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    cmd = [
+        OPENSCAD_PATH,
+        "-o", output_path,
+        "-D", 'Full_or_Lite="Full"',
+        "-D", f"Board_Width={width}",
+        "-D", f"Board_Height={height}",
+        "-D", f"Stack_Count={stacks}",
+        "-D", 'Stacking_Method="Ironing"',
+        "-D", "Interface_Separation=0.2",
+        "-D", 'Screw_Mounting="Everywhere"',
+        SCAD_FILE
+    ]
+
+    if verbose:
+        print(f"  [DEBUG] Running: {' '.join(cmd)}")
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        if verbose:
+            print(f"  [DEBUG] Error: {result.stderr}")
+        return None, result.stderr
+
+    return output_path, None
+
+
+def generate_all_stls(scheme, copies, verbose=False, force=False):
+    """生成所有 STL 文件（并发执行）
+
+    Args:
+        scheme: 分割方案字典，需包含 'tiles' 键
+        copies: 打印份数
+        verbose: 是否输出详细信息
+        force: 是否强制重新生成
+
+    Returns:
+        list: 成功生成的 STL 文件路径列表
+    """
+    # 按尺寸分组统计
+    tile_counts = {}
+    for w, h in scheme['tiles']:
+        key = (w, h)
+        tile_counts[key] = tile_counts.get(key, 0) + 1
+
+    max_stacks = get_max_stacks()
+
+    # 收集所有需要生成的任务
+    tasks = []
+    for (w, h), count in tile_counts.items():
+        total_stacks = count * copies
+
+        # 检查是否需要分多次打印
+        if total_stacks > max_stacks:
+            num_prints = (total_stacks + max_stacks - 1) // max_stacks
+            stacks_per_print = total_stacks // num_prints
+            remainder = total_stacks % num_prints
+
+            for i in range(num_prints):
+                stacks = stacks_per_print + (1 if i < remainder else 0)
+                if stacks == 0:
+                    continue
+                tasks.append((w, h, stacks))
+        else:
+            tasks.append((w, h, total_stacks))
+
+    print(f"\n--- 生成 STL ({len(tasks)} 个任务) ---")
+
+    # 检查哪些文件已存在
+    existing = []
+    to_generate = []
+    for w, h, stacks in tasks:
+        filename = f"opengrid_{w}x{h}_Full_s{stacks}.stl"
+        output_dir = os.path.join(OUTPUT_DIR, f"{w}x{h}_Full/")
+        output_path = os.path.join(output_dir, filename)
+
+        if os.path.exists(output_path) and not force:
+            existing.append((w, h, stacks, output_path))
+        else:
+            to_generate.append((w, h, stacks, output_path))
+
+    if existing:
+        print(f"  已存在: {len(existing)} 个")
+        for w, h, stacks, path in existing:
+            print(f"    {w}x{h}: {os.path.basename(path)}")
+
+    if not to_generate:
+        print("\n所有文件已存在，跳过生成")
+        return [p for _, _, _, p in existing]
+
+    print(f"  需要生成: {len(to_generate)} 个")
+
+    # 并发执行生成任务
+    results = []
+    errors = []
+
+    def generate_task(w, h, stacks):
+        return generate_stl(w, h, stacks, verbose, force)
+
+    # 使用线程池并发执行，最多同时运行 2 个 OpenSCAD 进程
+    max_workers = min(2, len(to_generate))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_task = {
+            executor.submit(generate_task, w, h, stacks): (w, h, stacks)
+            for w, h, stacks, _ in to_generate
+        }
+
+        for future in as_completed(future_to_task):
+            w, h, stacks = future_to_task[future]
+            try:
+                path, err = future.result()
+                if err and err != "exists":
+                    errors.append((w, h, err))
+                    print(f"  {w}x{h}: 生成失败")
+                elif err == "exists":
+                    print(f"  {w}x{h}: 已存在（跳过）")
+                else:
+                    results.append(path)
+                    print(f"  {w}x{h}: {os.path.basename(path)}")
+            except Exception as e:
+                errors.append((w, h, str(e)))
+                print(f"  {w}x{h}: 异常 - {e}")
+
+    generated = len(results)
+    skipped = len(existing)
+    print(f"\n完成: 生成 {generated} 个, 跳过 {skipped} 个, 失败 {len(errors)} 个")
+
+    if errors:
+        print("失败列表:")
+        for w, h, err in errors:
+            print(f"  {w}x{h}: {err}")
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description='openGrid STL 生成和切片工具')
     args = parser.parse_args()
