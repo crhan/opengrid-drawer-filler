@@ -41,5 +41,8 @@ Thumbs.db
 # Vendor (external dependencies, cloned at install time)
 vendor/
 
+# User configuration (copy from config.example.yaml)
+config.yaml
+
 # Inventory (user-specific data)
 scripts/inventory.json

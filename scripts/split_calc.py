@@ -10,12 +10,38 @@ import json
 import os
 import sys
 
-TILE_SIZE = 28    # mm
-MAX_X = 10        # 最大X方向格数
-MAX_Y = 11        # 最大Y方向格数
-MIN_TILE = 2      # 最小瓦片格数
-FULL_THICKNESS = 6.8 + 0.4  # Full版本单层厚度+间距(mm)
-MAX_Z = 325       # 打印机Z轴最大高度(mm)
+# 导入配置模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import load_config, get_printer_config
+
+# 加载配置
+_config = load_config()
+_printer = get_printer_config()
+
+# 瓦片厚度定义
+TILE_THICKNESS = {
+    "Full": 6.8,
+    "Lite": 4.0,
+    "Heavy": 13.8
+}
+
+# 从配置获取参数
+TILE_SIZE = _config["opengrid"].get("tile_size", 28)
+MAX_Z = _printer["max_z"]
+MAX_X = _printer["bed_x"] // TILE_SIZE
+MAX_Y = _printer["bed_y"] // TILE_SIZE
+MIN_TILE = 2
+
+# 计算每层厚度
+tile_type = _config["opengrid"].get("tile_type", "Full")
+interface_separation = _config["opengrid"].get("interface_separation", 0.2)
+stacking_method = _config["opengrid"].get("stacking_method", "Ironing")
+
+if stacking_method == "Ironing":
+    FULL_THICKNESS = TILE_THICKNESS.get(tile_type, 6.8) + 2 * interface_separation
+else:
+    # Interface Layer: tile_thickness + interface_thickness + 2 * interface_separation
+    FULL_THICKNESS = TILE_THICKNESS.get(tile_type, 6.8) + 0.4 + 2 * interface_separation
 
 # 耗材和打印时间估算常量（基于实测数据）
 FILAMENT_MAIN_PER_CELL = 1.13     # 主耗材: g/格/层

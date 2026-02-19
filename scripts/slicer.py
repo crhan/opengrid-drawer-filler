@@ -10,10 +10,27 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# 导入配置模块（添加 scripts 目录到路径）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import load_config, get_printer_config
+
+# 加载配置
+_config = load_config()
+_printer = get_printer_config()
+
 # === 常量 ===
-TILE_SIZE = 28
-MAX_Z = 325
-FULL_THICKNESS = 6.8 + 0.4
+TILE_SIZE = _config["opengrid"].get("tile_size", 28)
+MAX_Z = _printer["max_z"]
+
+# 计算每层厚度 (Ironing: tile_thickness + 2 * interface_separation)
+tile_thickness = {
+    "Full": 6.8,
+    "Lite": 4.0,
+    "Heavy": 13.8
+}
+tile_type = _config["opengrid"].get("tile_type", "Full")
+interface_separation = _config["opengrid"].get("interface_separation", 0.2)
+FULL_THICKNESS = tile_thickness.get(tile_type, 6.8) + 2 * interface_separation
 
 # 获取 skill 目录路径
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -21,18 +38,18 @@ SKILL_DIR = os.path.dirname(SCRIPT_DIR)
 VENDOR_DIR = os.path.join(SKILL_DIR, "vendor")
 
 # OpenSCAD 路径
-OPENSCAD_PATH = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
+OPENSCAD_PATH = _config["software"]["openscad"]
 SCAD_FILE = os.path.join(VENDOR_DIR, "QuackWorks", "openGrid", "openGrid.scad")
-OUTPUT_DIR = "/Users/ruohanc/Library/CloudStorage/SynologyDrive-homeNAS/3D模型/opengrid/"
+OUTPUT_DIR = os.path.expanduser(_config["output"]["stl_dir"])
 
 # Bambu Studio 路径
-BAMBU_STUDIO_PATH = "/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"
-BAMBU_OUTPUT_DIR = "/Users/ruohanc/Library/CloudStorage/SynologyDrive-homeNAS/3D模型/opengrid/sliced/"
+BAMBU_STUDIO_PATH = _config["software"]["bambustudio"]
+BAMBU_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "sliced")
 BAMBU_DEFAULT_PRINT_SETTINGS = "/Users/ruohanc/Library/Application Support/BambuStudio/user/1955088115/process/Opengrid堆叠打印.json"
 
 # Orca Slicer 路径
-ORCA_SLICER_PATH = "/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer"
-ORCA_OUTPUT_DIR = "/Users/ruohanc/Library/CloudStorage/SynologyDrive-homeNAS/3D模型/opengrid/sliced/"
+ORCA_SLICER_PATH = _config["software"]["orca"]
+ORCA_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "sliced")
 ORCA_MACHINE_PRESET = "/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL/machine/Bambu Lab P1P 0.4 nozzle.json"
 ORCA_PROCESS_PRESET = "/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL/process/0.20mm Standard @BBL P1P.json"
 ORCA_FILAMENT_PRESET = "/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL/filament/P1P/Bambu PLA Basic @BBL P1P.json"
@@ -60,8 +77,9 @@ def generate_stl(width, height, stacks, verbose=False, force=False):
     if width <= 0 or height <= 0 or stacks <= 0:
         return None, f"Invalid parameters: width={width}, height={height}, stacks={stacks}"
 
-    filename = f"opengrid_{width}x{height}_Full_s{stacks}.stl"
-    output_dir = os.path.join(OUTPUT_DIR, f"{width}x{height}_Full/")
+    tile_type = _config["opengrid"].get("tile_type", "Full")
+    filename = f"opengrid_{width}x{height}_{tile_type}_s{stacks}.stl"
+    output_dir = os.path.join(OUTPUT_DIR, f"{width}x{height}_{tile_type}/")
     output_path = os.path.join(output_dir, filename)
 
     # 检查文件是否已存在
@@ -70,15 +88,20 @@ def generate_stl(width, height, stacks, verbose=False, force=False):
 
     os.makedirs(output_dir, exist_ok=True)
 
+    # 从配置获取参数
+    tile_type = _config["opengrid"].get("tile_type", "Full")
+    stacking_method = _config["opengrid"].get("stacking_method", "Ironing")
+    interface_sep = _config["opengrid"].get("interface_separation", 0.2)
+
     cmd = [
         OPENSCAD_PATH,
         "-o", output_path,
-        "-D", 'Full_or_Lite="Full"',
+        "-D", f'Full_or_Lite="{tile_type}"',
         "-D", f"Board_Width={width}",
         "-D", f"Board_Height={height}",
         "-D", f"Stack_Count={stacks}",
-        "-D", 'Stacking_Method="Ironing"',
-        "-D", "Interface_Separation=0.2",
+        "-D", f'Stacking_Method="{stacking_method}"',
+        "-D", f"Interface_Separation={interface_sep}",
         "-D", 'Screw_Mounting="Everywhere"',
         SCAD_FILE
     ]
@@ -138,11 +161,12 @@ def generate_all_stls(scheme, copies, verbose=False, force=False):
     print(f"\n--- 生成 STL ({len(tasks)} 个任务) ---")
 
     # 检查哪些文件已存在
+    tile_type = _config["opengrid"].get("tile_type", "Full")
     existing = []
     to_generate = []
     for w, h, stacks in tasks:
-        filename = f"opengrid_{w}x{h}_Full_s{stacks}.stl"
-        output_dir = os.path.join(OUTPUT_DIR, f"{w}x{h}_Full/")
+        filename = f"opengrid_{w}x{h}_{tile_type}_s{stacks}.stl"
+        output_dir = os.path.join(OUTPUT_DIR, f"{w}x{h}_{tile_type}/")
         output_path = os.path.join(output_dir, filename)
 
         if os.path.exists(output_path) and not force:

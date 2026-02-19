@@ -1,0 +1,27 @@
+# === 必需配置 ===
+output:
+  stl_dir: "~/3D打印/opengrid/"
+
+# === 打印机配置 ===
+printer:
+  # 机型预设: a1_mini / a1 / p1p / p1s / x1c / x1e / h2d / custom
+  model: "p1p"
+
+  # 自定义参数（当 model=custom 时使用）
+  custom:
+    bed_x: 256
+    bed_y: 256
+    max_z: 256
+
+# === openGrid 参数（可选）===
+opengrid:
+  tile_type: "Full"           # Full / Lite / Heavy
+  stacking_method: "Ironing"   # Ironing / Interface Layer
+  interface_separation: 0.2
+  tile_size: 28
+
+# === 软件路径（可选）===
+software:
+  openscad: "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
+  bambustudio: "/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"
+  orca: "/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer"

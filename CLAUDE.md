@@ -20,6 +20,32 @@ cd {skill_dir}
 - QuackWorks 源码 (克隆到 vendor 目录)
 - BOSL2 库 (OpenSCAD 依赖)
 
+## 配置文件
+
+首次使用需要配置 `config.yaml`：
+
+```bash
+# 复制模板
+cp config.example.yaml config.yaml
+
+# 编辑配置
+# - STL 输出目录
+# - 打印机型号 (Bambu 机型预设)
+# - openGrid 参数
+```
+
+### 打印机预设
+
+| 型号 | bed_x | bed_y | max_z |
+|------|-------|-------|-------|
+| a1_mini | 120 | 120 | 120 |
+| a1 | 180 | 180 | 180 |
+| p1p | 256 | 256 | 256 |
+| p1s | 256 | 256 | 256 |
+| x1c | 256 | 256 | 256 |
+| x1e | 256 | 256 | 256 |
+| h2d | 300 | 300 | 300 |
+
 ## Common Commands
 
 ```bash
