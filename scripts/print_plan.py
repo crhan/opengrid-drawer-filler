@@ -138,12 +138,12 @@ def main():
         else:
             output_dir = args.output
 
+        if args.text:
+            output_text(plan_data)
         if args.png:
             output_png(plan_data, output_dir)
-        elif args.html:
+        if args.html:
             output_html(plan_data, output_dir)
-        else:
-            output_text(plan_data)
 
     # 如果有多个文件且指定了批量模式
     if len(args.files) > 1 and (args.png or args.html):
