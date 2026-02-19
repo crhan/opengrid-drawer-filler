@@ -199,6 +199,147 @@ def generate_all_stls(scheme, copies, verbose=False, force=False):
     return results
 
 
+def slice_with_bambu(stl_paths, output_name, print_settings=None, machine_settings=None, verbose=False):
+    """使用 Bambu Studio 切片 STL 文件
+
+    Args:
+        stl_paths: STL 文件路径列表
+        output_name: 输出文件名（不含扩展名）
+        print_settings: 打印设置文件路径
+        machine_settings: 机器/耗材设置文件路径
+        verbose: 是否输出详细信息
+
+    Returns:
+        (output_path, error): 成功时返回3MF路径和None，失败时返回None和错误信息
+    """
+    if not stl_paths:
+        return None, "No STL files to slice"
+
+    os.makedirs(BAMBU_OUTPUT_DIR, exist_ok=True)
+
+    output_3mf = os.path.join(BAMBU_OUTPUT_DIR, f"{output_name}.3mf")
+
+    cmd = [
+        BAMBU_STUDIO_PATH,
+        "--slice", "0",
+        "--outputdir", BAMBU_OUTPUT_DIR,
+    ]
+
+    if print_settings:
+        cmd.extend(["--load-settings", print_settings])
+
+    if machine_settings:
+        cmd.extend(["--load-filaments", machine_settings])
+
+    cmd.extend(stl_paths)
+
+    if verbose:
+        print(f"  [DEBUG] Running: {' '.join(cmd)}")
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        return None, "切片超时"
+    except Exception as e:
+        return None, f"启动失败: {e}"
+
+    if result.returncode != 0:
+        error_msg = result.stderr or result.stdout or "未知错误"
+        if "display" in error_msg.lower() or "gtk" in error_msg.lower():
+            return None, "Bambu Studio 需要图形界面，无法在无头模式下运行"
+        if verbose:
+            print(f"  [DEBUG] Error: {error_msg}")
+        return None, error_msg
+
+    if os.path.exists(output_3mf):
+        return output_3mf, None
+    else:
+        for f in os.listdir(BAMBU_OUTPUT_DIR):
+            if f.endswith(".3mf"):
+                return os.path.join(BAMBU_OUTPUT_DIR, f), None
+
+    return None, "切片完成但未生成输出文件（Bambu Studio 可能需要图形界面）"
+
+
+def slice_with_orca(stl_paths, output_name, verbose=False):
+    """使用 Orca Slicer 切片 STL 文件
+
+    Args:
+        stl_paths: STL 文件路径列表
+        output_name: 输出文件名（不含扩展名）
+        verbose: 是否输出详细信息
+
+    Returns:
+        (output_path, error): 成功时返回3MF路径和None，失败时返回None和错误信息
+    """
+    if not stl_paths:
+        return None, "No STL files to slice"
+
+    os.makedirs(ORCA_OUTPUT_DIR, exist_ok=True)
+
+    output_3mf = os.path.join(ORCA_OUTPUT_DIR, f"{output_name}.3mf")
+
+    cmd = [
+        ORCA_SLICER_PATH,
+        "--arrange", "1",
+        "--load-settings", ORCA_MACHINE_PRESET,
+        "--load-settings", ORCA_PROCESS_PRESET,
+        "--load-filaments", ORCA_FILAMENT_PRESET,
+        "--export-3mf", output_3mf,
+    ]
+
+    cmd.extend(stl_paths)
+
+    if verbose:
+        print(f"  [DEBUG] Running: {' '.join(cmd)}")
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        return None, "切片超时"
+    except Exception as e:
+        return None, f"启动失败: {e}"
+
+    if result.returncode != 0:
+        error_msg = result.stderr or result.stdout or "未知错误"
+        if "shader" in error_msg.lower() or "gl_" in error_msg.lower() or "display" in error_msg.lower():
+            return None, "Orca Slicer 需要图形界面，无法在无头模式下运行。建议使用 -o 选项在 GUI 中打开 STL 文件。"
+        if verbose:
+            print(f"  [DEBUG] Error: {error_msg}")
+        return None, error_msg
+
+    if os.path.exists(output_3mf):
+        return output_3mf, None
+    else:
+        for f in os.listdir(ORCA_OUTPUT_DIR):
+            if f.endswith(".3mf"):
+                return os.path.join(ORCA_OUTPUT_DIR, f), None
+
+    return None, "切片完成但未生成输出文件（Orca Slicer 可能需要图形界面）"
+
+
+def open_in_slicer(stl_paths, slicer="bambu"):
+    """在切片器中打开 STL 文件
+
+    Args:
+        stl_paths: STL 文件路径列表
+        slicer: 切片器类型 ("bambu" 或 "orca")
+
+    Returns:
+        (success, error): 成功时返回(True, None)，失败时返回(False, error)
+    """
+    if slicer == "orca":
+        cmd = [ORCA_SLICER_PATH] + list(stl_paths)
+    else:
+        cmd = [BAMBU_STUDIO_PATH] + list(stl_paths)
+
+    try:
+        subprocess.Popen(cmd)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
 def main():
     parser = argparse.ArgumentParser(description='openGrid STL 生成和切片工具')
     args = parser.parse_args()
