@@ -952,14 +952,15 @@ def optimize_batch_global(batch_results, inventory=None):
 
     # 步骤1：各自找最优作为初始解（如果有库存，传入库存）
     initial_schemes = []
-    for r in batch_results:
+    for i, r in enumerate(batch_results):
         if r is None:
             initial_schemes.append(None)
             continue
         x, y = r['grid']
+        copies = r.get('copies', 1)
         # 如果有库存，使用 find_best_scheme 获取最优方案
         if inventory:
-            scheme = find_best_scheme(x, y, inventory=inventory)
+            scheme = find_best_scheme(x, y, inventory=inventory, copies=copies)
             initial_schemes.append(scheme)
         else:
             initial_schemes.append(r['scheme'] if r else None)
@@ -967,8 +968,10 @@ def optimize_batch_global(batch_results, inventory=None):
     # 计算初始解的成本（打印次数或库存成本）
     if inventory:
         initial_cost = sum(
-            calculate_print_cost(s['tiles'], inventory, 1)[0]
-            for s in initial_schemes if s
+            calculate_print_cost(
+                s['tiles'], inventory, batch_results[i].get('copies', 1)
+            )[0]
+            for i, s in enumerate(initial_schemes) if s
         )
     else:
         initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
@@ -1005,7 +1008,9 @@ def optimize_batch_global(batch_results, inventory=None):
             # 计算新组合的成本
             if inventory:
                 total = sum(
-                    calculate_print_cost(s['tiles'], inventory, 1)[0]
+                    calculate_print_cost(
+                        s['tiles'], inventory, batch_results[i].get('copies', 1)
+                    )[0]
                     for s in test_schemes if s
                 )
             else:
