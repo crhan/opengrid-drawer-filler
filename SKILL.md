@@ -5,25 +5,119 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
 
 # openGrid 抽屉铺满
 
-根据抽屉尺寸计算最优瓦片分割方案，并可自动生成 STL 文件。
+根据抽屉尺寸计算最优瓦片分割方案，并可自动生成 STL 文件用于 3D 打印。
 
-## 快速开始
+## 核心原则
+
+**Agent 负责用户交互，脚本负责计算和生成。**
+
+- 脚本不应有 `input()` 交互代码
+- Agent 询问用户需求，调用脚本获取结果，展示给用户
+
+## Agent 工作流
+
+### Step 1: 检查配置
+
+1. 读取 `config.yaml` 检查 `initialized` 状态
+2. 如果未初始化，引导用户配置：
+   - 复制配置文件：`cp config.example.yaml config.yaml`
+   - 编辑设置 `initialized: true` 和打印机型号
+
+### Step 2: 询问需求
+
+1. 询问抽屉尺寸和份数
+2. 解析尺寸格式：
+   - `"265x360:2"` = 265×360mm，2份
+   - `"265x360"` = 265×360mm，1份
+   - `"265 360 2"` = 空格分隔格式
+
+### Step 3: 计算方案
+
+调用 `split_calc.py`：
 
 ```bash
-# 方式 1：交互式工作流（推荐）
-python3 scripts/interactive.py
+# 批量模式（自动合并优化）
+python3 scripts/split_calc.py -b "265x365:2 325x365:2"
 
-# 方式 2：指定尺寸
-python3 scripts/interactive.py 485x425
-
-# 方式 3：指定份数
-python3 scripts/interactive.py 485x425x2
-
-# 方式 4：传统方式（split_calc）
-python3 scripts/split_calc.py
-
-# 方式 5：指定尺寸（传统）
+# 单尺寸模式
 python3 scripts/split_calc.py 485 425
+
+# 使用预设
+python3 scripts/split_calc.py -p klean
+
+# JSON 输出（便于解析）
+python3 scripts/split_calc.py 485 425 -j
+```
+
+### Step 4: 展示方案
+
+将脚本输出展示给用户，询问选择。
+
+### Step 5: 生成文件
+
+1. 调用 `slicer.py` 生成 STL
+2. 调用 `visualizer.py` 生成 HTML 打印计划
+
+## 脚本职责
+
+| 脚本                  | 功能             | 修改状态      |
+| --------------------- | ---------------- | ------------- |
+| `split_calc.py`       | 批量计算分割方案 | ✅ 已移除交互 |
+| `scheme_generator.py` | 生成多方案       | 保留          |
+| `scheme_presenter.py` | 格式化方案输出   | 保留          |
+| `slicer.py`           | STL 生成         | 保留          |
+| `project_manager.py`  | 项目管理         | 保留          |
+| `visualizer.py`       | HTML 生成        | 保留          |
+| `config.py`           | 配置加载         | ✅ 已简化     |
+| `interactive.py`      | 入口             | ❌ 已删除     |
+
+## 命令参考
+
+### 批量计算
+
+```bash
+# 格式1: 宽x高:份数（推荐）
+python3 scripts/split_calc.py -b "265x365:2 325x365:2"
+
+# 格式2: 宽x高（默认1份）
+python3 scripts/split_calc.py -b "265x365 325x365"
+
+# 格式3: 宽 高 份数（空格分隔）
+python3 scripts/split_calc.py -b "265 365 2 325 365 2"
+```
+
+### 单尺寸计算
+
+```bash
+python3 scripts/split_calc.py 485 425        # 指定尺寸
+python3 scripts/split_calc.py 485 425 -c 3   # 指定份数
+python3 scripts/split_calc.py -p klean      # 使用预设
+python3 scripts/split_calc.py 485 425 -j    # JSON 输出
+```
+
+### 预设尺寸
+
+```bash
+--list-presets                          # 列出所有预设
+-p klean                                # Klean件盒 270×170mm
+-p ikea-sunda                           # IKEA Sunda 360×500mm
+-p ikea-kal                             # IKEA KAL 360×500mm
+-p ikea-alex                            # IKEA Alex 360×500mm
+-p standard                             # 标准抽屉 400×400mm
+```
+
+### 生成 STL
+
+```bash
+# 假设方案输出 7x5:3 和 10x5:3
+python3 scripts/slicer.py -g 7x5x3 10x5x3
+```
+
+### 在 slicer 中打开
+
+```bash
+python3 scripts/slicer.py -o file.stl --slicer orca
+python3 scripts/slicer.py -o file.stl --slicer bambu
 ```
 
 ## 初始化
@@ -31,203 +125,47 @@ python3 scripts/split_calc.py 485 425
 首次使用前完成配置：
 
 1. 运行 setup.sh：
+
    ```bash
    cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
    ./scripts/setup.sh
    ```
 
 2. 复制配置文件：
+
    ```bash
    cp config.example.yaml config.yaml
    ```
 
 3. 编辑 config.yaml，设置 `initialized: true` 和打印机型号
 
-未配置时运行会显示详细步骤。
+未配置时运行脚本会显示警告，Agent 应检测到并引导用户配置。
 
-## 交互式工作流
-
-交互式工作流会自动：
-1. 展示当前配置（打印机、库存、输出路径）
-2. 生成多方案对比（纯数学、库存感知、打印次数约束）
-3. 用户确认后自动生成 STL 和 HTML 打印计划
-4. HTML 打开时提示库存扣减
-
-### 使用方式
-
-```bash
-# 交互模式
-python3 scripts/interactive.py
-
-# 指定尺寸
-python3 scripts/interactive.py 485x425
-
-# 指定尺寸和份数
-python3 scripts/interactive.py 485x425x2
-```
-
-### 配置项目目录
-
-在 `config.yaml` 中设置项目根目录：
+## 配置文件 (config.yaml)
 
 ```yaml
-projects_dir: "~/opengrid_projects/"
-```
+# 基本设置
+initialized: true
+printer:
+  model: p1s # 打印机型号 (a1_mini, a1, p1p, p1s, x1c, x1e, h2d)
+  bed_x: 256 # 热床宽度 mm
+  bed_y: 256 # 热床深度 mm
+  max_z: 256 # 最大打印高度 mm
 
-项目会自动创建在 `~/opengrid_projects/YYYY-MM-DD-项目名/` 目录下，包含：
-- `project.yaml` - 项目配置
-- `plan.html` - 打印计划
-- `stl/` - STL 文件链接
+# openGrid 参数
+opengrid:
+  tile_type: Full # 瓦片类型 (Full, Half)
+  stacking_method: Ironing # 堆叠方式 (Ironing, Flat)
 
-## 批量计算模式
+# 输出设置
+output:
+  stl_dir: "~/Documents/opengrid/stls/"
+  projects_dir: "~/Documents/opengrid/projects/"
 
-支持一次输入多个尺寸和份数，系统会自动：
-1. 分别计算每个尺寸的最优分割方案
-2. 合并所有尺寸，统计共用瓦片
-3. 输出优化后的打印计划（减少总打印次数）
-
-### 输入格式
-
-支持多种格式：
-```bash
-# 格式1: 宽x高:份数（推荐）
--b "265x365:2 325x365:2 315x365:2"
-
-# 格式2: 宽x高（默认1份）
--b "265x365 325x365 315x365"
-
-# 格式3: 宽 高 份数（空格分隔）
--b "265 365 2 325 365 2 315 365 2"
-```
-
-### 输出示例
-
-```
-解析到 3 个尺寸:
-  265×365mm × 2份
-  325×365mm × 2份
-  315×365mm × 2份
-
---- 合并后的瓦片清单（可一起打印）---
-
-6×7 格:
-  来源: 325×365 × 2份 = 2 stack
-  来源: 315×365 × 2份 = 2 stack
-  需打印: 1次 (4 stack, 29mm)
-
-...
-
---- 总计 ---
-总耗材: ~959g
-总打印次数: 6次
-总打印时间: ~41h38m
-```
-
-## 参数说明
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| width | 抽屉内部宽度 (mm) | 交互询问 |
-| depth | 抽屉内部深度 (mm) | 交互询问 |
-| -c, --copies | 打印份数 | 1 |
-| -b, --batch | 批量计算（自动合并优化） | 无 |
-| -p, --preset | 预设尺寸 | 无 |
-| -j, --json | JSON 格式输出 | false |
-| -v, --verbose | 详细输出 | false |
-
-## 预设尺寸
-
-```bash
-# 常用抽屉尺寸预设
--p klean       # Klean件盒 270×170mm
--p ikea-sunda  # IKEA Sunda 36×50cm
--p ikea-kal    # IKEA KAL 36×50cm
--p ikea alex   # IKEA Alex 36×50cm
--p standard    # 标准 400×400mm
-```
-
-## 输出示例
-
-```
-抽屉尺寸: 485mm × 425mm
-有效格子: 17 × 15 = 255格
-打印份数: 1套
-
---- 分割方案 ---
-分割: 2×3
-X方向: 17 = 7 + 10
-Y方向: 15 = 5 + 5 + 5
-
-排布:
-7×5 10×5
-7×5 10×5
-7×5 10×5
-
---- 瓦片清单 ---
-7×5: 3块 (高度 71mm)
-       耗材: 119.7g, 时间: 47m
-10×5: 3块 (高度 71mm)
-       耗材: 170.9g, 时间: 67m
-
---- 耗材估算 ---
-主耗材: ~291g
-支撑耗材: ~16g
-总耗材: ~307g (1份)
-
---- 打印时间估算 ---
-预计总时间: ~3h31m (6次打印)
-```
-
-## 端到端工作流
-
-### 方式 1：计算方案
-
-```bash
-python3 scripts/split_calc.py 485 425 -j
-```
-
-### 方式 2：生成 STL（使用 slicer.py）
-
-根据上一步输出的方案，生成对应的 STL：
-
-```bash
-# 假设方案输出 7x5:3 和 10x5:3
-python3 scripts/slicer.py -g 7x5x3 10x5x3
-```
-
-### 方式 3：在 slicer 中打开或切片
-
-```bash
-# 在 Orca Slicer 中打开
-python3 scripts/slicer.py -o path/to/file.stl --slicer orca
-
-# 或者切片
-python3 scripts/slicer.py -s path/to/file.stl --slicer orca --output my_project
-```
-
-### JSON 输出示例
-
-```json
-{
-  "drawer": { "width": 485, "depth": 425 },
-  "grid": { "x": 17, "y": 15 },
-  "scheme": {
-    "x_parts": 2,
-    "y_parts": 3,
-    "x_splits": [7, 10],
-    "y_splits": [5, 5, 5],
-    "tiles": [
-      {"width": 7, "height": 5, "count": 3},
-      {"width": 10, "height": 5, "count": 3}
-    ]
-  },
-  "stats": {
-    "unique_sizes": 2,
-    "total_tiles": 6,
-    "total_filament_g": 307,
-    "total_time_min": 211
-  }
-}
+# 库存管理（可选）
+inventory:
+  enabled: true
+  file: "inventory.yaml"
 ```
 
 ## 算法规则
@@ -239,51 +177,43 @@ python3 scripts/slicer.py -s path/to/file.stl --slicer orca --output my_project
 
 ## 耗材估算
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| 单格耗材 | 1.13g | 主耗材/格/层 |
-| 单格支撑 | 0.06g | 支撑耗材/格/层 |
-| 单格时间 | 3.1min | 打印时间/格/层 |
-| 层高 | 7.2mm | Full 6.8mm + 0.4mm 间距 |
-| Z轴限制 | 325mm | 约 45 stack |
+| 常量     | 值     | 说明                    |
+| -------- | ------ | ----------------------- |
+| 单格耗材 | 1.13g  | 主耗材/格/层            |
+| 单格支撑 | 0.06g  | 支撑耗材/格/层          |
+| 单格时间 | 3.1min | 打印时间/格/层          |
+| 层高     | 7.2mm  | Full 6.8mm + 0.4mm 间距 |
+| Z轴限制  | 325mm  | 约 45 stack             |
 
 ## 故障排除
 
+**Q: 脚本运行失败？**
+
+- 检查 Python 依赖：`pip install -r requirements.txt`
+- 检查配置文件是否存在
+
 **Q: 无法生成有效方案？**
+
 - 抽屉尺寸可能太小或太大
 - 尝试增加分割数（当前最多 20 块瓦片）
 
-**Q: 打印次数太多？**
-- 使用 `-c 1` 先打印一份测试
-- 考虑分批打印
-
 **Q: STL 生成失败？**
+
 - 检查 OpenSCAD 是否已安装
 - 确认 SCAD 文件路径正确
 
 ## Slicer 集成
 
-### Orca Slicer CLI 研究结果
+### Orca Slicer CLI
 
 **注意**: Orca Slicer CLI 在 macOS 上需要显示上下文（OpenGL），无法无头运行。
 
 **已测试的功能**:
+
 - `--arrange 1` - 自动排列模型
 - `--load-settings` - 加载机器/工艺设置
 - `--load-filaments` - 加载耗材设置
 - `--export-3mf` - 导出 3MF 项目
-
-**需要的配置文件**:
-```bash
-# 机器配置（需要 nozzle-specific）
---load-settings "/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL/machine/Bambu Lab P1P 0.4 nozzle.json"
-
-# 工艺配置
---load-settings "/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL/process/0.20mm Standard @BBL P1P.json"
-
-# 耗材配置
---load-filaments "/Applications/OrcaSlicer.app/Contents/Resources/profiles/BBL/filament/P1P/Bambu PLA Basic @BBL P1P.json"
-```
 
 **当前限制**: CLI 需要 GUI 环境运行，无法在服务器/无界面环境使用。
 
@@ -293,54 +223,29 @@ python3 scripts/slicer.py -s path/to/file.stl --slicer orca --output my_project
 2. **手动排版**: 在 slicer 中手动排列模型并选择预设
 3. **使用 3MF 模板**: 手动创建包含预设的 3MF 项目，后续复用
 
-## STL 生成工具 (slicer.py)
-
-`scripts/slicer.py` 负责 STL 文件生成和切片。
-
-### 使用方式
-
-```bash
-# 生成单个 STL
-python3 scripts/slicer.py -g 7x5x3          # 格式: 宽x高x层数
-python3 scripts/slicer.py -g 7x5x3 --force  # 强制重新生成
-
-# 批量生成多个 STL
-python3 scripts/slicer.py -g 7x5x3 10x5x3 5x5x1
-
-# 在 slicer 中打开 STL
-python3 scripts/slicer.py -o file.stl --slicer orca
-python3 scripts/slicer.py -o file1.stl file2.stl --slicer bambu
-
-# 切片 STL 文件
-python3 scripts/slicer.py -s file.stl --slicer orca --output my_project
-```
-
-### Python 模块调用
+## 模块调用
 
 ```python
-from scripts.slicer import (
-    generate_stl,
-    generate_all_stls,
-    slice_with_bambu,
-    slice_with_orca,
-    open_in_slicer,
-)
+# 方案计算
+from scripts.split_calc import find_best_scheme, get_grid_dimensions
 
-# 生成单个 STL
+x, y = get_grid_dimensions(485, 425)
+scheme = find_best_scheme(x, y)
+
+# STL 生成
+from scripts.slicer import generate_stl, generate_all_stls
+
 path, err = generate_stl(7, 5, 3, verbose=True, force=False)
 
-# 批量生成
-stl_files = generate_all_stls(scheme, copies=2, verbose=True)
+# 项目管理
+from scripts.project_manager import ProjectManager
 
-# 切片
-result, err = slice_with_orca(stl_files, "my_project")
+pm = ProjectManager("~/opengrid_projects/")
+project_path = pm.create_project("my-project", drawers)
 
-# 在 slicer 中打开
-open_in_slicer(stl_files, slicer="orca")
+# HTML 生成
+from scripts.visualizer import Visualizer
+
+v = Visualizer()
+v.generate_html(project_path, scheme, tiles)
 ```
-
-### 分步工作流
-
-1. **计算分割方案** → `scripts/split_calc.py`
-2. **生成 STL** → `scripts/slicer.py -g`
-3. **切片或打开** → `scripts/slicer.py -s` 或 `scripts/slicer.py -o`

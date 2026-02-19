@@ -1232,42 +1232,12 @@ def batch_mode(input_str, verbose=False):
     return stats
 
 
-def interactive_mode():
-    """交互式输入"""
-    print("openGrid 抽屉分割计算器")
-    print("=" * 40)
-
-    # 显示预设
-    print("\n可用预设:")
-    for name, (w, h, desc) in PRESETS.items():
-        print(f"  {name:12} {w}×{h}mm - {desc}")
-    print("  custom      自定义尺寸")
-
-    preset = input("\n选择预设 (直接回车使用 custom): ").strip().lower()
-
-    if preset == "" or preset == "custom":
-        width = int(input("抽屉宽度 (mm): "))
-        depth = int(input("抽屉深度 (mm): "))
-    elif preset in PRESETS:
-        width, depth = PRESETS[preset][0], PRESETS[preset][1]
-        print(f"使用预设: {PRESETS[preset][2]} ({width}×{depth}mm)")
-    else:
-        print(f"未知预设: {preset}")
-        sys.exit(1)
-
-    copies = input("打印份数 (默认1): ").strip()
-    copies = int(copies) if copies else 1
-
-    return width, depth, copies
-
-
 def main():
     parser = argparse.ArgumentParser(
         description='openGrid 抽屉分割计算器 - 优化版',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python3 split_calc.py                    # 交互式
   python3 split_calc.py 485 425            # 指定尺寸
   python3 split_calc.py 485 425 -c 3       # 指定份数
   python3 split_calc.py -p klean           # 使用预设
@@ -1307,10 +1277,13 @@ def main():
         list_presets()
         return
 
-    # 交互式模式
+    # 无参数时显示帮助
     if args.width is None and args.preset is None:
-        width, depth, copies = interactive_mode()
-    elif args.preset:
+        parser.print_help()
+        sys.exit(0)
+
+    # 预设模式
+    if args.preset:
         if args.preset not in PRESETS:
             print(f"错误: 未知预设 '{args.preset}'")
             print("\n可用预设:")

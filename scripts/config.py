@@ -1,7 +1,6 @@
 """配置管理模块"""
 
 import os
-import sys
 import yaml
 from pathlib import Path
 
@@ -145,56 +144,14 @@ def get_bambu_printers():
 
 
 def ensure_initialized():
-    """检查初始化状态，未初始化则提示并退出"""
+    """检查初始化状态，未初始化则打印简短警告"""
     if is_initialized():
         return
 
-    config_path = get_config_path()
-
-    print("\n" + "=" * 50)
-    print("openGrid 初始化检查")
-    print("=" * 50)
+    print("\n警告: openGrid 未初始化")
+    print("请运行: cp config.example.yaml config.yaml")
+    print("然后编辑 config.yaml 设置 initialized: true 和打印机型号")
     print()
-    print("请先完成以下步骤：")
-    print()
-    print("1) 运行 setup.sh 安装依赖")
-    print("   cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler")
-    print("   ./scripts/setup.sh")
-    print()
-
-    printers = get_bambu_printers()
-
-    print("2) 复制配置文件")
-    print("   cp config.example.yaml config.yaml")
-    print()
-
-    example_path = config_path.parent / "config.example.yaml"
-    if example_path.exists():
-        print("【默认配置】")
-        with open(example_path) as f:
-            example = yaml.safe_load(f)
-            example["initialized"] = True
-            example["output"]["stl_dir"] = "~/Documents/opengrid/"
-            print(f"   initialized: true")
-            print(f"   output.stl_dir: {example['output']['stl_dir']}")
-
-        if printers:
-            print()
-            print("【检测到的打印机】")
-            for i, p in enumerate(printers, 1):
-                print(f"   {i}) {p['name']} → {p['model']}")
-            print()
-            print("在 config.yaml 中设置 printer.model")
-        else:
-            print()
-            print("   printer.model: <选择型号>")
-            print("   opengrid.tile_type: Full")
-            print("   opengrid.stacking_method: Ironing")
-
-    print()
-    print("编辑 config.yaml 完成配置后重新运行。")
-    print("=" * 50)
-    sys.exit(1)
 
 
 # 测试

@@ -61,7 +61,7 @@ pytest tests/test_scheme.py::TestFindBestScheme
 # Run specific test
 pytest tests/test_scheme.py::TestFindBestScheme::test_no_split_needed
 
-# Run split calculator (interactive mode)
+# Run split calculator (shows help, no interactive input)
 python3 scripts/split_calc.py
 
 # Run with specific dimensions
@@ -70,12 +70,21 @@ python3 scripts/split_calc.py 485 425
 # Batch mode (auto-merge optimization)
 python3 scripts/split_calc.py -b "265x365:2 325x365:2"
 
-# Generate STL files
-python3 scripts/split_calc.py 485 425 -g
-
 # JSON output
 python3 scripts/split_calc.py 485 425 -j
+
+# List available presets
+python3 scripts/split_calc.py --list-presets
 ```
+
+## Core Design Principle
+
+**Agent 负责用户交互，脚本负责计算和生成。**
+
+- Scripts should NOT contain `input()` or any interactive prompts
+- Scripts are pure computation: take parameters, return results
+- Agent handles all user interaction: ask questions, present options, get decisions
+- See `SKILL.md` for the complete Agent workflow
 
 ## Architecture
 
@@ -144,7 +153,12 @@ Tests use pytest. Test files are organized by domain:
 ## Project Files
 
 - `SKILL.md` - Skill definition file (used by Claude Code skill system)
-- `scripts/split_calc.py` - Core calculation logic (main entry point)
+- `scripts/split_calc.py` - Core calculation logic (CLI entry point, no interactive input)
 - `scripts/slicer.py` - STL generation using OpenSCAD
 - `scripts/inventory.py` - Inventory management for tile tracking
 - `scripts/3mf_utils.py` - 3MF project file utilities
+- `scripts/config.py` - Configuration loading (simplified, no exit on uninitialized)
+- `scripts/scheme_generator.py` - Multi-scheme generation
+- `scripts/scheme_presenter.py` - Scheme output formatting
+- `scripts/project_manager.py` - Project directory management
+- `scripts/visualizer.py` - HTML print plan generation
