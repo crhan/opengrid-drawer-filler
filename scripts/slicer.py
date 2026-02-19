@@ -389,13 +389,20 @@ def main():
     slicer = args.slicer
 
     # 处理生成请求
-    if args.generate:
+    if args.generate is not None:
+        if not args.generate:
+            print("警告: -g 需要至少一个维度参数（如 7x5x3）")
+            return
         for dim in args.generate:
             # 解析维度: 支持 7x5x3 格式
             if 'x' in dim:
                 parts = dim.split('x')
                 if len(parts) == 3:
-                    w, h, s = map(int, parts)
+                    try:
+                        w, h, s = map(int, parts)
+                    except ValueError:
+                        print(f"警告: 忽略无效格式 '{dim}'，维度必须是整数")
+                        continue
                 else:
                     print(f"警告: 忽略无效格式 '{dim}'，期望 WxHxS")
                     continue
