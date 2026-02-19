@@ -132,3 +132,60 @@ class TestUndoLast:
         inventory.undo_last()
         with pytest.raises(ValueError, match="没有可撤销的操作"):
             inventory.undo_last()
+
+
+class TestGetInventoryMatch:
+    def test_full_match(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {"7x5": 6},
+            "log": []
+        }))
+        inv = inventory.load_inventory()
+        # scheme has 3 tiles of 7x5, copies=2 -> need 6 total
+        result = inventory.get_inventory_match(
+            tiles=[(7, 5), (7, 5), (7, 5)],
+            copies=2,
+            inv=inv
+        )
+        assert result["from_inventory"] == {"7x5": 6}
+        assert result["need_print"] == {}
+        assert result["match_score"] == 6
+
+    def test_partial_match(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {"7x5": 2},
+            "log": []
+        }))
+        inv = inventory.load_inventory()
+        # need 3 tiles of 7x5 (copies=1)
+        result = inventory.get_inventory_match(
+            tiles=[(7, 5), (7, 5), (7, 5)],
+            copies=1,
+            inv=inv
+        )
+        assert result["from_inventory"] == {"7x5": 2}
+        assert result["need_print"] == {"7x5": 1}
+        assert result["match_score"] == 2
+
+    def test_no_match(self, tmp_inventory):
+        inv = {}
+        result = inventory.get_inventory_match(
+            tiles=[(7, 5), (10, 5)],
+            copies=1,
+            inv=inv
+        )
+        assert result["from_inventory"] == {}
+        assert result["need_print"] == {"7x5": 1, "10x5": 1}
+        assert result["match_score"] == 0
+
+    def test_mixed_sizes(self, tmp_inventory):
+        inv = {"7x5": 10, "10x5": 1}
+        # tiles: 3x 7x5, 3x 10x5, copies=2 -> need 6x 7x5, 6x 10x5
+        result = inventory.get_inventory_match(
+            tiles=[(7, 5), (7, 5), (7, 5), (10, 5), (10, 5), (10, 5)],
+            copies=2,
+            inv=inv
+        )
+        assert result["from_inventory"] == {"7x5": 6, "10x5": 1}
+        assert result["need_print"] == {"10x5": 5}
+        assert result["match_score"] == 7
