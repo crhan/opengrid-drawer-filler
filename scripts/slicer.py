@@ -51,6 +51,10 @@ def generate_stl(width, height, stacks, verbose=False, force=False):
     Returns:
         (output_path, error): 成功时返回文件路径和None，失败时返回None和错误信息
     """
+    # 输入验证
+    if width <= 0 or height <= 0 or stacks <= 0:
+        return None, f"Invalid parameters: width={width}, height={height}, stacks={stacks}"
+
     filename = f"opengrid_{width}x{height}_Full_s{stacks}.stl"
     output_dir = os.path.join(OUTPUT_DIR, f"{width}x{height}_Full/")
     output_path = os.path.join(output_dir, filename)
@@ -77,7 +81,7 @@ def generate_stl(width, height, stacks, verbose=False, force=False):
     if verbose:
         print(f"  [DEBUG] Running: {' '.join(cmd)}")
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
     if result.returncode != 0:
         if verbose:
