@@ -27,7 +27,7 @@ def validate_tiles(tiles):
 def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """Find best scheme for given grid dimensions"""
     from .grid import validate_tile as vt
-    from .cost import calculate_print_cost
+    from .cost import calculate_print_cost, replan_with_inventory
 
     # Check if no split needed
     if vt(x, y):
@@ -66,6 +66,28 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
 
         scored.sort(key=SCHEME_SORT_KEY)
         best_scored = scored[0]
+
+        # 尝试重新规划，看是否有更好的方案
+        replan_result = replan_with_inventory(
+            best_scored['scheme']['tiles'],
+            inventory,
+            copies=copies,
+            grid=(x, y)
+        )
+
+        if replan_result and replan_result.get('cost', 999) < best_scored['cost']:
+            # 使用重新规划的方案
+            best = best_scored['scheme'].copy()
+            best.update({
+                'cost': replan_result['cost'],
+                'from_inventory': replan_result.get('from_inventory', {}),
+                'need_print': replan_result.get('need_print', {}),
+                'unique_sizes': len(set(replan_result['tiles'])),
+                'tile_count': len(replan_result['tiles']),
+                'balance': calc_scheme_balance(best_scored['scheme']['x_splits'], best_scored['scheme']['y_splits'])
+            })
+            return best
+
         best = best_scored['scheme'].copy()
         best.update({
             'cost': best_scored['cost'],
