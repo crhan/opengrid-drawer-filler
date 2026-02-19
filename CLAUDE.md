@@ -94,12 +94,14 @@ pytest -v
 
 ## Testing
 
-Tests use pytest. Test structure:
-- `TestConstants` - Constants validation
-- `TestGetMaxStacks`, `TestGetGridDimensions` - Utility functions
-- `TestValidateTile`, `TestSplitWithLimit` - Core algorithms
-- `TestCalcBalance`, `TestCalcSchemeBalance` - Balance scoring
-- `TestFindBestScheme` - Main algorithm (includes rotation symmetry tests)
-- `TestCalculateFilamentAndTime`, `TestFormatTime` - Statistics
-- `TestIntegration` - End-to-end tests with real drawer sizes
-- `TestBatchMode` - Batch calculation and merge optimization
+Tests use pytest. Test files are organized by domain:
+- `tests/test_constants.py` - Constants validation
+- `tests/test_utils.py` - Utility functions (get_max_stacks, get_grid_dimensions)
+- `tests/test_validate.py` - Tile validation
+- `tests/test_split.py` - Split algorithm
+- `tests/test_balance.py` - Balance scoring
+- `tests/test_scheme.py` - Scheme finding (find_best_scheme, find_all_schemes)
+- `tests/test_stats.py` - Statistics (calculate_filament_and_time, format_time)
+- `tests/test_integration.py` - End-to-end tests with real drawer sizes
+- `tests/test_batch.py` - Batch calculation and merge optimization
+- `tests/test_inventory.py` - Inventory management (if present)
