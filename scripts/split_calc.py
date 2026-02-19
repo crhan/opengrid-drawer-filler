@@ -871,6 +871,44 @@ def merge_and_optimize(batch_results):
     return all_tiles
 
 
+def calculate_total_prints(batch_results, schemes):
+    """计算给定方案组合的总打印次数
+
+    Args:
+        batch_results: 批量计算结果列表，每个元素包含 width, depth, copies, scheme
+        schemes: 对应的分割方案列表
+
+    Returns:
+        (total_prints, details): 总打印次数和每个尺寸的详细信息
+    """
+    # 合并所有瓦片
+    all_tiles = {}
+    for result, scheme in zip(batch_results, schemes):
+        if result is None or scheme is None:
+            continue
+        copies = result['copies']
+        for w, h in scheme['tiles']:
+            key = (w, h)
+            if key not in all_tiles:
+                all_tiles[key] = 0
+            all_tiles[key] += copies
+
+    # 计算每个尺寸的打印次数
+    max_stacks = get_max_stacks()
+    total_prints = 0
+    details = {}
+
+    for (w, h), stacks in all_tiles.items():
+        prints_needed = (stacks + max_stacks - 1) // max_stacks
+        total_prints += prints_needed
+        details[(w, h)] = {
+            'stacks': stacks,
+            'print_count': prints_needed
+        }
+
+    return total_prints, details
+
+
 def print_batch_plan(batch_results, merged_tiles):
     """打印批量打印计划"""
     print("=" * 70)

@@ -20,6 +20,7 @@ from split_calc import (
     merge_and_optimize,
     calculate_filament_and_time,
     format_time,
+    calculate_total_prints,
     TILE_SIZE,
     MAX_X,
     MAX_Y,
@@ -540,6 +541,33 @@ class TestBatchMode:
         # 50mm = 1 格，小于最小瓦片 2x2
         result = calculate_single(50, 50)
         assert result is None
+
+
+class TestCalculateTotalPrints:
+    """calculate_total_prints 函数测试"""
+
+    def test_calculate_total_prints_basic(self):
+        # 模拟两个抽屉，各一个瓦片
+        batch_results = [
+            {'width': 400, 'depth': 400, 'copies': 1, 'scheme': {'tiles': [(10, 10)]}},
+        ]
+        schemes = [batch_results[0]['scheme']]
+
+        total, details = calculate_total_prints(batch_results, schemes)
+        assert total >= 1
+        assert isinstance(details, dict)
+
+    def test_calculate_total_prints_shared(self):
+        # 两个抽屉共享瓦片尺寸
+        batch_results = [
+            {'width': 400, 'depth': 400, 'copies': 1, 'scheme': {'tiles': [(10, 10)]}},
+            {'width': 280, 'depth': 280, 'copies': 1, 'scheme': {'tiles': [(10, 10)]}},
+        ]
+        schemes = [r['scheme'] for r in batch_results]
+
+        total, details = calculate_total_prints(batch_results, schemes)
+        # 共享瓦片应该只打印一次 (2 stacks fit in 1 print with max_stacks=45)
+        assert details[(10, 10)]['print_count'] == 1
 
 
 if __name__ == "__main__":
