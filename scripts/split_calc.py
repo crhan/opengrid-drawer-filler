@@ -726,6 +726,33 @@ def print_plan(width, depth, scheme, copies=1, verbose=False, inventory_match=No
     print("--- 打印时间估算 ---")
     print(f"预计总时间: ~{format_time(total_time)} ({total_prints}次打印)")
 
+    # 如果有库存信息，显示库存利用情况
+    if 'cost' in scheme and scheme['cost'] is not None:
+        print()
+        print("--- 库存利用 ---")
+
+        # 显示从库存取的瓦片
+        from_inv = scheme.get('from_inventory', {})
+        if from_inv:
+            parts = []
+            for key in sorted(from_inv.keys()):
+                w, h = key.split('x')
+                count = from_inv[key]
+                parts.append(f"{w}×{h} ×{count}")
+            print(f"从库存: {', '.join(parts)}")
+
+        # 显示需要打印的瓦片
+        need_print = scheme.get('need_print', {})
+        if need_print:
+            parts = []
+            for key in sorted(need_print.keys()):
+                w, h = key.split('x')
+                count = need_print[key]
+                parts.append(f"{w}×{h} ×{count}")
+            print(f"需打印: {', '.join(parts)} (成本: {format_time(scheme['cost'])})")
+        else:
+            print("需打印: 无 (成本: 0)")
+
     print()
     print("--- 安装说明 ---")
     print("1. 打印 STL")
