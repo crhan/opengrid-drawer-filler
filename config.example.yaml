@@ -1,3 +1,6 @@
+# 初始化标记（首次使用设为 true）
+initialized: false
+
 # === 必需配置 ===
 output:
   stl_dir: "~/3D打印/opengrid/"
