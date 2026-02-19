@@ -15,9 +15,14 @@ TILE_SIZE = 28
 MAX_Z = 325
 FULL_THICKNESS = 6.8 + 0.4
 
+# 获取 skill 目录路径
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SKILL_DIR = os.path.dirname(SCRIPT_DIR)
+VENDOR_DIR = os.path.join(SKILL_DIR, "vendor")
+
 # OpenSCAD 路径
 OPENSCAD_PATH = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
-SCAD_FILE = "/Users/ruohanc/Documents/GitHub/QuackWorks/openGrid/openGrid.scad"
+SCAD_FILE = os.path.join(VENDOR_DIR, "QuackWorks", "openGrid", "openGrid.scad")
 OUTPUT_DIR = "/Users/ruohanc/Library/CloudStorage/SynologyDrive-homeNAS/3D模型/opengrid/"
 
 # Bambu Studio 路径

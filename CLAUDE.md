@@ -6,6 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 opengrid-drawer-filler (openGrid 抽屉铺满) - 计算抽屉最优瓦片分割方案并生成 STL 文件用于 3D 打印。
 
+## 首次安装
+
+首次使用需要运行安装脚本：
+
+```bash
+cd {skill_dir}
+./scripts/setup.sh
+```
+
+脚本安装：
+- OpenSCAD Snapshot (通过 Homebrew)
+- QuackWorks 源码 (克隆到 vendor 目录)
+- BOSL2 库 (OpenSCAD 依赖)
+
 ## Common Commands
 
 ```bash

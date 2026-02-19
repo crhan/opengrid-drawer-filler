@@ -38,5 +38,8 @@ Thumbs.db
 # Worktrees
 .worktrees/
 
+# Vendor (external dependencies, cloned at install time)
+vendor/
+
 # Inventory (user-specific data)
 scripts/inventory.json
