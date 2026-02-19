@@ -496,8 +496,8 @@ def parse_batch_input(input_str):
     parts = input_str.strip().split()
 
     for part in parts:
-        # 尝试匹配 "宽x深:份数" 格式
-        match = re.match(r'(\d+)[x×](\d+)(?::(\d+))?', part)
+        # 尝试匹配 "宽x深:份数" 或 "宽x深x份数" 格式
+        match = re.match(r'(\d+)[x×](\d+)(?:[x:](\d+))?', part)
         if match:
             width = int(match.group(1))
             depth = int(match.group(2))
