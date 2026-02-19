@@ -120,10 +120,17 @@ def calc_scheme_balance(xs, ys):
     return max(x_balance, y_balance)
 
 
-def find_best_scheme(x, y, verbose=False):
+def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """直接寻找最优方案，找到1种尺寸就停止
 
     修复: 考虑旋转对称性，搜索两个方向并取最优解
+
+    Args:
+        x: 宽度（格子数）
+        y: 深度（格子数）
+        verbose: 是否打印调试信息
+        inventory: 库存 dict，如 {"7x5": 6, "10x5": 3}
+        copies: 打印份数
     """
     # 首先检查是否需要分割
     if validate_tile(x, y):
@@ -138,11 +145,11 @@ def find_best_scheme(x, y, verbose=False):
         }
 
     # 搜索原始方向
-    best = _find_best_scheme_impl(x, y, verbose)
+    best = _find_best_scheme_impl(x, y, verbose, inventory, copies)
 
     # 如果 x != y，搜索旋转后的方向并比较
     if x != y:
-        rotated = _find_best_scheme_impl(y, x, verbose)
+        rotated = _find_best_scheme_impl(y, x, verbose, inventory, copies)
         if rotated is not None:
             # 旋转结果：将 x_splits 和 y_splits 交换
             # 同时规范化瓦片：如果 x 超过 MAX_X 但 y 在范围内，则交换
@@ -161,23 +168,25 @@ def find_best_scheme(x, y, verbose=False):
                 'tiles': normalized_tiles,
                 'unique_sizes': rotated['unique_sizes'],
                 'tile_count': rotated['tile_count'],
-                'balance': rotated['balance']
+                'balance': rotated['balance'],
+                'inv_score': rotated.get('inv_score', 0)
             }
 
             # 验证规范化后的瓦片是否有效
             rotated_valid = all(validate_tile(w, h) for w, h in normalized_tiles)
 
-            # 比较：只有当旋转结果更优且有效时才采用
+            # 比较：先比较库存分数，再比较独特尺寸
             if rotated_valid and (best is None or \
-               rotated_swapped['unique_sizes'] < best['unique_sizes'] or \
-               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] < best['tile_count']) or \
-               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] == best['tile_count'] and rotated_swapped['balance'] < best['balance'])):
+               (rotated_swapped.get('inv_score', 0) > best.get('inv_score', 0)) or \
+               (rotated_swapped.get('inv_score', 0) == best.get('inv_score', 0) and rotated_swapped['unique_sizes'] < best['unique_sizes']) or \
+               (rotated_swapped.get('inv_score', 0) == best.get('inv_score', 0) and rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] < best['tile_count']) or \
+               (rotated_swapped.get('inv_score', 0) == best.get('inv_score', 0) and rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] == best['tile_count'] and rotated_swapped['balance'] < best['balance'])):
                 best = rotated_swapped
 
     return best
 
 
-def _find_best_scheme_impl(x, y, verbose=False):
+def _find_best_scheme_impl(x, y, verbose=False, inventory=None, copies=1):
     """find_best_scheme 的实际实现"""
     best = None
     candidates_checked = 0
@@ -222,6 +231,17 @@ def _find_best_scheme_impl(x, y, verbose=False):
 
                     balance = calc_scheme_balance(xs, ys)
 
+                    # 计算库存匹配分数
+                    inv_score = 0
+                    if inventory:
+                        for xd in xs:
+                            for yd in ys:
+                                key = f"{xd}x{yd}"
+                                inv_score += min(
+                                    tiles.count((xd, yd)) * copies,
+                                    inventory.get(key, 0)
+                                )
+
                     scheme = {
                         'x_parts': x_parts,
                         'y_parts': y_parts,
@@ -230,20 +250,22 @@ def _find_best_scheme_impl(x, y, verbose=False):
                         'tiles': tiles,
                         'unique_sizes': len(unique),
                         'tile_count': len(tiles),
-                        'balance': balance
+                        'balance': balance,
+                        'inv_score': inv_score
                     }
 
-                    # 优先级: 1)独特尺寸最少 2)瓦片数最少 3)均衡度最好
+                    # 优先级: 1)库存匹配最多 2)独特尺寸最少 3)瓦片数最少 4)均衡度最好
                     if best is None or \
-                       (len(unique) < best['unique_sizes']) or \
-                       (len(unique) == best['unique_sizes'] and len(tiles) < best['tile_count']) or \
-                       (len(unique) == best['unique_sizes'] and len(tiles) == best['tile_count'] and balance < best['balance']):
+                       (inv_score > best.get('inv_score', 0)) or \
+                       (inv_score == best.get('inv_score', 0) and len(unique) < best['unique_sizes']) or \
+                       (inv_score == best.get('inv_score', 0) and len(unique) == best['unique_sizes'] and len(tiles) < best['tile_count']) or \
+                       (inv_score == best.get('inv_score', 0) and len(unique) == best['unique_sizes'] and len(tiles) == best['tile_count'] and balance < best['balance']):
                         best = scheme
                         if verbose:
-                            print(f"  [DEBUG] New best: {len(unique)} sizes, {len(tiles)} tiles, balance={balance:.2f}")
+                            print(f"  [DEBUG] New best: inv_score={inv_score}, {len(unique)} sizes, {len(tiles)} tiles, balance={balance:.2f}")
 
-                    # 找到最优解：1种尺寸，停止搜索
-                    if len(unique) == 1:
+                    # 找到最优解：1种尺寸，停止搜索（仅在没有库存优化时）
+                    if len(unique) == 1 and not inventory:
                         if verbose:
                             print(f"  [DEBUG] Checked {candidates_checked} candidates")
                         return best
