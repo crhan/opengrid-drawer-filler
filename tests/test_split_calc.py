@@ -285,6 +285,46 @@ class TestFindBestScheme:
         assert scheme['tile_count'] == expected
 
 
+class TestInventoryAwareScheme:
+    """库存感知分割测试"""
+
+    def test_no_inventory_same_as_before(self):
+        """无库存时行为不变"""
+        scheme_no_inv = find_best_scheme(17, 15)
+        scheme_with_empty = find_best_scheme(17, 15, inventory={})
+        assert scheme_no_inv['x_splits'] == scheme_with_empty['x_splits']
+        assert scheme_no_inv['y_splits'] == scheme_with_empty['y_splits']
+
+    def test_inventory_biases_toward_stocked_sizes(self):
+        """库存应影响方案选择"""
+        # 20x10: 不用库存时选 10x10 * 2（1种尺寸）
+        scheme_no_inv = find_best_scheme(20, 10)
+        assert scheme_no_inv['x_splits'] == [10, 10]
+        assert scheme_no_inv['y_splits'] == [10]
+
+        # 有 5x10 库存时，20x10 可以分为 4个5x10，同样1种尺寸
+        # 但如果只有2个5x10库存，方案 [5,5,10]x[10] 可利用2个库存
+        # 而 [10,10]x[10] 利用0个
+        inv = {"5x10": 2}
+        scheme_inv = find_best_scheme(20, 10, inventory=inv, copies=1)
+        # 有库存时应倾向于使用有库存的尺寸
+        # 不过如果两个方案的 unique_sizes 差异大，unique_sizes 仍然优先
+        # 这里 [10,10]x[10]=1种, [5,5,10]x[10]=2种
+        # 由于库存优先级最高，应选择能利用库存的方案
+        assert scheme_inv is not None
+        # 验证方案中包含 5x10 的瓦片
+        tile_keys = set()
+        for w, h in scheme_inv['tiles']:
+            tile_keys.add(f"{w}x{h}")
+        assert "5x10" in tile_keys
+
+    def test_inventory_none_fallback(self):
+        """inventory=None 时退回原始行为"""
+        scheme = find_best_scheme(17, 15, inventory=None)
+        assert scheme is not None
+        assert scheme['unique_sizes'] >= 1
+
+
 class TestCalculateFilamentAndTime:
     """calculate_filament_and_time 函数测试"""
 

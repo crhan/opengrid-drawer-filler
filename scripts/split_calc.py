@@ -12,6 +12,12 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+try:
+    from inventory import load_inventory, deduct_inventory, get_inventory_match
+    HAS_INVENTORY = True
+except ImportError:
+    HAS_INVENTORY = False
+
 TILE_SIZE = 28    # mm
 MAX_X = 10        # 最大X方向格数
 MAX_Y = 11        # 最大Y方向格数
@@ -120,10 +126,17 @@ def calc_scheme_balance(xs, ys):
     return max(x_balance, y_balance)
 
 
-def find_best_scheme(x, y, verbose=False):
+def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """直接寻找最优方案，找到1种尺寸就停止
 
     修复: 考虑旋转对称性，搜索两个方向并取最优解
+
+    Args:
+        x: 宽度（格子数）
+        y: 深度（格子数）
+        verbose: 是否打印调试信息
+        inventory: 库存 dict，如 {"7x5": 6, "10x5": 3}
+        copies: 打印份数
     """
     # 首先检查是否需要分割
     if validate_tile(x, y):
@@ -138,11 +151,11 @@ def find_best_scheme(x, y, verbose=False):
         }
 
     # 搜索原始方向
-    best = _find_best_scheme_impl(x, y, verbose)
+    best = _find_best_scheme_impl(x, y, verbose, inventory, copies)
 
     # 如果 x != y，搜索旋转后的方向并比较
     if x != y:
-        rotated = _find_best_scheme_impl(y, x, verbose)
+        rotated = _find_best_scheme_impl(y, x, verbose, inventory, copies)
         if rotated is not None:
             # 旋转结果：将 x_splits 和 y_splits 交换
             # 同时规范化瓦片：如果 x 超过 MAX_X 但 y 在范围内，则交换
@@ -161,23 +174,25 @@ def find_best_scheme(x, y, verbose=False):
                 'tiles': normalized_tiles,
                 'unique_sizes': rotated['unique_sizes'],
                 'tile_count': rotated['tile_count'],
-                'balance': rotated['balance']
+                'balance': rotated['balance'],
+                'inv_score': rotated.get('inv_score', 0)
             }
 
             # 验证规范化后的瓦片是否有效
             rotated_valid = all(validate_tile(w, h) for w, h in normalized_tiles)
 
-            # 比较：只有当旋转结果更优且有效时才采用
+            # 比较：先比较库存分数，再比较独特尺寸
             if rotated_valid and (best is None or \
-               rotated_swapped['unique_sizes'] < best['unique_sizes'] or \
-               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] < best['tile_count']) or \
-               (rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] == best['tile_count'] and rotated_swapped['balance'] < best['balance'])):
+               (rotated_swapped.get('inv_score', 0) > best.get('inv_score', 0)) or \
+               (rotated_swapped.get('inv_score', 0) == best.get('inv_score', 0) and rotated_swapped['unique_sizes'] < best['unique_sizes']) or \
+               (rotated_swapped.get('inv_score', 0) == best.get('inv_score', 0) and rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] < best['tile_count']) or \
+               (rotated_swapped.get('inv_score', 0) == best.get('inv_score', 0) and rotated_swapped['unique_sizes'] == best['unique_sizes'] and rotated_swapped['tile_count'] == best['tile_count'] and rotated_swapped['balance'] < best['balance'])):
                 best = rotated_swapped
 
     return best
 
 
-def _find_best_scheme_impl(x, y, verbose=False):
+def _find_best_scheme_impl(x, y, verbose=False, inventory=None, copies=1):
     """find_best_scheme 的实际实现"""
     best = None
     candidates_checked = 0
@@ -222,6 +237,17 @@ def _find_best_scheme_impl(x, y, verbose=False):
 
                     balance = calc_scheme_balance(xs, ys)
 
+                    # 计算库存匹配分数
+                    inv_score = 0
+                    if inventory:
+                        for xd in xs:
+                            for yd in ys:
+                                key = f"{xd}x{yd}"
+                                inv_score += min(
+                                    tiles.count((xd, yd)) * copies,
+                                    inventory.get(key, 0)
+                                )
+
                     scheme = {
                         'x_parts': x_parts,
                         'y_parts': y_parts,
@@ -230,20 +256,22 @@ def _find_best_scheme_impl(x, y, verbose=False):
                         'tiles': tiles,
                         'unique_sizes': len(unique),
                         'tile_count': len(tiles),
-                        'balance': balance
+                        'balance': balance,
+                        'inv_score': inv_score
                     }
 
-                    # 优先级: 1)独特尺寸最少 2)瓦片数最少 3)均衡度最好
+                    # 优先级: 1)库存匹配最多 2)独特尺寸最少 3)瓦片数最少 4)均衡度最好
                     if best is None or \
-                       (len(unique) < best['unique_sizes']) or \
-                       (len(unique) == best['unique_sizes'] and len(tiles) < best['tile_count']) or \
-                       (len(unique) == best['unique_sizes'] and len(tiles) == best['tile_count'] and balance < best['balance']):
+                       (inv_score > best.get('inv_score', 0)) or \
+                       (inv_score == best.get('inv_score', 0) and len(unique) < best['unique_sizes']) or \
+                       (inv_score == best.get('inv_score', 0) and len(unique) == best['unique_sizes'] and len(tiles) < best['tile_count']) or \
+                       (inv_score == best.get('inv_score', 0) and len(unique) == best['unique_sizes'] and len(tiles) == best['tile_count'] and balance < best['balance']):
                         best = scheme
                         if verbose:
-                            print(f"  [DEBUG] New best: {len(unique)} sizes, {len(tiles)} tiles, balance={balance:.2f}")
+                            print(f"  [DEBUG] New best: inv_score={inv_score}, {len(unique)} sizes, {len(tiles)} tiles, balance={balance:.2f}")
 
-                    # 找到最优解：1种尺寸，停止搜索
-                    if len(unique) == 1:
+                    # 找到最优解：1种尺寸，停止搜索（仅在没有库存优化时）
+                    if len(unique) == 1 and not inventory:
                         if verbose:
                             print(f"  [DEBUG] Checked {candidates_checked} candidates")
                         return best
@@ -534,7 +562,7 @@ def generate_all_stls(scheme, copies, verbose=False, force=False):
     return results
 
 
-def print_plan(width, depth, scheme, copies=1, verbose=False):
+def print_plan(width, depth, scheme, copies=1, verbose=False, inventory_match=None):
     """打印分割方案"""
     x, y = get_grid_dimensions(width, depth)
 
@@ -630,6 +658,24 @@ def print_plan(width, depth, scheme, copies=1, verbose=False):
             total_support += support_g
             total_time += time_min
             total_prints += 1
+
+    # 显示库存利用情况
+    if inventory_match and (inventory_match['from_inventory'] or inventory_match['need_print']):
+        print()
+        print("--- 库存利用 ---")
+        for size_key in sorted(set(
+            list(inventory_match['from_inventory'].keys()) +
+            list(inventory_match['need_print'].keys())
+        )):
+            from_inv = inventory_match['from_inventory'].get(size_key, 0)
+            need = inventory_match['need_print'].get(size_key, 0)
+            total = from_inv + need
+            if from_inv > 0 and need > 0:
+                print(f"{size_key}: 需要 {total}，库存取用 {from_inv}，需新打印 {need}")
+            elif from_inv > 0:
+                print(f"{size_key}: 需要 {total}，全部从库存取用")
+            else:
+                print(f"{size_key}: 需要 {total}，全部需新打印")
 
     print()
     print("--- 耗材估算 ---")
@@ -753,14 +799,14 @@ def parse_batch_input(input_str):
     return items
 
 
-def calculate_single(width, depth, copies=1, verbose=False):
+def calculate_single(width, depth, copies=1, verbose=False, inventory=None):
     """计算单个尺寸的分割方案"""
     x, y = get_grid_dimensions(width, depth)
 
     if x < MIN_TILE or y < MIN_TILE:
         return None
 
-    scheme = find_best_scheme(x, y, verbose)
+    scheme = find_best_scheme(x, y, verbose, inventory=inventory, copies=copies)
 
     if not scheme:
         return None
@@ -817,7 +863,7 @@ def merge_and_optimize(batch_results):
     return all_tiles
 
 
-def print_batch_plan(batch_results, merged_tiles):
+def print_batch_plan(batch_results, merged_tiles, inventory=None):
     """打印批量打印计划"""
     print("=" * 70)
     print("openGrid 批量打印计划 - 合并优化版")
@@ -913,6 +959,32 @@ def print_batch_plan(batch_results, merged_tiles):
     print(f"总打印次数: {total_prints}次")
     print(f"总打印时间: ~{format_time(total_time)}")
 
+    # 显示库存利用情况
+    if inventory:
+        print("\n" + "=" * 70)
+        print("--- 库存利用 ---")
+        print("=" * 70)
+        total_from_inv = 0
+        deduct_items = {}
+        for (w, h), info in sorted_tiles:
+            key = f"{w}x{h}"
+            needed = info['total']
+            available = inventory.get(key, 0)
+            used = min(needed, available)
+            if used > 0:
+                deduct_items[key] = used
+                total_from_inv += used
+                remaining_print = needed - used
+                print(f"  {key}: 需要 {needed}，库存取用 {used}，需新打印 {remaining_print}")
+            else:
+                print(f"  {key}: 需要 {needed}，全部需新打印")
+
+        if deduct_items:
+            confirm = input("\n接受方案并扣除库存？(y/n): ").strip().lower()
+            if confirm == 'y':
+                deduct_inventory(deduct_items, reason="批量方案")
+                print("库存已更新")
+
     return {
         'total_main': total_main,
         'total_support': total_support,
@@ -922,7 +994,7 @@ def print_batch_plan(batch_results, merged_tiles):
     }
 
 
-def batch_mode(input_str, verbose=False):
+def batch_mode(input_str, verbose=False, use_inventory=True):
     """批量计算模式"""
     import re
 
@@ -969,10 +1041,15 @@ def batch_mode(input_str, verbose=False):
         print(f"  {w}×{d}mm × {c}份")
     print()
 
+    # 加载库存
+    inv = {}
+    if HAS_INVENTORY and use_inventory:
+        inv = load_inventory()
+
     # 计算每个尺寸的分割方案
     batch_results = []
     for width, depth, copies in items:
-        result = calculate_single(width, depth, copies, verbose)
+        result = calculate_single(width, depth, copies, verbose, inventory=inv if inv else None)
         if result:
             batch_results.append(result)
         else:
@@ -986,7 +1063,7 @@ def batch_mode(input_str, verbose=False):
     merged = merge_and_optimize(batch_results)
 
     # 打印计划
-    stats = print_batch_plan(batch_results, merged)
+    stats = print_batch_plan(batch_results, merged, inventory=inv if inv else None)
 
     return stats
 
@@ -1062,12 +1139,13 @@ def main():
     parser.add_argument('--print-settings', type=str, help='Bambu Studio 打印设置文件 (.json)')
     parser.add_argument('--machine-settings', type=str, help='Bambu Studio 机器/耗材设置文件 (.json)')
     parser.add_argument('-v', '--verbose', action='store_true', help='详细输出')
+    parser.add_argument('--no-inventory', action='store_true', help='不使用库存')
     parser.add_argument('--list-presets', action='store_true', help='列出所有预设')
     args = parser.parse_args()
 
     # 批量模式处理
     if args.batch:
-        batch_mode(args.batch, args.verbose)
+        batch_mode(args.batch, args.verbose, use_inventory=not args.no_inventory)
         return
 
     # 列出预设
@@ -1114,7 +1192,18 @@ def main():
         print("错误: 抽屉尺寸太小，无法放置最小瓦片")
         sys.exit(1)
 
-    scheme = find_best_scheme(x, y, args.verbose)
+    # 加载库存
+    inv = {}
+    inventory_match = None
+    if HAS_INVENTORY and not args.no_inventory:
+        inv = load_inventory()
+        if inv:
+            scheme = find_best_scheme(x, y, args.verbose, inventory=inv, copies=copies)
+            inventory_match = get_inventory_match(scheme['tiles'], copies, inv)
+        else:
+            scheme = find_best_scheme(x, y, args.verbose)
+    else:
+        scheme = find_best_scheme(x, y, args.verbose)
 
     if not scheme:
         print("错误: 无法生成有效方案!")
@@ -1123,7 +1212,20 @@ def main():
     print(f"最优: {scheme['unique_sizes']}种尺寸, {scheme['tile_count']}块瓦片")
     print()
 
-    stats = print_plan(width, depth, scheme, copies, args.verbose)
+    stats = print_plan(width, depth, scheme, copies, args.verbose, inventory_match)
+
+    # 交互确认扣库
+    if inventory_match and inventory_match['from_inventory'] and not args.json:
+        confirm = input("\n接受此方案并扣除库存？(y/n): ").strip().lower()
+        if confirm == 'y':
+            deduct_inventory(
+                inventory_match['from_inventory'],
+                reason=f"用于 {width}x{depth}mm 抽屉 x{copies}"
+            )
+            print("库存已更新")
+        else:
+            print("已取消，库存未变更")
+            return
 
     if args.json:
         output_json(width, depth, scheme, copies, stats)
