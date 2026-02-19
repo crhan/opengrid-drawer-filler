@@ -106,3 +106,29 @@ class TestDeductInventory:
         }))
         with pytest.raises(ValueError, match="库存不足"):
             inventory.deduct_inventory({"7x5": 1}, reason="不存在")
+
+
+class TestUndoLast:
+    def test_undo_add(self, tmp_inventory):
+        inventory.add_inventory({"7x5": 6}, reason="打印")
+        result = inventory.undo_last()
+        assert result == {}
+
+    def test_undo_deduct(self, tmp_inventory):
+        tmp_inventory.write_text(json.dumps({
+            "inventory": {"7x5": 6},
+            "log": []
+        }))
+        inventory.deduct_inventory({"7x5": 3}, reason="用于抽屉")
+        result = inventory.undo_last()
+        assert result == {"7x5": 6}
+
+    def test_undo_empty_log_raises(self, tmp_inventory):
+        with pytest.raises(ValueError, match="没有可撤销的操作"):
+            inventory.undo_last()
+
+    def test_undo_already_undone_raises(self, tmp_inventory):
+        inventory.add_inventory({"7x5": 6}, reason="打印")
+        inventory.undo_last()
+        with pytest.raises(ValueError, match="没有可撤销的操作"):
+            inventory.undo_last()

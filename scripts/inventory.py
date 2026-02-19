@@ -67,3 +67,50 @@ def deduct_inventory(items, reason=""):
             del inv[key]
     save_inventory(inv, {"action": "deduct", "items": items, "reason": reason})
     return inv
+
+
+def undo_last():
+    """撤销最近一次 add/deduct 操作，返回更新后库存"""
+    data = _load_data()
+    log = data.get("log", [])
+
+    # 找到最近一次非 undo 操作
+    last_entry = None
+    for entry in reversed(log):
+        if entry["action"] != "undo":
+            last_entry = entry
+            break
+
+    if last_entry is None:
+        raise ValueError("没有可撤销的操作")
+
+    inv = data["inventory"]
+    items = last_entry["items"]
+
+    if last_entry["action"] == "add":
+        # 撤销入库 = 扣除
+        for key, count in items.items():
+            inv[key] = inv.get(key, 0) - count
+            if inv[key] <= 0:
+                inv.pop(key, None)
+    elif last_entry["action"] == "deduct":
+        # 撤销扣库 = 加回
+        for key, count in items.items():
+            inv[key] = inv.get(key, 0) + count
+
+    # 从日志中移除被撤销的条目
+    log.remove(last_entry)
+
+    # 记录 undo 操作
+    undo_entry = {
+        "action": "undo",
+        "items": items,
+        "reason": f"撤销 {last_entry['action']}",
+        "timestamp": datetime.now().isoformat()
+    }
+    log.append(undo_entry)
+
+    data["inventory"] = inv
+    data["log"] = log
+    _save_data(data)
+    return inv
