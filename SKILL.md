@@ -18,14 +18,20 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
 
 ### Step 1: 检查配置并展示状态
 
-1. 导入并调用 `print_status_banner()` 展示当前配置：
-   ```python
-   from scripts.config import print_status_banner
-   print_status_banner()
+1. 首先加载配置（使用 Python 直接读取或调用 config 模块）
+2. 直接向用户输出当前状态 Banner：
    ```
-
-2. 读取 `config.yaml` 检查 `initialized` 状态
-3. 如果未初始化，引导用户配置：
+   ╔═══════════════════════════════════════════════════════════════╗
+   ║  openGrid 抽屉铺满                                           ║
+   ╠═══════════════════════════════════════════════════════════════╣
+   ║  🖨️  打印机: [型号] ([bed_x]×[bed_y]×[max_z]mm)             ║
+   ║  📁  输出目录: [stl_dir]                                      ║
+   ║  📦  库存: [库存列表或"无库存"]                               ║
+   ║  🔧  瓦片类型: [tile_type] | 堆叠: [stacking_method]          ║
+   ╚═══════════════════════════════════════════════════════════════╝
+   ```
+3. 读取 `config.yaml` 检查 `initialized` 状态
+4. 如果未初始化，引导用户配置：
    - 复制配置文件：`cp config.example.yaml config.yaml`
    - 编辑设置 `initialized: true` 和打印机型号
 
