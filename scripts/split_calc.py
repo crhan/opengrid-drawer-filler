@@ -473,7 +473,10 @@ def _find_best_scheme_impl(x, y, verbose=False):
 
 
 def find_all_schemes(x, y):
-    """生成某个抽屉的所有有效分割方案"""
+    """生成某个抽屉的所有有效分割方案
+
+    注意：旋转方案由 find_best_scheme 单独处理
+    """
     # 先检查是否需要分割
     if validate_tile(x, y):
         return [{
@@ -486,8 +489,8 @@ def find_all_schemes(x, y):
 
     all_schemes = []
 
-    # 遍历所有分割组合
-    for x_parts in range(2, 8):
+    # 遍历所有分割组合，包括 x_parts=1 和 y_parts=1 的情况
+    for x_parts in range(1, 8):
         for y_parts in range(1, 5):
             total_tiles = x_parts * y_parts
             if total_tiles > 20:
@@ -1075,6 +1078,8 @@ def calculate_total_prints(batch_results, schemes):
 def calculate_batch_cost_with_inventory(schemes, batch_results, inventory):
     """计算批量方案的总成本，正确追踪库存使用
 
+    正确的逻辑：按节省成本排序，优先给节省多的抽屉分配库存
+
     Args:
         schemes: 分割方案列表
         batch_results: 批量计算结果列表
@@ -1089,28 +1094,62 @@ def calculate_batch_cost_with_inventory(schemes, batch_results, inventory):
             for i, s in enumerate(schemes) if s
         ), {}
 
-    # 深拷贝库存，因为我们会修改它
-    remaining_inv = dict(inventory)
-    total_cost = 0
-    inventory_usage = {}
-
+    # 第一步：计算每个抽屉不使用库存和使用库存的成本差异
+    # 按节省成本从高到低排序
+    savings = []
     for i, scheme in enumerate(schemes):
         if scheme is None:
             continue
 
         copies = batch_results[i].get('copies', 1) if i < len(batch_results) else 1
 
-        # 计算当前抽屉使用库存后的成本
-        cost, from_inv, need_print = calculate_print_cost(
-            scheme['tiles'], remaining_inv, copies
-        )
+        # 不使用库存的成本
+        cost_no_inv, _, _ = calculate_print_cost(scheme['tiles'], {}, copies)
+        # 使用库存的成本
+        cost_with_inv, from_inv, _ = calculate_print_cost(scheme['tiles'], inventory, copies)
 
-        # 更新剩余库存
-        for key, used in from_inv.items():
-            remaining_inv[key] = remaining_inv.get(key, 0) - used
+        saved = cost_no_inv - cost_with_inv
+        savings.append({
+            'index': i,
+            'scheme': scheme,
+            'cost_no_inv': cost_no_inv,
+            'cost_with_inv': cost_with_inv,
+            'from_inv': from_inv,
+            'saved': saved
+        })
+
+    # 按节省成本从高到低排序
+    savings.sort(key=lambda x: x['saved'], reverse=True)
+
+    # 第二步：按排序分配库存
+    remaining_inv = dict(inventory)
+    total_cost = 0
+    inventory_usage = {}
+
+    for item in savings:
+        i = item['index']
+        scheme = item['scheme']
+        copies = batch_results[i].get('copies', 1) if i < len(batch_results) else 1
+
+        # 检查库存是否足够
+        can_use = True
+        for key, needed in item['from_inv'].items():
+            if remaining_inv.get(key, 0) < needed:
+                can_use = False
+                break
+
+        if can_use:
+            # 使用库存
+            cost = item['cost_with_inv']
+            for key, used in item['from_inv'].items():
+                remaining_inv[key] -= used
+            inventory_usage[i] = item['from_inv']
+        else:
+            # 库存不足，不能使用库存
+            cost = item['cost_no_inv']
+            inventory_usage[i] = {}
 
         total_cost += cost
-        inventory_usage[i] = from_inv
 
     return total_cost, inventory_usage
 
@@ -1126,7 +1165,8 @@ def optimize_batch_global(batch_results, inventory=None):
         return None
 
     # 步骤1：各自找最优作为初始解
-    # 如果有库存，传入实际库存让find_best_scheme考虑库存选择方案
+    # 注意：不传inventory，让每个抽屉选择最优的瓦片方案（与库存无关）
+    # 库存分配由 calculate_batch_cost_with_inventory 统一处理
     initial_schemes = []
     for i, r in enumerate(batch_results):
         if r is None:
@@ -1134,13 +1174,9 @@ def optimize_batch_global(batch_results, inventory=None):
             continue
         x, y = r['grid']
         copies = r.get('copies', 1)
-        # 如果有库存，使用实际库存让find_best_scheme选择能使用库存的方案
-        if inventory:
-            scheme = find_best_scheme(x, y, inventory=inventory, copies=copies)
-            initial_schemes.append(scheme)
-        else:
-            scheme = find_best_scheme(x, y, inventory=None, copies=copies)
-            initial_schemes.append(scheme)
+        # 不传 inventory，每个抽屉选择成本最低的方案
+        scheme = find_best_scheme(x, y, inventory=None, copies=copies)
+        initial_schemes.append(scheme)
 
     # 计算初始解的成本（打印次数或库存成本）
     if inventory:
@@ -1192,10 +1228,22 @@ def optimize_batch_global(batch_results, inventory=None):
                 best_cost = total
 
     # 返回优化结果
+    # 重新计算最终的库存使用情况，并更新到每个方案中
+    if inventory:
+        final_cost, final_inv_usage = calculate_batch_cost_with_inventory(
+            best_schemes, batch_results, inventory
+        )
+        # 更新每个方案的 from_inventory 字段
+        for i, scheme in enumerate(best_schemes):
+            if scheme is not None and i in final_inv_usage:
+                scheme['from_inventory'] = final_inv_usage[i]
+    else:
+        final_cost = best_cost
+
     return {
         'schemes': best_schemes,
         'total_prints': best_cost if not inventory else None,
-        'cost': best_cost if inventory else None,
+        'cost': final_cost if inventory else None,
         'initial_prints': initial_cost if not inventory else None,
         'initial_cost': initial_cost if inventory else None,
         'improved': best_cost < initial_cost
