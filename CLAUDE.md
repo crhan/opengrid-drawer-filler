@@ -16,6 +16,7 @@ cd {skill_dir}
 ```
 
 脚本安装：
+
 - Python venv 虚拟环境 (`.venv`)
 - Python 依赖 (pyyaml, pytest, Pillow)
 - OpenSCAD Snapshot (通过 Homebrew)
@@ -35,18 +36,6 @@ cp config/config.example.yaml config/config.yaml
 # - 打印机型号 (Bambu 机型预设)
 # - openGrid 参数
 ```
-
-### 打印机预设
-
-| 型号 | bed_x | bed_y | max_z |
-|------|-------|-------|-------|
-| a1_mini | 120 | 120 | 120 |
-| a1 | 180 | 180 | 180 |
-| p1p | 256 | 256 | 256 |
-| p1s | 256 | 256 | 256 |
-| x1c | 256 | 256 | 256 |
-| x1e | 256 | 256 | 256 |
-| h2d | 300 | 300 | 300 |
 
 ## 库存管理
 
@@ -73,6 +62,7 @@ cp config/config.example.yaml config/config.yaml
 ### 库存日志
 
 每次库存操作都会自动记录到 `inventory.json` 的 `log` 字段，包括：
+
 - 操作时间 (timestamp)
 - 操作类型 (add/deduct/undo)
 - 变化的物品和数量
@@ -213,6 +203,7 @@ opengrid/
 开始功能开发或实施计划前，使用 `using-git-worktrees` skill 创建隔离的 worktree，保持主分支干净。
 
 完成前运行测试：
+
 ```bash
 .venv/bin/python -m pytest -v
 ```
@@ -220,6 +211,7 @@ opengrid/
 ## 测试
 
 使用 pytest，测试文件按领域组织：
+
 - `test_scheme.py` - 方案查找算法
 - `test_split.py` - 分割算法
 - `test_inventory.py` - 库存匹配

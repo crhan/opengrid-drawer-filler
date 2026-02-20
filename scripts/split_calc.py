@@ -256,14 +256,22 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
                 'balance': balance
             })
 
+            # 提前终止：找到完美匹配（成本为0）
+            if cost == 0:
+                break
+
         # 多维度排序：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
         scored_schemes.sort(key=SCHEME_SORT_KEY)
 
         best_scored = scored_schemes[0]
 
         # 计算最佳无库存方案作为基准（包括旋转）
+        # 使用缓存加速
         baseline_cost = float('inf')
         baseline_scheme = None
+        baseline_normalized = None
+
+        # 先检查原始方案
         for scheme in all_schemes:
             cost_no_inv, _, _ = calculate_print_cost(scheme['tiles'], {}, copies)
             if cost_no_inv < baseline_cost:
@@ -281,7 +289,6 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
                 if cost_no_inv < baseline_cost:
                     baseline_cost = cost_no_inv
                     baseline_scheme = scheme
-                    # 保存旋转后的瓦片
                     baseline_normalized = normalized
 
         # 如果使用库存后的成本高于基准成本，选择不使用库存的方案
@@ -289,7 +296,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             # 使用基准方案
             if baseline_scheme:
                 # 检查是否是旋转后的方案
-                if 'baseline_normalized' in dir() and baseline_scheme == rotated_schemes[-1]:
+                if baseline_normalized is not None:
                     tiles = baseline_normalized
                 else:
                     tiles = baseline_scheme['tiles']
@@ -300,10 +307,10 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
                     tile_counts[key] = tile_counts.get(key, 0) + 1
 
                 best = {
-                    'x_parts': baseline_scheme.get('y_parts', 1) if 'baseline_normalized' in dir() else baseline_scheme.get('x_parts', 1),
-                    'y_parts': baseline_scheme.get('x_parts', 1) if 'baseline_normalized' in dir() else baseline_scheme.get('y_parts', 1),
-                    'x_splits': baseline_scheme.get('y_splits', tiles) if 'baseline_normalized' in dir() else baseline_scheme.get('x_splits', []),
-                    'y_splits': baseline_scheme.get('x_splits', []) if 'baseline_normalized' in dir() else baseline_scheme.get('y_splits', []),
+                    'x_parts': baseline_scheme.get('y_parts', 1) if baseline_normalized else baseline_scheme.get('x_parts', 1),
+                    'y_parts': baseline_scheme.get('x_parts', 1) if baseline_normalized else baseline_scheme.get('y_parts', 1),
+                    'x_splits': baseline_scheme.get('y_splits', tiles) if baseline_normalized else baseline_scheme.get('x_splits', []),
+                    'y_splits': baseline_scheme.get('x_splits', []) if baseline_normalized else baseline_scheme.get('y_splits', []),
                     'tiles': tiles,
                     'cost': baseline_cost,
                     'from_inventory': {},
@@ -445,11 +452,27 @@ def _find_best_scheme_impl(x, y, verbose=False):
     best = None
     candidates_checked = 0
 
-    # 从最少分割开始尝试
-    for x_parts in range(2, 8):
-        for y_parts in range(1, 5):
+    # 计算最少需要的分割数
+    min_x_parts = max(1, int((x + MAX_X - 1) / MAX_X))
+    min_y_parts = max(1, int((y + MAX_Y - 1) / MAX_Y))
+
+    # 智能限制搜索范围：只搜索必要的组合
+    if min_x_parts >= 6 or min_y_parts >= 5:
+        # 大网格：使用更宽的搜索范围
+        x_search = range(max(2, min_x_parts - 1), min_x_parts + 3)
+        y_search = range(max(1, min_y_parts - 1), min_y_parts + 3)
+    else:
+        # 小网格：使用原有搜索范围
+        x_search = range(2, 8)
+        y_search = range(1, 5)
+
+    for x_parts in x_search:
+        for y_parts in y_search:
             total_tiles = x_parts * y_parts
-            if total_tiles > 20:
+            # 大网格需要更多瓦片
+            min_required = min_x_parts * min_y_parts
+            max_allowed = max(28, min_required)
+            if total_tiles > max_allowed:
                 continue
 
             # 生成有效的 X 分割
@@ -534,10 +557,31 @@ def find_all_schemes(x, y):
     all_schemes = []
 
     # 遍历所有分割组合，包括 x_parts=1 和 y_parts=1 的情况
-    for x_parts in range(1, 8):
-        for y_parts in range(1, 5):
+    # 对于大网格，使用优化的搜索范围
+    import math
+
+    # 计算最少需要的分割数
+    min_x_parts = max(1, int((x + MAX_X - 1) / MAX_X))
+    min_y_parts = max(1, int((y + MAX_Y - 1) / MAX_Y))
+
+    # 智能限制搜索范围：只搜索必要的组合
+    # 对于大网格，使用更小的搜索窗口
+    if min_x_parts >= 6 or min_y_parts >= 5:
+        # 大网格：只搜索最小需要的分割数 +/- 1
+        x_search = range(max(1, min_x_parts - 1), min_x_parts + 2)
+        y_search = range(max(1, min_y_parts - 1), min_y_parts + 2)
+    else:
+        # 小网格：使用原有搜索范围
+        x_search = range(1, min(8, x + 1))
+        y_search = range(1, min(5, y + 1))
+
+    for x_parts in x_search:
+        for y_parts in y_search:
             total_tiles = x_parts * y_parts
-            if total_tiles > 20:
+            # 大网格需要更多瓦片，允许最小需要的瓦片数
+            min_required = min_x_parts * min_y_parts
+            max_allowed = max(28, min_required)
+            if total_tiles > max_allowed:
                 continue
 
             x_splits = split_with_limit(x, x_parts, MAX_X)
@@ -584,6 +628,9 @@ def calculate_filament_and_time(cells, stacks):
 # 换料惩罚时间（分钟）
 SWAP_PENALTY = 60
 
+# 成本计算缓存
+_cost_cache = {}
+
 
 def calculate_print_cost(tiles: list[tuple[int, int]], inventory: dict[str, int], copies: int = 1) -> tuple[int, dict, dict]:
     """
@@ -599,11 +646,17 @@ def calculate_print_cost(tiles: list[tuple[int, int]], inventory: dict[str, int]
         - from_inventory: 从库存取的瓦片 {"6x7": 2, ...}
         - need_print: 需要新打印的瓦片 {"6x7": 1, ...}
     """
-    # 统计每种尺寸的需求
+    # 创建缓存键（基于瓦片尺寸计数和库存）
     tile_counts = {}
     for w, h in tiles:
         key = f"{w}x{h}"
         tile_counts[key] = tile_counts.get(key, 0) + 1
+
+    # 使用排序的元组作为缓存键
+    cache_key = (tuple(sorted(tile_counts.items())), tuple(sorted(inventory.items()) if inventory else ()), copies)
+
+    if cache_key in _cost_cache:
+        return _cost_cache[cache_key]
 
     from_inventory = {}
     need_print = {}
@@ -635,7 +688,9 @@ def calculate_print_cost(tiles: list[tuple[int, int]], inventory: dict[str, int]
     if total_prints > 1:
         total_time += (total_prints - 1) * SWAP_PENALTY
 
-    return total_time, from_inventory, need_print
+    result = (total_time, from_inventory, need_print)
+    _cost_cache[cache_key] = result
+    return result
 
 
 def replan_with_inventory(tiles: list[tuple[int, int]], inventory: dict[str, int], copies: int = 1, grid: tuple[int, int] = None):
@@ -1186,6 +1241,8 @@ def calculate_single(width, depth, copies=1, verbose=False, index=None):
 
     if x < MIN_TILE or y < MIN_TILE:
         return None
+
+    # 不再检查 MAX_X/MAX_Y，因为 split 会把大网格拆分成小瓦片
 
     scheme = find_best_scheme(x, y, verbose)
 
@@ -2060,6 +2117,8 @@ def main():
         if x < MIN_TILE or y < MIN_TILE:
             print("错误: 抽屉尺寸太小，无法放置最小瓦片")
             sys.exit(1)
+
+        # 不再检查 MAX_X/MAX_Y，因为 split 会把大网格拆分成小瓦片
 
         scheme = find_best_scheme(x, y, args.verbose, inventory=inventory)
 
