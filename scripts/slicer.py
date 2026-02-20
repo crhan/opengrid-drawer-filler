@@ -11,9 +11,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 导入配置模块（添加 scripts 目录到路径）
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
-from config import load_config, get_printer_config
+from opengrid.config import load_config, get_printer_config
 
 # 加载配置
 _config = load_config()
@@ -479,6 +478,6 @@ def main():
 
 
 if __name__ == "__main__":
-    from config import ensure_initialized
+    from opengrid.config import ensure_initialized
     ensure_initialized()
     main()

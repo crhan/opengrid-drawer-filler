@@ -18,6 +18,10 @@ import pytest
 
 # 添加 scripts 目录到路径
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scripts')
+sys.path.insert(0, SCRIPTS_DIR)
+
+# 从 split_calc 导入所需函数
+from split_calc import calculate_filament_and_time, SWAP_PENALTY, calculate_print_cost
 
 
 def run_cmd(cmd, capture=True, cwd=None):
@@ -163,7 +167,20 @@ def check_inventory_not_exceeded(used, available):
 class TestScenario1:
     """场景 1：精确匹配 - 成本 = 0
 
-    注：此测试通过 CLI 验证库存功能是否正常工作。
+    假设：
+    - 库存：6×7 有 2 个
+    - 需求：2 个 6×7 瓦片
+
+    预期结果：
+    - 成本 = 0（完全使用库存）
+    - from_inventory = {'6x7': 2}
+    - need_print = {}
+
+    验证目标：
+    [x] 成本 = 0
+    [x] from_inventory = {'6x7': 2}
+    [x] need_print = {}
+    [x] 库存使用不超过提供数量
     """
 
     def test_exact_match_cost_zero(self, tmp_path):
@@ -171,45 +188,68 @@ class TestScenario1:
         inv_file = tmp_path / "inventory.json"
         create_empty_inventory(str(inv_file))
 
-        # 使用批量模式（单抽屉）以获取 inventory_usage
-        add_inventory(str(inv_file), {'9x9': 1})
+        # 添加库存：6x7 有 2 个
+        add_inventory(str(inv_file), {'6x7': 2})
+        inventory = load_inventory(str(inv_file))
 
-        # 批量模式：270x270 (9x9格子)
-        batch_mode = "270x270:1"
-        plan = get_print_plan(0, 0, str(inv_file), batch_mode=batch_mode)
+        # 直接调用 calculate_print_cost 测试（与 integration_test.py 一致）
+        tiles = [(6, 7), (6, 7)]
+        cost, from_inv, need_print = calculate_print_cost(tiles, inventory, copies=1)
 
-        # 验证：有库存使用
-        inv_usage = plan.get('inventory_usage', {})
-        from_inv = inv_usage.get('from_inventory', {})
+        # 精确匹配验证
+        assert cost == 0, f"成本应为 0，实际: {cost}"
+        assert from_inv == {'6x7': 2}, f"from_inventory 应为 {{'6x7': 2}}，实际: {from_inv}"
+        assert need_print == {}, f"need_print 应为 {{}}，实际: {need_print}"
 
-        # 只要有使用库存即可
-        assert len(from_inv) > 0 or inv_usage.get('need_print', {}) != {}, f"应该有库存使用或需要打印: {from_inv}"
+        # 检查库存使用不超过提供数量
+        assert check_inventory_not_exceeded(from_inv, inventory), "库存使用不应超过提供数量"
 
 
 class TestScenario2:
-    """场景 2：部分匹配 - 只计算差额"""
+    """场景 2：部分匹配 - 只计算差额
+
+    假设：
+    - 库存：6×7 有 1 个
+    - 需求：2 个 6×7 瓦片
+
+    预期结果：
+    - 库存取 1 个，打印 1 个
+    - 成本 > 0
+    - from_inventory = {'6x7': 1}
+    - need_print = {'6x7': 1}
+
+    验证目标：
+    [x] from_inventory = {'6x7': 1}
+    [x] need_print = {'6x7': 1}
+    [x] 成本 > 0 且 < 无库存时的成本
+    [x] 库存使用不超过提供数量
+    """
 
     def test_partial_match_cost_calculation(self, tmp_path):
         """部分匹配时只计算差额"""
         inv_file = tmp_path / "inventory.json"
         create_empty_inventory(str(inv_file))
 
-        # 使用 6x6 库存
-        add_inventory(str(inv_file), {'6x6': 1})
+        # 添加库存：6x7 有 1 个
+        add_inventory(str(inv_file), {'6x7': 1})
+        inventory = load_inventory(str(inv_file))
 
-        # 批量模式：265x360 (9x12格子)
-        batch_mode = "265x360:1"
-        plan = get_print_plan(0, 0, str(inv_file), batch_mode=batch_mode)
+        # 直接调用 calculate_print_cost 测试（与 integration_test.py 一致）
+        tiles = [(6, 7), (6, 7)]
+        cost, from_inv, need_print = calculate_print_cost(tiles, inventory, copies=1)
 
-        inv_usage = plan.get('inventory_usage', {})
-        from_inv = inv_usage.get('from_inventory', {})
-        need_print = inv_usage.get('need_print', {})
+        # 无库存对比
+        cost_no_inv, _, _ = calculate_print_cost(tiles, {}, copies=1)
 
         # 验证：使用了库存
-        assert len(from_inv) > 0, f"应使用库存，实际: {from_inv}"
+        assert from_inv == {'6x7': 1}, f"from_inventory 应为 {{'6x7': 1}}，实际: {from_inv}"
         # 验证：还需要打印
-        assert len(need_print) > 0, f"应还需要打印，实际: {need_print}"
-        assert len(need_print) > 0, f"应还需要打印，实际: {need_print}"
+        assert need_print == {'6x7': 1}, f"need_print 应为 {{'6x7': 1}}，实际: {need_print}"
+        # 验证：成本大于0但小于无库存成本
+        assert cost > 0, f"成本应大于0，实际: {cost}"
+        assert cost < cost_no_inv, f"成本({cost})应小于无库存成本({cost_no_inv})"
+        # 验证：库存使用不超过提供数量
+        assert check_inventory_not_exceeded(from_inv, inventory), "库存使用不应超过提供数量"
 
 
 class TestScenario3a:

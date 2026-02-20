@@ -2,10 +2,10 @@ import pytest
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "opengrid"))
 
-from scheme_generator import generate_schemes, generate_inventory_aware_scheme
-from inventory import add_inventory, load_inventory
+from opengrid.scheme_generator import generate_schemes, generate_inventory_aware_scheme
+from opengrid.inventory import add_inventory, load_inventory
 
 
 def test_generate_schemes_returns_three_options():

@@ -1,5 +1,5 @@
 import pytest
-from scripts.visualizer import Visualizer, get_tile_color
+from opengrid.visualizer import Visualizer, get_tile_color
 
 
 def test_get_tile_color():

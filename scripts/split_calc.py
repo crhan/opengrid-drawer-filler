@@ -11,9 +11,8 @@ import os
 import sys
 
 # 导入配置模块
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
-from config import load_config, get_printer_config, get_inventory
+from opengrid.config import load_config, get_printer_config, get_inventory
 
 # 加载配置
 _config = load_config()
@@ -1779,7 +1778,7 @@ def main():
         output_json(width, depth, scheme, copies, stats)
 
 if __name__ == "__main__":
-    from config import ensure_initialized, reload_config
+    from opengrid.config import ensure_initialized, reload_config
     ensure_initialized()
     reload_config()
     main()

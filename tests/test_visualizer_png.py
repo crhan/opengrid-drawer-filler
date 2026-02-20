@@ -1,5 +1,5 @@
 import pytest
-from scripts.visualizer import Visualizer, get_tile_color
+from opengrid.visualizer import Visualizer, get_tile_color
 
 def test_generate_assembly_image():
     """测试拼接图生成"""

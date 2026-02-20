@@ -95,53 +95,68 @@ project/
 ├── inventory/             # 库存数据目录
 │   └── inventory.json     # 库存数据文件
 │
-├── scripts/               # 代码目录
-│   ├── core/            # 核心算法
+├── opengrid/              # 核心库 (Python 包)
+│   ├── core/              # 核心算法
 │   │   ├── constants.py   # 常量定义
 │   │   ├── grid.py       # 网格计算
 │   │   ├── splitter.py   # 分割算法
 │   │   ├── scheme.py     # 方案查找
 │   │   ├── stats.py      # 耗材和时间估算
 │   │   └── cost.py       # 库存成本计算
-│   ├── matcher.py        # 库存匹配
-│   ├── config.py         # 配置加载模块
+│   ├── config.py          # 配置加载模块
 │   ├── inventory.py       # 库存 CRUD 模块
-│   ├── stl/             # STL 生成
-│   │   ├── generator.py  # OpenSCAD 生成
-│   │   └── manager.py    # 文件管理
-│   ├── project/          # 项目管理
-│   ├── ui/               # 输出展示
-│   │   ├── presenter.py  # 方案格式化
-│   │   ├── visualizer.py # HTML 可视化
-│   │   └── print_plan.py # 打印计划
+│   ├── matcher.py         # 库存匹配
+│   ├── visualizer.py      # 可视化模块
+│   ├── scheme_generator.py # 方案生成器
+│   ├── stl/               # STL 生成
+│   │   ├── generator.py   # OpenSCAD 生成
+│   │   └── manager.py     # 文件管理
+│   ├── project/           # 项目管理
+│   └── ui/                # 输出展示
+│       ├── presenter.py   # 方案格式化
+│       └── print_plan.py  # 打印计划
+│
+├── scripts/               # 用户可直接运行的脚本
+│   ├── split_calc.py      # 批量计算入口
+│   ├── slicer.py          # STL 生成入口
+│   └── setup.sh           # 安装脚本
+│
+├── dev-scripts/           # 开发辅助脚本 (非必需)
 │   └── ...
 │
-└── tests/               # 测试目录
+└── tests/                # 测试目录
 ```
 
-### 模块划分（scripts 目录）
+### 核心脚本 (scripts/)
 
 ```
 scripts/
+├── split_calc.py    # 批量计算入口 (主要脚本)
+└── slicer.py       # STL 生成入口
+```
+
+### 核心库 (opengrid/)
+
+```
+opengrid/
 ├── core/           # 核心算法
-│   ├── constants.py   # 常量定义
-│   ├── grid.py        # 网格计算
-│   ├── splitter.py    # 分割算法
-│   ├── scheme.py      # 方案查找
-│   ├── stats.py       # 耗材和时间估算
-│   └── cost.py        # 库存成本计算
-├── matcher.py        # 库存匹配
-├── config.py         # 配置管理
-├── inventory.py      # 库存 CRUD
-├── stl/           # STL 生成
-│   ├── generator.py   # OpenSCAD 生成
-│   └── manager.py     # 文件管理
-├── project/       # 项目管理
-├── ui/            # 输出展示
-│   ├── presenter.py   # 方案格式化
-│   ├── visualizer.py  # HTML 可视化
-│   └── print_plan.py  # 打印计划
-└── ...
+│   ├── constants.py # 常量定义
+│   ├── grid.py     # 网格计算
+│   ├── splitter.py # 分割算法
+│   ├── scheme.py   # 方案查找
+│   ├── stats.py    # 耗材和时间估算
+│   └── cost.py     # 库存成本计算
+├── config.py       # 配置管理
+├── inventory.py    # 库存 CRUD
+├── matcher.py      # 库存匹配
+├── visualizer.py   # 可视化
+├── scheme_generator.py # 方案生成器
+├── stl/            # STL 生成
+│   ├── generator.py # OpenSCAD 生成
+│   └── manager.py   # 文件管理
+└── ui/             # 输出展示
+    ├── presenter.py # 方案格式化
+    └── print_plan.py # 打印计划
 ```
 
 ### 核心常量
