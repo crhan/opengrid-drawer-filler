@@ -95,3 +95,56 @@ def ensure_initialized():
     if not is_initialized():
         from .init import main as init_main
         init_main()
+
+
+def get_inventory():
+    """Load inventory data"""
+    import json
+    inventory_path = Path(__file__).parent.parent / "inventory.json"
+    if not inventory_path.exists():
+        return {}
+
+    try:
+        with open(inventory_path) as f:
+            data = json.load(f)
+            return data.get("inventory", {})
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+
+def print_status_banner():
+    """Print startup status banner"""
+    config = load_config()
+    printer_cfg = get_printer_config()
+    model = config.get("printer", {}).get("model", "p1p").upper()
+    stl_dir = config.get("output", {}).get("stl_dir", "~/3D打印/opengrid/")
+    stl_dir = str(Path(stl_dir).expanduser())
+
+    # Tile type and stacking method
+    tile_type = config.get("opengrid", {}).get("tile_type", "Full")
+    stacking = config.get("opengrid", {}).get("stacking_method", "Ironing")
+
+    # Load inventory
+    inventory = get_inventory()
+    if inventory:
+        inv_parts = [f"{k.replace('x', '×')} ({v}块)" for k, v in sorted(inventory.items())]
+        inv_str = ", ".join(inv_parts)
+    else:
+        inv_str = "无库存"
+
+    # Build output
+    lines = [
+        "",
+        "╔═══════════════════════════════════════════════════════════════╗",
+        "║  openGrid 抽屉铺满                                           ║",
+        "╠═══════════════════════════════════════════════════════════════╣",
+        f"║  🖨️  打印机: {model} ({printer_cfg['bed_x']}×{printer_cfg['bed_y']}×{printer_cfg['max_z']}mm)                        ║",
+        f"║  📁  输出目录: {stl_dir[:44]:<44} ║",
+        f"║  📦  库存: {inv_str[:48]:<48} ║",
+        f"║  🔧  瓦片类型: {tile_type} | 堆叠: {stacking:<33} ║",
+        "╚═══════════════════════════════════════════════════════════════╝",
+        "",
+    ]
+
+    for line in lines:
+        print(line)

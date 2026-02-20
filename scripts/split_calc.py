@@ -12,7 +12,7 @@ import sys
 
 # 导入配置模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import load_config, get_printer_config
+from config import load_config, get_printer_config, get_inventory
 
 # 加载配置
 _config = load_config()
@@ -1616,21 +1616,31 @@ def main():
     args = parser.parse_args()
 
     # 读取库存文件
+    # 默认自动加载 scripts/inventory.json，可以通过 -i 参数指定其他文件
+    # 传入 -i "" 可以禁用库存
     inventory = None
-    if args.inventory:
-        import json as json_module
-        try:
-            with open(args.inventory, 'r', encoding='utf-8') as f:
-                data = json_module.load(f)
-                inventory = data.get('inventory', {})
-                if args.verbose:
-                    print(f"[DEBUG] 加载库存: {inventory}")
-        except FileNotFoundError:
-            print(f"错误: 库存文件不存在: {args.inventory}")
-            sys.exit(1)
-        except json_module.JSONDecodeError as e:
-            print(f"错误: 库存文件格式错误: {e}")
-            sys.exit(1)
+    if args.inventory is not None:
+        # 用户显式指定了库存文件路径
+        if args.inventory == "":
+            inventory = {}
+        else:
+            try:
+                with open(args.inventory, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    inventory = data.get('inventory', {})
+                    if args.verbose:
+                        print(f"[DEBUG] 加载库存: {inventory}")
+            except FileNotFoundError:
+                print(f"错误: 库存文件不存在: {args.inventory}")
+                sys.exit(1)
+            except json.JSONDecodeError as e:
+                print(f"错误: 库存文件格式错误: {e}")
+                sys.exit(1)
+    else:
+        # 自动加载默认库存文件
+        inventory = get_inventory()
+        if inventory and args.verbose:
+            print(f"[DEBUG] 自动加载库存: {inventory}")
 
     # 批量模式处理
     if args.batch:

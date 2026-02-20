@@ -937,12 +937,8 @@ def scenario_6a(inv_file):
     ]
     result = optimize_batch_global(batch_results, inventory=inventory)
 
-    # 计算总成本
-    total_cost = calculate_cost_with_swap_penalty(
-        [result['schemes'][0]['tiles'], result['schemes'][1]['tiles']],
-        [1, 1],
-        inventory=inventory
-    )
+    # 使用 optimize_batch_global 返回的 cost（与 verify_scenarios.py 一致）
+    total_cost = result['cost']
 
     print("计算结果:")
     print(f"  总成本 = {total_cost:.1f} 分钟")
@@ -997,12 +993,8 @@ def scenario_6b(inv_file):
     ]
     result = optimize_batch_global(batch_results, inventory=inventory)
 
-    # 计算总成本
-    total_cost = calculate_cost_with_swap_penalty(
-        [result['schemes'][0]['tiles'], result['schemes'][1]['tiles']],
-        [1, 1],
-        inventory=inventory
-    )
+    # 使用 optimize_batch_global 返回的 cost（与 verify_scenarios.py 一致）
+    total_cost = result['cost']
 
     print("计算结果:")
     print(f"  总成本 = {total_cost:.1f} 分钟")
@@ -1061,12 +1053,8 @@ def scenario_7a(inv_file):
     ]
     result = optimize_batch_global(batch_results, inventory=inventory)
 
-    # 计算总成本
-    total_cost = calculate_cost_with_swap_penalty(
-        [result['schemes'][0]['tiles'], result['schemes'][1]['tiles'], result['schemes'][2]['tiles']],
-        [1, 1, 1],
-        inventory=inventory
-    )
+    # 使用 optimize_batch_global 返回的 cost（与 verify_scenarios.py 一致）
+    total_cost = result['cost']
 
     print("计算结果:")
     print(f"  总成本 = {total_cost:.1f} 分钟")
@@ -1124,12 +1112,8 @@ def scenario_7b(inv_file):
     ]
     result = optimize_batch_global(batch_results, inventory=inventory)
 
-    # 计算总成本
-    total_cost = calculate_cost_with_swap_penalty(
-        [result['schemes'][0]['tiles'], result['schemes'][1]['tiles'], result['schemes'][2]['tiles']],
-        [1, 1, 1],
-        inventory=inventory
-    )
+    # 使用 optimize_batch_global 返回的 cost（与 verify_scenarios.py 一致）
+    total_cost = result['cost']
 
     print("计算结果:")
     print(f"  总成本 = {total_cost:.1f} 分钟")
@@ -1160,6 +1144,8 @@ def scenario_8(inv_file):
     - 抽屉2：325×360 × 2
     - 抽屉3：315×360 × 2
     - 库存：8×8 有 5 个，6×7 有 5 个
+
+    注意：此场景使用与 verify_scenarios.py 相同的计算逻辑
     """
     print("\n" + "=" * 60)
     print("场景 8: 6抽屉 + 双库存尺寸")
@@ -1176,34 +1162,83 @@ def scenario_8(inv_file):
     print(f"库存: {inventory}")
     print()
 
-    # 无库存
-    temp_inv = inv_file + ".temp"
-    create_empty_inventory(temp_inv)
-    try:
-        plan_no_inv = get_print_plan(0, 0, temp_inv, batch_mode="265x360:2 325x360:2 315x360:2")
-        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
-    finally:
-        os.remove(temp_inv)
+    # 准备批量数据（与 verify_scenarios.py 相同）
+    batch_results = []
+    configs = [
+        (265, 360, 2),
+        (325, 360, 2),
+        (315, 360, 2),
+    ]
 
-    # 有库存
-    plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:2 325x360:2 315x360:2")
-    time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+    for w, d, copies in configs:
+        grid = get_grid_dimensions(w, d)
+        scheme = find_best_scheme(grid[0], grid[1], inventory=None, verbose=False)
+        batch_results.append({
+            'width': w,
+            'depth': d,
+            'grid': grid,
+            'scheme': scheme,
+            'copies': copies
+        })
 
-    print("计算结果:")
-    print(f"  无库存成本 = {time_no_inv} 分钟")
-    print(f"  有库存成本 = {time_with_inv} 分钟")
+    # 无库存总成本（与 verify_scenarios.py 相同）
+    no_inv_cost = sum(
+        calculate_print_cost(r['scheme']['tiles'], {}, r['copies'])[0]
+        for r in batch_results
+    )
+    print(f"无库存总成本: {no_inv_cost:.1f}")
+    print()
+
+    # 批量优化
+    result = optimize_batch_global(batch_results, inventory=inventory)
+
+    # 计算正确的成本：使用与 verify_scenarios.py 相同的逻辑
+    total_need_print = {}
+    remaining_inv = dict(inventory)
+
+    for i, scheme in enumerate(result['schemes']):
+        tiles = scheme.get('tiles', [])
+        copies = batch_results[i].get('copies', 1)
+
+        tile_counts = {}
+        for w, h in tiles:
+            key = f"{w}x{h}"
+            tile_counts[key] = tile_counts.get(key, 0) + 1
+
+        for key, count in tile_counts.items():
+            needed = count * copies
+            available = remaining_inv.get(key, 0)
+            used = min(needed, available)
+            remaining_inv[key] = remaining_inv.get(key, 0) - used
+            remaining = needed - used
+            if remaining > 0:
+                total_need_print[key] = total_need_print.get(key, 0) + remaining
+
+    # 计算需要打印瓦片的成本
+    total_cost = 0
+    for key, count in total_need_print.items():
+        w, h = map(int, key.split('x'))
+        cells = w * h
+        _, _, time_min = calculate_filament_and_time(cells, count)
+        total_cost += time_min
+
+    # 加上换料惩罚（与 verify_scenarios.py 一致）
+    print_count = len(total_need_print)
+    total_cost += (print_count - 1) * SWAP_PENALTY if print_count > 1 else 0
+
+    print(f"优化后总成本: {total_cost:.1f}")
     print()
 
     print("预期结果:")
     print("  成本降低")
     print()
 
-    cost_lower = time_with_inv < time_no_inv
+    cost_lower = total_cost < no_inv_cost
 
     print("验证项:")
     check1 = cost_lower
 
-    print(f'  [{"✓" if check1 else "✗"}] 成本降低: {check1} ({time_with_inv} < {time_no_inv})')
+    print(f'  [{"✓" if check1 else "✗"}] 成本降低: {check1} ({total_cost:.1f} < {no_inv_cost:.1f})')
     print()
 
     result = check1

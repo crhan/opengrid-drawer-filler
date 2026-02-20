@@ -16,10 +16,16 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
 
 ## Agent 工作流
 
-### Step 1: 检查配置
+### Step 1: 检查配置并展示状态
 
-1. 读取 `config.yaml` 检查 `initialized` 状态
-2. 如果未初始化，引导用户配置：
+1. 导入并调用 `print_status_banner()` 展示当前配置：
+   ```python
+   from scripts.config import print_status_banner
+   print_status_banner()
+   ```
+
+2. 读取 `config.yaml` 检查 `initialized` 状态
+3. 如果未初始化，引导用户配置：
    - 复制配置文件：`cp config.example.yaml config.yaml`
    - 编辑设置 `initialized: true` 和打印机型号
 
@@ -31,7 +37,9 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
    - `"265x360"` = 265×360mm，1份
    - `"265 360 2"` = 空格分隔格式
 
-### Step 3: 确认库存（新增）
+### Step 3: 确认库存
+
+**注意：这个环节你必须要和用户交互来确认库存数量是否正确，如果不正确就引导用户更新库存**
 
 1. 检查库存文件 `scripts/inventory.json`
 2. 列出可用瓦片（如有库存）
@@ -69,6 +77,54 @@ python3 scripts/split_calc.py 485 425 -j
 ### Step 5: 展示方案
 
 将脚本输出展示给用户，询问选择。
+
+#### 展示内容规范
+
+**1. 可视化布局**（风格2：带尺寸标注）
+
+```
+┌───────────┬─────────┐
+│   7×5     │   3×5   │
+│ ┌───────┐ │ ┌─────┐ │
+│ │       │ │ │     │ │
+│ └───────┘ │ └─────┘ │
+├───────────┼─────────┤
+│   7×5     │   3×5   │
+│ ┌───────┐ │ ┌─────┐ │
+│ │       │ │ │     │ │
+│ └───────┘ │ └─────┘ │
+└───────────┴─────────┘
+```
+
+**2. 详细统计**
+
+| 项目     | 值                 |
+| -------- | ------------------ |
+| 抽屉尺寸 | 265×365mm × 2份    |
+| 分割方案 | 7×5 × 2 + 3×5 × 2  |
+| 瓦片数量 | 4 stack            |
+| 打印时间 | 12.4 分钟          |
+| 预估耗材 | 45.2g              |
+| 库存使用 | 7×5 × 2 (从库存取) |
+| 节省     | 50% (如有库存)     |
+
+**3. 对比表格**（当展示两种方案时）
+
+| 项目     | 方案 A        | 方案 B        |
+| -------- | ------------- | ------------- |
+| 分割     | 7×5×2 + 3×5×2 | 7×5×2 + 3×5×2 |
+| 需打印   | 4 stack       | 2 stack       |
+| 打印时间 | 12.4 min      | 6.2 min       |
+| 耗材     | 45.2g         | 22.6g         |
+
+**4. 用户引导**
+
+```
+请选择方案：
+[ A ] 方案 A - 标准分割
+[ B ] 方案 B - 使用库存（节省 50%）
+[ Q ] 退出
+```
 
 ### Step 6: 生成文件
 
@@ -147,6 +203,7 @@ cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
 ```
 
 脚本自动完成：
+
 1. 创建 Python venv (`.venv`)
 2. 安装 Python 依赖 (pyyaml, pytest, Pillow)
 3. 安装 OpenSCAD
@@ -154,6 +211,7 @@ cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
 5. 安装 BOSL2
 
 之后运行脚本：
+
 ```bash
 .venv/bin/python scripts/split_calc.py 485 425
 ```
