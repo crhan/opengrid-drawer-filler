@@ -31,7 +31,24 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
    - `"265x360"` = 265×360mm，1份
    - `"265 360 2"` = 空格分隔格式
 
-### Step 3: 计算方案
+### Step 3: 确认库存（新增）
+
+1. 检查库存文件 `scripts/inventory.json`
+2. 列出可用瓦片（如有库存）
+3. 询问用户是否使用库存计算
+
+**库存为空时**：提示用户并询问是继续计算还是先入库
+
+### Step 4: 计算方案
+
+根据用户选择执行：
+
+- **不使用库存**：按原有逻辑计算最优方案
+- **使用库存**：计算并展示两种方案：
+  1. 不考虑库存的最优方案
+  2. 考虑库存的方案（显示节省多少打印）
+
+展示两种方案供用户选择
 
 调用 `split_calc.py`：
 
@@ -49,11 +66,11 @@ python3 scripts/split_calc.py -p klean
 python3 scripts/split_calc.py 485 425 -j
 ```
 
-### Step 4: 展示方案
+### Step 5: 展示方案
 
 将脚本输出展示给用户，询问选择。
 
-### Step 5: 生成文件
+### Step 6: 生成文件
 
 1. 调用 `slicer.py` 生成 STL
 2. 调用 `visualizer.py` 生成 HTML 打印计划

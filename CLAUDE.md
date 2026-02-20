@@ -89,6 +89,7 @@ cp config.example.yaml config.yaml
 - Scripts are pure computation: take parameters, return results
 - Agent handles all user interaction: ask questions, present options, get decisions
 - See `SKILL.md` for the complete Agent workflow
+- **Important**: Agent must confirm inventory status before calculating schemes (see SKILL.md Step 3)
 
 ## Architecture
 
