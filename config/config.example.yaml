@@ -28,3 +28,10 @@ software:
   openscad: "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
   bambustudio: "/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"
   orca: "/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer"
+
+# === 项目配置（可选）===
+projects:
+  # 项目根目录
+  projects_dir: "~/3D打印/openGrid-projects"
+  # 3MF 模板路径 (相对于 skill 目录)
+  template_3mf: "openGrid_h2d.3mf"
