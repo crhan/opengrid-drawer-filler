@@ -1979,11 +1979,10 @@ def main():
         """
     )
 
-    parser.add_argument('width', nargs='?', type=int, help='抽屉宽度(mm)')
-    parser.add_argument('depth', nargs='?', type=int, help='抽屉深度(mm)')
+    parser.add_argument('dimensions', nargs='*', type=str,
+                       help='尺寸列表，如 485x425 或 265x365:2')
     parser.add_argument('-c', '--copies', type=int, default=1, help='打印份数 (默认1)')
     parser.add_argument('-p', '--preset', type=str, help='预设尺寸 (klean, ikea-sunda, ikea-kal, ikea-alex, standard, small, medium, large)')
-    parser.add_argument('-b', '--batch', type=str, help='批量计算: "265x365:2 325x365:2" 或 "265 365 2 325 365 2"')
     parser.add_argument('-i', '--inventory', type=str, help='库存文件路径 (JSON格式)')
     parser.add_argument('-j', '--json', action='store_true', help='JSON 格式输出')
     parser.add_argument('-v', '--verbose', action='store_true', help='详细输出')
@@ -2017,73 +2016,71 @@ def main():
         if inventory and args.verbose:
             print(f"[DEBUG] 自动加载库存: {inventory}")
 
-    # 批量模式处理
-    if args.batch:
-        batch_mode(args.batch, args.verbose, inventory=inventory, json_output=args.json)
-        return
-
     # 列出预设
     if args.list_presets:
         list_presets()
         return
 
+    # 解析尺寸参数
+    dims = parse_dimensions(args.dimensions)
+
+    # 如果有预设，加入列表
+    if args.preset:
+        preset_dims = parse_preset(args.preset, args.copies)
+        if preset_dims:
+            dims.extend(preset_dims)
+
+    # 全局份数覆盖
+    if args.copies and dims:
+        dims = [(w, h, args.copies) for w, h, c in dims]
+
     # 无参数时显示帮助
-    if args.width is None and args.preset is None:
+    if not dims:
         parser.print_help()
         sys.exit(0)
 
-    # 预设模式
-    if args.preset:
-        if args.preset not in PRESETS:
-            print(f"错误: 未知预设 '{args.preset}'")
-            print("\n可用预设:")
-            list_presets()
+    # 根据尺寸数量选择模式
+    if len(dims) == 1:
+        # 单尺寸模式
+        width, depth, copies = dims[0]
+
+        # 验证参数
+        if width < 50 or depth < 50:
+            print("错误: 尺寸太小")
             sys.exit(1)
-        width, depth, _ = PRESETS[args.preset]
-        copies = args.copies
+
+        if args.verbose:
+            print(f"[DEBUG] Input: {width}mm × {depth}mm, copies={copies}")
+
+        x, y = get_grid_dimensions(width, depth)
+
+        # JSON 模式跳过所有人类可读输出
+        if not args.json:
+            print(f"输入: {width}mm × {depth}mm")
+            print(f"格子: {x} × {y}")
+            print()
+
+        if x < MIN_TILE or y < MIN_TILE:
+            print("错误: 抽屉尺寸太小，无法放置最小瓦片")
+            sys.exit(1)
+
+        scheme = find_best_scheme(x, y, args.verbose, inventory=inventory)
+
+        if not scheme:
+            print("错误: 无法生成有效方案!")
+            sys.exit(1)
+
+        # JSON 模式只输出 JSON，跳过人类可读输出
+        if args.json:
+            output_json(width, depth, scheme, copies, inventory=inventory)
+        else:
+            print(f"最优: {scheme['unique_sizes']}种尺寸, {scheme['tile_count']}块瓦片")
+            print()
+            print_plan(width, depth, scheme, copies, args.verbose, inventory=inventory)
     else:
-        width = args.width
-        depth = args.depth
-        copies = args.copies
-
-    # 验证参数
-    if width is None or depth is None:
-        print("错误: 请提供抽屉尺寸或使用预设")
-        parser.print_help()
-        sys.exit(1)
-
-    if width < 50 or depth < 50:
-        print("错误: 尺寸太小")
-        sys.exit(1)
-
-    if args.verbose:
-        print(f"[DEBUG] Input: {width}mm × {depth}mm, copies={copies}")
-
-    x, y = get_grid_dimensions(width, depth)
-
-    # JSON 模式跳过所有人类可读输出
-    if not args.json:
-        print(f"输入: {width}mm × {depth}mm")
-        print(f"格子: {x} × {y}")
-        print()
-
-    if x < MIN_TILE or y < MIN_TILE:
-        print("错误: 抽屉尺寸太小，无法放置最小瓦片")
-        sys.exit(1)
-
-    scheme = find_best_scheme(x, y, args.verbose, inventory=inventory)
-
-    if not scheme:
-        print("错误: 无法生成有效方案!")
-        sys.exit(1)
-
-    # JSON 模式只输出 JSON，跳过人类可读输出
-    if args.json:
-        output_json(width, depth, scheme, copies, inventory=inventory)
-    else:
-        print(f"最优: {scheme['unique_sizes']}种尺寸, {scheme['tile_count']}块瓦片")
-        print()
-        print_plan(width, depth, scheme, copies, args.verbose, inventory=inventory)
+        # 批量模式
+        batch_items = ['{}x{}:{}'.format(w, d, c) for w, d, c in dims]
+        batch_mode(' '.join(batch_items), args.verbose, inventory=inventory, json_output=args.json)
 
 if __name__ == "__main__":
     from opengrid.config import ensure_initialized, reload_config
