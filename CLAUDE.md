@@ -48,6 +48,42 @@ cp config/config.example.yaml config/config.yaml
 | x1e | 256 | 256 | 256 |
 | h2d | 300 | 300 | 300 |
 
+## 库存管理
+
+**严格禁止直接编辑 `inventory/inventory.json` 文件。**
+
+所有库存修改必须通过脚本进行，并记录修改原因。
+
+### 库存管理命令
+
+```bash
+# 查看当前库存
+.venv/bin/python scripts/inventory.py list
+
+# 添加库存 (格式: 宽x高:数量)
+.venv/bin/python scripts/inventory.py add 8x8:5 6x7:3 "入库原因：购买新材料"
+
+# 扣减库存
+.venv/bin/python scripts/inventory.py deduct 8x8:2 "扣减原因：打印使用"
+
+# 撤销上次操作
+.venv/bin/python scripts/inventory.py undo
+```
+
+### 库存日志
+
+每次库存操作都会自动记录到 `inventory.json` 的 `log` 字段，包括：
+- 操作时间 (timestamp)
+- 操作类型 (add/deduct/undo)
+- 变化的物品和数量
+- 修改原因
+
+### 重要约束
+
+- **禁止直接编辑 inventory.json** - 无论任何理由，都必须使用脚本
+- **必须提供原因** - add 和 deduct 操作必须附带修改原因
+- **库存是可选的** - 如果没有库存数据，方案计算会忽略库存匹配
+
 ## 常用命令
 
 **注意**: 所有 Python 命令都应使用项目 venv (`.venv/bin/python`) 执行。

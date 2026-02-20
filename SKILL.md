@@ -38,6 +38,31 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
    - 编辑设置 `initialized: true` 和打印机型号
 6. **确认库存数量是否正确**，如不正确引导用户更新
 
+### 库存管理
+
+**严格禁止直接编辑 `inventory/inventory.json` 文件。**
+
+所有库存修改必须通过脚本进行，并记录修改原因：
+
+```bash
+# 查看当前库存
+.venv/bin/python scripts/inventory.py list
+
+# 添加库存 (格式: 宽x高:数量)
+.venv/bin/python scripts/inventory.py add 8x8:5 6x7:3 "入库原因：购买新材料"
+
+# 扣减库存
+.venv/bin/python scripts/inventory.py deduct 8x8:2 "扣减原因：打印使用"
+
+# 撤销上次操作
+.venv/bin/python scripts/inventory.py undo
+```
+
+**关键约束**：
+- 禁止直接编辑 inventory.json
+- 必须提供原因说明
+- 每次操作自动记录到日志
+
 ### Step 2: 询问需求
 
 1. 询问抽屉尺寸和份数
@@ -73,22 +98,27 @@ python3 scripts/split_calc.py -b "265x365:2 325x365:2"
 
 #### 展示内容规范
 
-> **重要**: 展示方案时必须包含以下全部内容：
+> **重要**: 展示方案时必须包含以下全部内容，使用 emoji + 框线表格突出库存价值：
 
-**1. 库存覆盖率分析**（必须展示）
+**1. 库存覆盖率表格**（必须展示）
 
-从脚本输出中提取方案需要的所有瓦片尺寸，列出每个尺寸与库存的匹配情况：
+脚本已输出增强版库存展示，包含框线表格：
+```
+╔════════════════════════════════════════╗
+║  📦 库存利用                            ║
+╚════════════════════════════════════════╝
 
-| 瓦片尺寸 | 库存数量 | 需要数量 | 状态        |
-| -------- | -------- | -------- | ----------- |
-| 8×8      | 9 块     | 4 块     | ✅ 充足     |
-| 6×7      | 5 块     | 2 块     | ✅ 充足     |
-| 8×4      | 0 块     | 4 块     | ❌ 需要打印 |
-| 6×5      | 0 块     | 2 块     | ❌ 需要打印 |
-| 3×8      | 0 块     | 4 块     | ❌ 需要打印 |
-| ...      | ...      | ...      | ...         |
+┌──────────┬──────────┬──────────┬──────────┐
+│ 瓦片尺寸  │ 库存数量  │ 需要数量  │   状态   │
+├──────────┼──────────┼──────────┼──────────┤
+│  8×8    │   9      │   4      │ ✅ 充足  │
+│  6×7    │   5      │   2      │ ✅ 充足  │
+│  8×4    │   0      │   4      │ ❌ 需打印 │
+└──────────┴──────────┴──────────┴──────────┘
 
-**覆盖率**: X/Y 种尺寸被覆盖 (Z%)
+📊 库存覆盖率: 3/5 种尺寸 (60%)
+💰 节省: 18 分钟 (45%打印时间)
+```
 
 **2. 可视化布局**（风格2：带尺寸标注）
 
@@ -136,10 +166,101 @@ python3 scripts/split_calc.py -b "265x365:2 325x365:2"
 [ Q ] 退出
 ```
 
-### Step 5: 生成文件
+### Step 5: 生成 STL 文件
 
-1. 调用 `slicer.py` 生成 STL
-2. 调用 `visualizer.py` 生成 HTML 打印计划
+用户选择方案后，调用 `slicer.py` 生成 STL 文件。
+
+#### 5.1 提取需要打印的瓦片
+
+从方案中提取需要打印的瓦片（**不含从库存取的瓦片**）：
+
+```python
+# 从 scheme 中获取需要打印的瓦片
+# scheme['tiles'] 是所有瓦片 [(w, h), ...]
+# scheme['need_print'] 是需要打印的瓦片 {"6x7": 2, ...}
+
+# 构建只需要打印的瓦片列表
+tiles_to_print = []
+for w, h in scheme['tiles']:
+    key = f"{w}x{h}"
+    if key in scheme.get('need_print', {}) and scheme['need_print'][key] > 0:
+        tiles_to_print.append((w, h))
+        # 减少计数
+        scheme['need_print'][key] -= 1
+```
+
+#### 5.2 调用 STL 生成
+
+调用 `scripts/slicer.py` 中的 `generate_all_stls` 函数：
+
+```bash
+# 方法1：使用 Python 模块
+cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
+.venv/bin/python -c "
+import sys
+sys.path.insert(0, 'scripts')
+from slicer import generate_all_stls
+
+# 构造 scheme 字典（只包含需要打印的瓦片）
+scheme = {
+    'tiles': [(7, 5), (3, 5)]  # 只包含需要打印的瓦片
+}
+
+result = generate_all_stls(scheme, copies=1, verbose=True)
+print('Generated:', result)
+"
+
+# 方法2：直接调用脚本
+.venv/bin/python scripts/slicer.py -g 7x5x2 3x5x2
+```
+
+#### 5.3 展示生成结果
+
+STL 生成完成后，向用户展示结果：
+
+```
+--- STL 生成完成 ---
+输出目录: ~/3D打印/opengrid/
+
+生成的文件:
+  7×5: 2 stack (~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl)
+  3×5: 2 stack (~/3D打印/opengrid/3x5_Full/opengrid_3x5_Full_s2.stl)
+```
+
+#### 5.4 后续操作
+
+询问用户是否需要后续操作：
+
+```
+生成完成！
+
+[ O ] 在 slicer 中打开 STL
+[ S ] 切片 STL (生成 3MF)
+[ D ] 在文件夹中显示
+[ Q ] 退出
+```
+
+**打开 slicer**:
+
+```python
+# 在 OrcaSlicer 中打开
+from scripts.slicer import open_in_slicer
+stl_files = [
+    "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl",
+    "~/3D打印/opengrid/3x5_Full/opengrid_3x5_Full_s2.stl"
+]
+open_in_slicer(stl_files, slicer="orca")
+```
+
+**切片 STL** (可选):
+
+```bash
+# 切片单个文件
+.venv/bin/python scripts/slicer.py -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
+
+# 切片多个文件
+.venv/bin/python scripts/slicer.py -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
+```
 
 ## 快速命令
 

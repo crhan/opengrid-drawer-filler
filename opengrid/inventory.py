@@ -124,18 +124,19 @@ def print_inventory():
 
 import sys
 def parse_items(args):
-    """Parse '7x5:6' format"""
+    """Parse '7x5:6' format,最后一个非格式参数作为 reason"""
     import re
     items = {}
+    reason = ""
     for arg in args:
         match = re.match(r'(\d+)x(\d+):(\d+)', arg)
         if match:
             key = f"{match.group(1)}x{match.group(2)}"
             items[key] = int(match.group(3))
         else:
-            print(f"格式错误: {arg}")
-            sys.exit(1)
-    return items
+            # 最后一个非格式参数作为 reason
+            reason = arg
+    return items, reason
 
 
 def get_inventory_match(tiles, copies, inv):
@@ -192,16 +193,16 @@ def main():
     if cmd == "list":
         print_inventory()
     elif cmd == "add":
-        items = parse_items(sys.argv[2:])
-        result = add_inventory(items, reason="手动入库")
+        items, reason = parse_items(sys.argv[2:])
+        result = add_inventory(items, reason=reason if reason else "手动入库")
         print("入库完成:")
         for key, count in items.items():
             print(f"  {key}: +{count}")
         print_inventory()
     elif cmd == "deduct":
-        items = parse_items(sys.argv[2:])
+        items, reason = parse_items(sys.argv[2:])
         try:
-            result = deduct_inventory(items, reason="手动扣库")
+            result = deduct_inventory(items, reason=reason if reason else "手动扣库")
             print("扣库完成:")
             for key, count in items.items():
                 print(f"  {key}: -{count}")
