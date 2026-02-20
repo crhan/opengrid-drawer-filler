@@ -1978,7 +1978,7 @@ def main():
 
     parser.add_argument('dimensions', nargs='*', type=str,
                        help='尺寸列表，如 485x425 或 265x365:2')
-    parser.add_argument('-c', '--copies', type=int, default=1, help='打印份数 (默认1)')
+    parser.add_argument('-c', '--copies', type=int, default=None, help='打印份数 (默认1)')
     parser.add_argument('-p', '--preset', type=str, help='预设尺寸 (klean, ikea-sunda, ikea-kal, ikea-alex, standard, small, medium, large)')
     parser.add_argument('-i', '--inventory', type=str, help='库存文件路径 (JSON格式)')
     parser.add_argument('-j', '--json', action='store_true', help='JSON 格式输出')
@@ -2027,8 +2027,8 @@ def main():
         if preset_dims:
             dims.extend(preset_dims)
 
-    # 全局份数覆盖
-    if args.copies and dims:
+    # 全局份数覆盖（只有当用户明确指定 -c 时才覆盖）
+    if args.copies is not None and dims:
         dims = [(w, h, args.copies) for w, h, c in dims]
 
     # 无参数时显示帮助

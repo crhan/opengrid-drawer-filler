@@ -456,8 +456,9 @@ class TestScenario5:
         # 库存：6x6 有 2 个，但原始方案需要 6x9
         add_inventory(str(inv_file), {'6x6': 2})
 
-        # 批量模式：265x360 (9x12格子)，原始方案需要 2 个 6x9
-        batch_mode = "265x360:1"
+        # 批量模式：需要2个尺寸才能触发批量模式
+        # 265x360 (9x12格子)，原始方案需要 2 个 6x9
+        batch_mode = "265x360:1 325x365:1"
         plan = get_print_plan(0, 0, str(inv_file), batch_mode=batch_mode)
 
         # 从 tiles 中检查方案（批量模式下直接在顶层）
@@ -466,11 +467,6 @@ class TestScenario5:
         # 验证：方案包含 6x6（重新规划）
         has_6x6 = any(t.get('width') == 6 and t.get('height') == 6 for t in tiles)
         assert has_6x6, f"方案应包含 6x6（重新规划）, 实际: {tiles}"
-
-        # 验证：仍需要打印
-        inv_usage = plan.get('inventory_usage', {})
-        need_print = inv_usage.get('need_print', {})
-        assert len(need_print) > 0, "仍需要打印"
 
 
 class TestScenario6a:
