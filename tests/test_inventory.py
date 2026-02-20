@@ -8,7 +8,7 @@ import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
 import inventory as inventory_module
-import inventory.inventory as inventory_impl
+import inventory as inventory_impl
 
 
 @pytest.fixture

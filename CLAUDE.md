@@ -24,11 +24,11 @@ cd {skill_dir}
 
 ## 配置文件
 
-首次使用需要配置 `config.yaml`：
+首次使用需要配置 `config/config.yaml`：
 
 ```bash
 # 复制模板
-cp config.example.yaml config.yaml
+cp config/config.example.yaml config/config.yaml
 
 # 编辑配置
 # - STL 输出目录
@@ -84,7 +84,42 @@ cp config.example.yaml config.yaml
 
 ## 架构
 
-### 模块划分
+### 目录结构
+
+```
+project/
+├── config/                # 配置文件目录
+│   ├── config.yaml        # 用户配置文件
+│   └── config.example.yaml # 配置模板
+│
+├── inventory/             # 库存数据目录
+│   └── inventory.json     # 库存数据文件
+│
+├── scripts/               # 代码目录
+│   ├── core/            # 核心算法
+│   │   ├── constants.py   # 常量定义
+│   │   ├── grid.py       # 网格计算
+│   │   ├── splitter.py   # 分割算法
+│   │   ├── scheme.py     # 方案查找
+│   │   ├── stats.py      # 耗材和时间估算
+│   │   └── cost.py       # 库存成本计算
+│   ├── matcher.py        # 库存匹配
+│   ├── config.py         # 配置加载模块
+│   ├── inventory.py       # 库存 CRUD 模块
+│   ├── stl/             # STL 生成
+│   │   ├── generator.py  # OpenSCAD 生成
+│   │   └── manager.py    # 文件管理
+│   ├── project/          # 项目管理
+│   ├── ui/               # 输出展示
+│   │   ├── presenter.py  # 方案格式化
+│   │   ├── visualizer.py # HTML 可视化
+│   │   └── print_plan.py # 打印计划
+│   └── ...
+│
+└── tests/               # 测试目录
+```
+
+### 模块划分（scripts 目录）
 
 ```
 scripts/
@@ -95,9 +130,9 @@ scripts/
 │   ├── scheme.py      # 方案查找
 │   ├── stats.py       # 耗材和时间估算
 │   └── cost.py        # 库存成本计算
-├── inventory/      # 库存管理
-│   ├── inventory.py   # 库存追踪
-│   └── matcher.py     # 库存匹配
+├── matcher.py        # 库存匹配
+├── config.py         # 配置管理
+├── inventory.py      # 库存 CRUD
 ├── stl/           # STL 生成
 │   ├── generator.py   # OpenSCAD 生成
 │   └── manager.py     # 文件管理
@@ -106,9 +141,7 @@ scripts/
 │   ├── presenter.py   # 方案格式化
 │   ├── visualizer.py  # HTML 可视化
 │   └── print_plan.py  # 打印计划
-└── config/        # 配置管理
-    ├── config.py      # 配置加载
-    └── printer.py     # 打印机预设
+└── ...
 ```
 
 ### 核心常量

@@ -1,0 +1,80 @@
+{
+  "inventory": {
+    "7x5": 52,
+    "10x5": 52
+  },
+  "log": [
+    {
+      "action": "add",
+      "items": {
+        "7x5": 10,
+        "10x5": 10
+      },
+      "reason": "test setup",
+      "timestamp": "2026-02-20T10:56:36.765881"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x5": 3,
+        "10x5": 3
+      },
+      "reason": "test",
+      "timestamp": "2026-02-20T10:56:37.758670"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x5": 10,
+        "10x5": 10
+      },
+      "reason": "test setup",
+      "timestamp": "2026-02-20T11:06:10.633242"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x5": 3,
+        "10x5": 3
+      },
+      "reason": "test",
+      "timestamp": "2026-02-20T11:06:11.619808"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x5": 10,
+        "10x5": 10
+      },
+      "reason": "test setup",
+      "timestamp": "2026-02-20T11:06:54.486618"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x5": 3,
+        "10x5": 3
+      },
+      "reason": "test",
+      "timestamp": "2026-02-20T11:06:55.471505"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x5": 10,
+        "10x5": 10
+      },
+      "reason": "test setup",
+      "timestamp": "2026-02-20T11:11:33.941935"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x5": 3,
+        "10x5": 3
+      },
+      "reason": "test",
+      "timestamp": "2026-02-20T11:11:34.939671"
+    }
+  ]
+}

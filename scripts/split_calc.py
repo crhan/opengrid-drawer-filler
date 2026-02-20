@@ -12,6 +12,7 @@ import sys
 
 # 导入配置模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 from config import load_config, get_printer_config, get_inventory
 
 # 加载配置
@@ -973,7 +974,7 @@ def parse_batch_input(input_str):
     return items
 
 
-def calculate_single(width, depth, copies=1, verbose=False):
+def calculate_single(width, depth, copies=1, verbose=False, index=None):
     """计算单个尺寸的分割方案"""
     x, y = get_grid_dimensions(width, depth)
 
@@ -990,18 +991,26 @@ def calculate_single(width, depth, copies=1, verbose=False):
         'depth': depth,
         'copies': copies,
         'grid': (x, y),
-        'scheme': scheme
+        'scheme': scheme,
+        'index': index  # 用于映射到抽屉名称
     }
 
 
-def merge_and_optimize(batch_results):
+def merge_and_optimize(batch_results, drawer_names=None):
     """合并多个尺寸的方案，优化共用尺寸
 
     策略:
     1. 收集所有需要的瓦片尺寸
     2. 统计每个尺寸的总需求数量
     3. 输出合并后的打印计划
+
+    Args:
+        batch_results: 批量计算结果列表
+        drawer_names: 可选的抽屉名称映射 {index: "name"}
     """
+    if drawer_names is None:
+        drawer_names = {}
+
     # 收集所有瓦片尺寸及其需求
     all_tiles = {}  # {(w, h): {drawer: count, total: total_count}}
 
@@ -1013,6 +1022,7 @@ def merge_and_optimize(batch_results):
         depth = result['depth']
         copies = result['copies']
         scheme = result['scheme']
+        idx = result.get('index')
 
         # 统计该尺寸的瓦片
         tile_counts = {}
@@ -1027,11 +1037,17 @@ def merge_and_optimize(batch_results):
 
             total_for_drawer = count * copies
             all_tiles[(w, h)]['total'] += total_for_drawer
+
+            # 获取抽屉名称
+            drawer_name = drawer_names.get(idx, f"{width}×{depth}") if idx is not None else f"{width}×{depth}"
+
             all_tiles[(w, h)]['by_drawer'].append({
                 'size': f"{width}×{depth}",
+                'name': drawer_name,
                 'copies': copies,
                 'tiles_per_copy': count,
-                'total': total_for_drawer
+                'total': total_for_drawer,
+                'index': idx
             })
 
     return all_tiles
@@ -1250,7 +1266,7 @@ def optimize_batch_global(batch_results, inventory=None):
     }
 
 
-def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=False):
+def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=False, drawer_names=None):
     """打印批量打印计划
 
     Args:
@@ -1258,7 +1274,11 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
         merged_tiles: 合并后的瓦片字典
         inventory: 库存字典
         json_output: 是否输出 JSON 格式
+        drawer_names: 抽屉名称映射 {index: "name"}
     """
+    # 如果 drawer_names 为 None，创建空映射
+    if drawer_names is None:
+        drawer_names = {}
     # 如果是 JSON 模式，只计算统计信息不打印
     if json_output:
         max_stacks = get_max_stacks()
@@ -1365,6 +1385,22 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
     print("openGrid 批量打印计划 - 合并优化版")
     print("=" * 70)
 
+    # 打印抽屉名称对照表（如果有多个抽屉）
+    if drawer_names:
+        print("\n--- 打印目标 ---")
+        print(f"\n| 名字 | 尺寸 | 份数 |")
+        print(f"|------|------|------|")
+        for result in batch_results:
+            if not result:
+                continue
+            idx = result.get('index')
+            if idx is not None and idx in drawer_names:
+                name = drawer_names[idx]
+                width = result['width']
+                depth = result['depth']
+                copies = result['copies']
+                print(f"| {name} | {width}×{depth}mm | {copies} |")
+
     # 先打印每个尺寸的分割方案
     print("\n--- 各尺寸分割方案 ---")
     for result in batch_results:
@@ -1377,7 +1413,12 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
         scheme = result['scheme']
         x, y = result['grid']
 
-        print(f"\n{width}×{depth}mm × {copies}份:")
+        idx = result.get('index')
+        if idx is not None and idx in drawer_names:
+            name = drawer_names[idx]
+            print(f"\n{name} × {copies} 份:")
+        else:
+            print(f"\n{width}×{depth}mm × {copies}份:")
         print(f"  格子: {x} × {y}")
         print(f"  分割: {scheme['x_parts']}×{scheme['y_parts']}")
         print(f"  X: {' + '.join(map(str, scheme['x_splits']))}")
@@ -1406,7 +1447,9 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
 
         # 显示来源
         for src in info['by_drawer']:
-            print(f"  来源: {src['size']} × {src['copies']}份 = {src['total']} stack")
+            # 使用抽屉名称（如果有）
+            drawer_name = src.get('name', src['size'])
+            print(f"  来源: {drawer_name} = {src['total']} stack")
 
         # 检查库存
         key = f"{w}x{h}"
@@ -1528,6 +1571,32 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
         print("  265 365 2 325 365 2 315 365 2")
         return
 
+    # 生成抽屉名称映射
+    # 规则：唯一尺寸用尺寸命名，重复尺寸加序号
+    drawer_names = {}
+    size_counts = {}  # {size: count} 用于跟踪每个尺寸的出现次数
+
+    for idx, (width, depth, copies) in enumerate(items):
+        size_key = f"{width}×{depth}"
+        if size_key not in size_counts:
+            size_counts[size_key] = 0
+        size_counts[size_key] += 1
+
+    # 第二遍：为每个 item 分配名称
+    size_indices = {}  # {size: current_index}
+    for idx, (width, depth, copies) in enumerate(items):
+        size_key = f"{width}×{depth}"
+        if size_key not in size_indices:
+            size_indices[size_key] = 1
+        else:
+            size_indices[size_key] += 1
+
+        # 如果该尺寸只出现一次，直接用尺寸名；否则加序号
+        if size_counts[size_key] == 1:
+            drawer_names[idx] = size_key
+        else:
+            drawer_names[idx] = f"{size_key}#{size_indices[size_key]}"
+
     # 输出调试信息到 stderr（如果需要）
     # JSON 模式下不输出任何调试信息
     def _print(msg):
@@ -1536,9 +1605,10 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
         else:
             print(msg)
 
-    _print(f"解析到 {len(items)} 个尺寸:")
-    for w, d, c in items:
-        _print(f"  {w}×{d}mm × {c}份")
+    _print(f"解析到 {len(items)} 个抽屉:")
+    for idx, (w, d, c) in enumerate(items):
+        name = drawer_names[idx]
+        _print(f"  {name}: {w}×{d}mm × {c}份")
 
     # 如果有库存，显示库存信息
     if inventory:
@@ -1547,8 +1617,8 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
 
     # 计算每个尺寸的分割方案
     batch_results = []
-    for width, depth, copies in items:
-        result = calculate_single(width, depth, copies, verbose)
+    for idx, (width, depth, copies) in enumerate(items):
+        result = calculate_single(width, depth, copies, verbose, index=idx)
         if result:
             batch_results.append(result)
         else:
@@ -1568,13 +1638,13 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
                 if i < len(batch_results) and scheme:
                     batch_results[i]['scheme'] = scheme
         # 始终使用 merge_and_optimize 获取合并的瓦片
-        merged = merge_and_optimize(batch_results)
+        merged = merge_and_optimize(batch_results, drawer_names)
     else:
         # 简单的合并优化
-        merged = merge_and_optimize(batch_results)
+        merged = merge_and_optimize(batch_results, drawer_names)
 
     # 打印计划
-    stats = print_batch_plan(batch_results, merged, inventory=inventory, json_output=json_output)
+    stats = print_batch_plan(batch_results, merged, inventory=inventory, json_output=json_output, drawer_names=drawer_names)
 
     return stats
 

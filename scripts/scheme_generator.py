@@ -5,9 +5,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from split_calc import calculate_single
-from inventory import get_inventory_match, load_inventory
+from matcher import get_inventory_match
+from inventory import load_inventory
 
 
 def generate_schemes(width, depth, copies, inventory):

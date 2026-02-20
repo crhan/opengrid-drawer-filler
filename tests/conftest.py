@@ -5,7 +5,13 @@ import sys
 import os
 
 # 添加 scripts 目录到路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+scripts_path = os.path.join(os.path.dirname(__file__), '..', 'scripts')
+sys.path.insert(0, scripts_path)
+
+# 添加根目录到路径（用于导入 config 和 inventory 模块）
+root_path = os.path.join(os.path.dirname(__file__), '..')
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
 
 # 在导入 split_calc 之前 mock 配置，使用测试值
 import config as config_module

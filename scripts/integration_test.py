@@ -253,12 +253,30 @@ def format_print_plan(tiles, inventory, copies=1):
     return "\n".join(lines)
 
 
+def check_cell_count_consistency(tiles_before, tiles_after):
+    """检查拆分前后格子数量是否一致
+
+    Args:
+        tiles_before: 拆分前的瓦片列表 [(w,h), ...] 或 [{'width': w, 'height': h}, ...]
+        tiles_after: 拆分后的瓦片列表
+
+    Returns:
+        tuple: (bool, int, int) - (是否一致, 原始格子数, 拆分后格子数)
+    """
+    def get_cells(tile):
+        if isinstance(tile, tuple):
+            return tile[0] * tile[1]
+        elif isinstance(tile, dict):
+            return tile['width'] * tile['height']
+        return 0
+
+    cells_before = sum(get_cells(t) for t in tiles_before)
+    cells_after = sum(get_cells(t) for t in tiles_after)
+    return cells_before == cells_after, cells_before, cells_after
+
+
 def scenario_1(inv_file):
     """场景 1：精确匹配（直接瓦片需求测试）
-
-    注意：此场景测试直接瓦片需求（2个6x7瓦片），而非抽屉分割。
-    由于 split_calc.py CLI 不支持直接瓦片输入，此场景无法通过 CLI 测试。
-    此场景的正确实现已由 verify_scenarios.py 覆盖。
 
     假设：
     - 库存：6×7 有 2 个
@@ -266,44 +284,83 @@ def scenario_1(inv_file):
 
     预期结果：
     - 成本 = 0（完全使用库存）
+    - from_inventory = {'6x7': 2}
+    - need_print = {}
 
     验证目标：
     [x] 成本 = 0
     [x] from_inventory = {'6x7': 2}
     [x] need_print = {}
-
-    此场景已移至 verify_scenarios.py 进行测试（直接函数调用）。
+    [x] 库存使用不超过提供数量
     """
     print("\n" + "=" * 60)
-    print("场景 1: 精确匹配 (已移至 verify_scenarios.py)")
+    print("场景 1: 精确匹配")
     print("=" * 60)
-    print("注意: 此场景测试直接瓦片需求，无法通过 CLI 测试。")
-    print("正确实现已由 verify_scenarios.py 验证。")
-    print()
     print("假设:")
     print("  库存: 6x7 有 2 个")
     print("  需求: 2 个 6x7 瓦片")
     print()
-    print("验证目标:")
+
+    add_inventory(inv_file, {'6x7': 2})
+    inventory = load_inventory(inv_file)
+    print(f"库存: {inventory}")
+    print()
+
+    # 直接调用 calculate_print_cost 测试
+    tiles = [(6, 7), (6, 7)]
+    cost, from_inv, need_print = calculate_print_cost(tiles, inventory, copies=1)
+
+    print("--- 打印计划 ---")
+    if from_inv:
+        print("从库存使用:")
+        for key in sorted(from_inv.keys()):
+            print(f"  {key}: {from_inv[key]} stack")
+    else:
+        print("从库存使用: 无")
+
+    if need_print:
+        print("需要打印:")
+        for key in sorted(need_print.keys()):
+            w, h = map(int, key.split('x'))
+            cells = w * h
+            _, _, time_min = calculate_filament_and_time(cells, need_print[key])
+            print(f"  {key}: {need_print[key]} stack (约 {time_min:.0f} 分钟)")
+    else:
+        print("需要打印: 无")
+    print()
+
+    print("计算结果:")
+    print(f"  成本 = {cost}")
+    print(f"  from_inventory = {from_inv}")
+    print(f"  need_print = {need_print}")
+    print()
+
+    print("预期结果:")
     print("  成本 = 0")
     print("  from_inventory = {'6x7': 2}")
     print("  need_print = {}")
     print()
 
-    # 跳过此场景（CLI 无法测试直接瓦片需求）
-    print("跳过: 此场景需要直接调用 calculate_print_cost()")
-    print("请运行: python3 scripts/verify_scenarios.py 1")
+    # 验证项
+    check1 = cost == 0
+    check2 = from_inv == {'6x7': 2}
+    check3 = need_print == {}
+    check4 = check_inventory_not_exceeded(from_inv, inventory)
+
+    print("验证项:")
+    print(f'  [{"✓" if check1 else "✗"}] 成本 = 0: {check1}')
+    print(f'  [{"✓" if check2 else "✗"}] from_inventory = {{"6x7": 2}}: {check2}')
+    print(f'  [{"✓" if check3 else "✗"}] need_print = {{}}: {check3}')
+    print(f'  [{"✓" if check4 else "✗"}] 库存使用不超过提供数量: {check4}')
     print()
 
-    return True  # 标记为通过（由 verify_scenarios.py 验证）
+    result = all([check1, check2, check3, check4])
+    print(f"最终判断: {'✓ 场景1通过' if result else '✗ 场景1失败'}")
+    return result
 
 
 def scenario_2(inv_file):
     """场景 2：部分匹配（直接瓦片需求测试）
-
-    注意：此场景测试直接瓦片需求（2个6x7瓦片），而非抽屉分割。
-    由于 split_calc.py CLI 不支持直接瓦片输入，此场景无法通过 CLI 测试。
-    此场景的正确实现已由 verify_scenarios.py 覆盖。
 
     假设：
     - 库存：6×7 有 1 个
@@ -312,36 +369,85 @@ def scenario_2(inv_file):
     预期结果：
     - 库存取 1 个，打印 1 个
     - 成本 > 0
+    - from_inventory = {'6x7': 1}
+    - need_print = {'6x7': 1}
 
     验证目标：
     [x] from_inventory = {'6x7': 1}
     [x] need_print = {'6x7': 1}
     [x] 成本 > 0 且 < 无库存时的成本
-
-    此场景已移至 verify_scenarios.py 进行测试（直接函数调用）。
+    [x] 库存使用不超过提供数量
     """
     print("\n" + "=" * 60)
-    print("场景 2: 部分匹配 (已移至 verify_scenarios.py)")
+    print("场景 2: 部分匹配")
     print("=" * 60)
-    print("注意: 此场景测试直接瓦片需求，无法通过 CLI 测试。")
-    print("正确实现已由 verify_scenarios.py 验证。")
-    print()
     print("假设:")
     print("  库存: 6x7 有 1 个")
     print("  需求: 2 个 6x7 瓦片")
     print()
-    print("验证目标:")
+
+    add_inventory(inv_file, {'6x7': 1})
+    inventory = load_inventory(inv_file)
+    print(f"库存: {inventory}")
+    print()
+
+    # 直接调用 calculate_print_cost 测试
+    tiles = [(6, 7), (6, 7)]
+    cost, from_inv, need_print = calculate_print_cost(tiles, inventory, copies=1)
+
+    # 无库存对比
+    cost_no_inv, _, _ = calculate_print_cost(tiles, {}, copies=1)
+
+    print("--- 打印计划 ---")
+    if from_inv:
+        print("从库存使用:")
+        for key in sorted(from_inv.keys()):
+            print(f"  {key}: {from_inv[key]} stack")
+    else:
+        print("从库存使用: 无")
+
+    if need_print:
+        print("需要打印:")
+        for key in sorted(need_print.keys()):
+            w, h = map(int, key.split('x'))
+            cells = w * h
+            _, _, time_min = calculate_filament_and_time(cells, need_print[key])
+            print(f"  {key}: {need_print[key]} stack (约 {time_min:.0f} 分钟)")
+    else:
+        print("需要打印: 无")
+    print()
+
+    print("计算结果:")
+    print(f"  成本 = {cost}")
+    print(f"  from_inventory = {from_inv}")
+    print(f"  need_print = {need_print}")
+    print()
+    print("对照组(无库存):")
+    print(f"  无库存成本 = {cost_no_inv}")
+    print()
+
+    print("预期结果:")
     print("  from_inventory = {'6x7': 1}")
     print("  need_print = {'6x7': 1}")
-    print("  成本 > 0")
+    print(f"  成本 > 0 且 < {cost_no_inv}")
     print()
 
-    # 跳过此场景（CLI 无法测试直接瓦片需求）
-    print("跳过: 此场景需要直接调用 calculate_print_cost()")
-    print("请运行: python3 scripts/verify_scenarios.py 2")
+    # 验证项
+    check1 = from_inv == {'6x7': 1}
+    check2 = need_print == {'6x7': 1}
+    check3 = cost > 0 and cost < cost_no_inv
+    check4 = check_inventory_not_exceeded(from_inv, inventory)
+
+    print("验证项:")
+    print(f'  [{"✓" if check1 else "✗"}] from_inventory = {{"6x7": 1}}: {check1}')
+    print(f'  [{"✓" if check2 else "✗"}] need_print = {{"6x7": 1}}: {check2}')
+    print(f'  [{"✓" if check3 else "✗"}] 成本 > 0 且 < 无库存成本({cost_no_inv}): {check3}')
+    print(f'  [{"✓" if check4 else "✗"}] 库存使用不超过提供数量: {check4}')
     print()
 
-    return True  # 标记为通过（由 verify_scenarios.py 验证）
+    result = all([check1, check2, check3, check4])
+    print(f"最终判断: {'✓ 场景2通过' if result else '✗ 场景2失败'}")
+    return result
 
 
 def scenario_3a(inv_file):
@@ -406,15 +512,22 @@ def scenario_3a(inv_file):
     has_6x6 = any(t['width'] == 6 and t['height'] == 6 for t in tiles)
     cost_lower = time_with_inv < time_no_inv
 
-    print("验证项:")
+    # 验证项
     check1 = has_6x6
     check2 = cost_lower
 
+    # 库存使用检查（从 plan 的 inventory_usage 获取）
+    inv_usage = plan.get('inventory_usage', {})
+    from_inv = inv_usage.get('from_inventory', {})
+    check3 = check_inventory_not_exceeded(from_inv, inventory)
+
+    print("验证项:")
     print(f'  [{"✓" if check1 else "✗"}] 方案包含 6x6: {check1}')
     print(f'  [{"✓" if check2 else "✗"}] 有库存成本({time_with_inv}) < 无库存成本({time_no_inv}): {check2}')
+    print(f'  [{"✓" if check3 else "✗"}] 库存使用不超过提供数量: {check3}')
     print()
 
-    result = check1 and check2
+    result = check1 and check2 and check3
     print(f"最终判断: {'✓ 场景3a通过' if result else '✗ 场景3a失败'}")
     return result
 
@@ -476,11 +589,17 @@ def scenario_3b(inv_file):
     check1 = time_2 < time_no_inv
     check2 = time_2 < time_1
 
+    # 库存使用检查
+    inv_usage = plan_2.get('inventory_usage', {})
+    from_inv = inv_usage.get('from_inventory', {})
+    check3 = check_inventory_not_exceeded(from_inv, inventory)
+
     print(f'  [{"✓" if check1 else "✗"}] 成本({time_2}) < 无库存成本({time_no_inv}): {check1}')
     print(f'  [{"✓" if check2 else "✗"}] 成本({time_2}) < 库存1个成本({time_1}): {check2}')
+    print(f'  [{"✓" if check3 else "✗"}] 库存使用不超过提供数量: {check3}')
     print()
 
-    result = check1 and check2
+    result = check1 and check2 and check3
     print(f"最终判断: {'✓ 场景3b通过' if result else '✗ 场景3b失败'}")
     return result
 
@@ -531,15 +650,21 @@ def scenario_3c(inv_file):
     # 3个和2个成本应该一样（因为抽屉只能用到2个）
     cost_equal = abs(time_3 - time_2) < 1
 
+    # 库存使用检查
+    inv_usage = plan_3.get('inventory_usage', {})
+    from_inv = inv_usage.get('from_inventory', {})
+    check3 = check_inventory_not_exceeded(from_inv, inventory)
+
     print("验证项:")
     check1 = time_3 < time_2 + 100  # 成本低于2个
     check2 = cost_equal
 
     print(f'  [{"✓" if check1 else "✗"}] 成本 < 库存2个方案: {check1}')
     print(f'  [{"✓" if check2 else "✗"}] 成本({time_3}) ≈ 库存2个成本({time_2}): {check2}')
+    print(f'  [{"✓" if check3 else "✗"}] 库存使用不超过提供数量: {check3}')
     print()
 
-    result = check1 and check2
+    result = check1 and check2 and check3
     print(f"最终判断: {'✓ 场景3c通过' if result else '✗ 场景3c失败'}")
     return result
 
