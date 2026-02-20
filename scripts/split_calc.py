@@ -61,6 +61,50 @@ PRESETS = {
 }
 
 
+def parse_dimensions(args):
+    """解析位置参数为尺寸列表
+
+    支持格式:
+    - 485x425 -> (485, 425, 1)
+    - 265x365:2 -> (265, 365, 2)
+
+    Args:
+        args: 位置参数列表
+
+    Returns:
+        [(width, depth, copies), ...]
+    """
+    import re
+    items = []
+
+    for arg in args:
+        # 支持 x 或 × 符号
+        match = re.match(r'(\d+)[x×](\d+)(?::(\d+))?', arg)
+        if match:
+            w = int(match.group(1))
+            h = int(match.group(2))
+            c = int(match.group(3)) if match.group(3) else 1
+            items.append((w, h, c))
+
+    return items
+
+
+def parse_preset(preset_name, copies=1):
+    """解析预设名称为尺寸
+
+    Args:
+        preset_name: 预设名称
+        copies: 份数
+
+    Returns:
+        [(width, depth, copies), ...] 或 None 如果预设不存在
+    """
+    if preset_name in PRESETS:
+        w, h, _ = PRESETS[preset_name]
+        return [(w, h, copies)]
+    return None
+
+
 def get_max_stacks():
     """计算最大stack数量"""
     return int(MAX_Z // FULL_THICKNESS)
