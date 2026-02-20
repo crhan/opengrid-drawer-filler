@@ -1529,10 +1529,10 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
         return
 
     # 输出调试信息到 stderr（如果需要）
+    # JSON 模式下不输出任何调试信息
     def _print(msg):
         if json_output:
-            import sys
-            print(msg, file=sys.stderr)
+            return  # JSON 模式下不打印任何内容
         else:
             print(msg)
 

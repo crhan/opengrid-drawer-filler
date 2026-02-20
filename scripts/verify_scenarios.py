@@ -24,8 +24,55 @@ from split_calc import (
     find_best_scheme,
     replan_with_inventory,
     optimize_batch_global,
-    find_all_schemes
+    find_all_schemes,
+    merge_and_optimize,
+    SWAP_PENALTY
 )
+
+
+def calculate_cost_with_swap_penalty(tiles_list, copies_list, inventory=None):
+    """计算带换料惩罚的总成本
+
+    Args:
+        tiles_list: 瓦片列表的列表 [[(w,h), ...], ...]
+        copies_list: 对应的份数列表 [1, 2, ...]
+        inventory: 库存字典（可选）
+
+    Returns:
+        total_cost: 带换料惩罚的总成本
+    """
+    total_need_print = {}
+    remaining_inv = dict(inventory) if inventory else {}
+
+    for tiles, copies in zip(tiles_list, copies_list):
+        tile_counts = {}
+        for w, h in tiles:
+            key = f"{w}x{h}"
+            tile_counts[key] = tile_counts.get(key, 0) + 1
+
+        for key, count in tile_counts.items():
+            needed = count * copies
+            available = remaining_inv.get(key, 0) if remaining_inv else 0
+            used = min(needed, available)
+            if remaining_inv:
+                remaining_inv[key] = remaining_inv.get(key, 0) - used
+            remaining = needed - used
+            if remaining > 0:
+                total_need_print[key] = total_need_print.get(key, 0) + remaining
+
+    # 计算成本
+    total_cost = 0
+    for key, count in total_need_print.items():
+        w, h = map(int, key.split('x'))
+        cells = w * h
+        _, _, time_min = calculate_filament_and_time(cells, count)
+        total_cost += time_min
+
+    # 加上换料惩罚
+    print_count = len(total_need_print)
+    total_cost += (print_count - 1) * SWAP_PENALTY if print_count > 1 else 0
+
+    return total_cost
 
 
 def format_print_plan(tiles, inventory, copies=1):
@@ -452,12 +499,13 @@ def scenario_4a():
     print(f"抽屉2原始方案: {scheme2['tiles']}")
     print()
 
-    # 无库存成本
-    cost_no_inv = sum(
-        calculate_print_cost(s['tiles'], {}, copies=1)[0]
-        for s in [scheme1, scheme2]
+    # 无库存成本（带换料惩罚）
+    cost_no_inv = calculate_cost_with_swap_penalty(
+        [scheme1['tiles'], scheme2['tiles']],
+        [1, 1],
+        inventory=None
     )
-    print(f"无库存总成本: {cost_no_inv}")
+    print(f"无库存总成本: {cost_no_inv:.1f}")
     print()
 
     # 库存1个
@@ -479,19 +527,26 @@ def scenario_4a():
     # 计算总库存使用量
     total_used = sum(inv1.values()) + sum(inv2.values())
 
+    # 有库存成本（带换料惩罚）
+    total_cost = calculate_cost_with_swap_penalty(
+        [result['schemes'][0]['tiles'], result['schemes'][1]['tiles']],
+        [1, 1],
+        inventory=inventory
+    )
+
     print(f"优化后成本:")
     print(f"  抽屉1: {drawer1_cost}, 使用库存: {inv1}")
     print(f"  抽屉2: {drawer2_cost}, 使用库存: {inv2}")
-    print(f"  总成本: {result['cost']}")
+    print(f"  总成本: {total_cost:.1f}")
     print(f"  库存使用: {total_used}个, 提供: 1个")
     print()
 
-    check1 = result['cost'] < cost_no_inv
+    check1 = total_cost < cost_no_inv
     check2 = total_used <= 1  # 库存1个
     check3 = inv1.get('6x9', 0) == 1  # 抽屉1使用1个库存
 
     print("验证项:")
-    print(f'  [{"✓" if check1 else "✗"}] 总成本降低: {check1}')
+    print(f'  [{"✓" if check1 else "✗"}] 总成本降低: {check1} ({total_cost:.1f} < {cost_no_inv:.1f})')
     print(f'  [{"✓" if check2 else "✗"}] 库存使用不超过提供数量({total_used}<=1): {check2}')
     print(f'  [{"✓" if check3 else "✗"}] 抽屉1使用1个库存: {check3} (实际={inv1.get("6x9", 0)})')
     print()
@@ -522,12 +577,13 @@ def scenario_4b():
     print(f"抽屉2方案: {scheme2['tiles']}")
     print()
 
-    # 无库存成本
-    cost_no_inv = sum(
-        calculate_print_cost(s['tiles'], {}, copies=1)[0]
-        for s in [scheme1, scheme2]
+    # 无库存成本（带换料惩罚）
+    cost_no_inv = calculate_cost_with_swap_penalty(
+        [scheme1['tiles'], scheme2['tiles']],
+        [1, 1],
+        inventory=None
     )
-    print(f"无库存总成本: {cost_no_inv}")
+    print(f"无库存总成本: {cost_no_inv:.1f}")
     print()
 
     # 库存2个
@@ -546,20 +602,27 @@ def scenario_4b():
     inv2 = calculate_print_cost(result['schemes'][1]['tiles'], inventory, copies=1)[1]
     total_used = sum(inv1.values()) + sum(inv2.values())
 
+    # 有库存成本（带换料惩罚）
+    total_cost = calculate_cost_with_swap_penalty(
+        [result['schemes'][0]['tiles'], result['schemes'][1]['tiles']],
+        [1, 1],
+        inventory=inventory
+    )
+
     print(f"优化后成本:")
     print(f"  抽屉1: {drawer1_cost}, 使用库存: {inv1}")
     print(f"  抽屉2: 使用库存: {inv2}")
-    print(f"  总成本: {result['cost']}")
+    print(f"  总成本: {total_cost:.1f}")
     print(f"  库存使用: {total_used}个, 提供: 2个")
     print()
 
     check1 = drawer1_cost == 0
-    check2 = result['cost'] < cost_no_inv
+    check2 = total_cost < cost_no_inv
     check3 = total_used <= 2  # 库存2个
 
     print("验证项:")
     print(f'  [{"✓" if check1 else "✗"}] 抽屉1成本 = 0: {check1} (实际={drawer1_cost})')
-    print(f'  [{"✓" if check2 else "✗"}] 总成本降低: {check2}')
+    print(f'  [{"✓" if check2 else "✗"}] 总成本降低: {check2} ({total_cost:.1f} < {cost_no_inv:.1f})')
     print(f'  [{"✓" if check3 else "✗"}] 库存使用不超过提供数量({total_used}<=2): {check3}')
     print()
 
@@ -1151,12 +1214,48 @@ def scenario_8():
         calculate_print_cost(r['scheme']['tiles'], {}, r['copies'])[0]
         for r in batch_results
     )
-    print(f"无库存总成本: {no_inv_cost}")
+    print(f"无库存总成本: {no_inv_cost:.1f}")
     print()
 
     # 批量优化
     result = optimize_batch_global(batch_results, inventory=inventory)
-    print(f"优化后总成本: {result['cost']}")
+
+    # 计算正确的成本：使用类似 format_batch_print_plan 的逻辑
+    # 只计算需要打印的瓦片（排除从库存使用的）
+    total_need_print = {}
+    remaining_inv = dict(inventory)
+
+    for i, scheme in enumerate(result['schemes']):
+        tiles = scheme.get('tiles', [])
+        copies = batch_results[i].get('copies', 1)
+
+        tile_counts = {}
+        for w, h in tiles:
+            key = f"{w}x{h}"
+            tile_counts[key] = tile_counts.get(key, 0) + 1
+
+        for key, count in tile_counts.items():
+            needed = count * copies
+            available = remaining_inv.get(key, 0)
+            used = min(needed, available)
+            remaining_inv[key] = remaining_inv.get(key, 0) - used
+            remaining = needed - used
+            if remaining > 0:
+                total_need_print[key] = total_need_print.get(key, 0) + remaining
+
+    # 计算需要打印瓦片的成本
+    total_cost = 0
+    for key, count in total_need_print.items():
+        w, h = map(int, key.split('x'))
+        cells = w * h
+        _, _, time_min = calculate_filament_and_time(cells, count)
+        total_cost += time_min
+
+    # 加上换料惩罚
+    print_count = len(total_need_print)
+    total_cost += (print_count - 1) * SWAP_PENALTY if print_count > 1 else 0
+
+    print(f"优化后总成本: {total_cost:.1f}")
     print()
 
     print(format_batch_print_plan(batch_results, inventory, optimized_schemes=result['schemes']))
@@ -1197,7 +1296,7 @@ def scenario_8():
     print()
 
     # 验证
-    check1 = result['cost'] < no_inv_cost  # 成本降低
+    check1 = total_cost < no_inv_cost  # 成本降低
     check2 = total_inv.get('8x8', 0) <= inventory['8x8']  # 8x8不超库存
     check3 = total_inv.get('6x7', 0) <= inventory['6x7']  # 6x7不超库存
     check4 = all(c > 0 for c in drawer_costs)  # 所有抽屉都有打印成本
@@ -1214,7 +1313,7 @@ def scenario_8():
     check5 = all_cells_consistent
 
     print("验证项:")
-    print(f'  [{"✓" if check1 else "✗"}] 总成本降低: {check1} ({result["cost"]:.1f} < {no_inv_cost})')
+    print(f'  [{"✓" if check1 else "✗"}] 总成本降低: {check1} ({total_cost:.1f} < {no_inv_cost:.1f})')
     print(f'  [{"✓" if check2 else "✗"}] 8x8库存不超限: {check2} ({total_inv.get("8x8", 0)} <= {inventory["8x8"]})')
     print(f'  [{"✓" if check3 else "✗"}] 6x7库存不超限: {check3} ({total_inv.get("6x7", 0)} <= {inventory["6x7"]})')
     print(f'  [{"✓" if check4 else "✗"}] 所有抽屉都有打印: {check4}')

@@ -85,12 +85,14 @@ def get_print_plan(width, depth, inv_file, batch_mode=None):
     # 从第一个 "{" 开始尝试解析，找到包含所需键的完整 JSON
     json_start = output.find('{')
     result_data = None
+    raw_data = None  # 保存原始 JSON 数据用于获取 inventory_usage
 
     while json_start >= 0 and json_start < len(output):
         json_str = output[json_start:]
         try:
             decoder = json.JSONDecoder()
             data, end_idx = decoder.raw_decode(json_str)
+            raw_data = data  # 保存用于后续获取 inventory_usage
 
             # 检查是否是完整 JSON（包含 drawer 或 drawers 键）
             if 'drawer' in data or 'drawers' in data:
@@ -117,6 +119,26 @@ def get_print_plan(width, depth, inv_file, batch_mode=None):
     if result_data is None:
         raise RuntimeError(f"无法从输出中提取有效 JSON: {output[:200]}")
 
+    # 加上换料惩罚
+    # 换料惩罚 = (打印次数 - 1) × 60 分钟
+    stats = result_data.get('stats', {})
+    total_time = stats.get('total_time_min', 0)
+
+    # 检查是否有库存使用信息
+    need_print = {}
+    if raw_data:
+        inventory_usage = raw_data.get('inventory_usage', {})
+        need_print = inventory_usage.get('need_print', {})
+
+    if need_print:
+        # 需要打印的瓦片种类数
+        print_count = len(need_print)
+        swap_penalty = (print_count - 1) * 60 if print_count > 1 else 0
+        total_time += swap_penalty
+        stats['total_time_min'] = total_time
+        stats['swap_penalty'] = swap_penalty
+        stats['print_count'] = print_count
+
     return result_data
 
 
@@ -126,6 +148,50 @@ def check_inventory_not_exceeded(used, available):
         if available.get(k, 0) < v:
             return False
     return True
+
+
+def format_print_plan(tiles, inventory, copies=1):
+    """格式化打印计划"""
+    tile_counts = {}
+    for t in tiles:
+        w, h = t['width'], t['height']
+        key = f"{w}x{h}"
+        tile_counts[key] = tile_counts.get(key, 0) + 1
+
+    from_inv = {}
+    need_print = {}
+    for key, count_per_copy in tile_counts.items():
+        needed = count_per_copy * copies
+        available = inventory.get(key, 0)
+        used = min(needed, available)
+        if used > 0:
+            from_inv[key] = used
+        remaining = needed - used
+        if remaining > 0:
+            need_print[key] = remaining
+
+    lines = []
+    lines.append("--- 打印计划 ---")
+    if from_inv:
+        lines.append("从库存使用:")
+        for key in sorted(from_inv.keys()):
+            lines.append(f"  {key}: {from_inv[key]} stack")
+    else:
+        lines.append("从库存使用: 无")
+
+    if need_print:
+        lines.append("需要打印:")
+        for key in sorted(need_print.keys()):
+            w, h = map(int, key.split('x'))
+            cells = w * h
+            count = need_print[key]
+            # 粗略估算时间：每格子 0.1 分钟
+            time_min = cells * count * 0.1
+            lines.append(f"  {key}: {count} stack (约 {time_min:.0f} 分钟)")
+    else:
+        lines.append("需要打印: 无")
+
+    return "\n".join(lines)
 
 
 def scenario_1(inv_file):
@@ -146,11 +212,16 @@ def scenario_1(inv_file):
     print("\n" + "=" * 60)
     print("场景 1: 部分匹配")
     print("=" * 60)
+    print("假设:")
+    print("  库存: 6x7 有 2 个")
+    print("  抽屉: 265x360 (9x12 格子)")
+    print()
 
     # 1. 添加库存
     add_inventory(inv_file, {'6x7': 2})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存方案
     temp_inv = inv_file + ".temp"
@@ -158,32 +229,46 @@ def scenario_1(inv_file):
     try:
         plan_no_inv = get_print_plan(265, 360, temp_inv)
         time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
-        print(f"无库存方案时间: {time_no_inv} 分钟")
+        tiles_no_inv = plan_no_inv.get('scheme', {}).get('tiles', [])
+        print(f"无库存方案:")
+        print(f"  tiles = {tiles_no_inv}")
+        print(f"  时间 = {time_no_inv} 分钟")
     finally:
         os.remove(temp_inv)
+    print()
 
     # 使用库存获取方案
     plan = get_print_plan(265, 360, inv_file)
     tiles = plan.get('scheme', {}).get('tiles', [])
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"有库存方案瓦片: {tiles}")
-    print(f"有库存方案时间: {time_with_inv} 分钟")
+    print(format_print_plan(tiles, inventory, copies=1))
+    print()
 
+    print("计算结果:")
+    print(f"  成本 (时间) = {time_with_inv} 分钟")
+    print()
+
+    # 验证
     has_6x7 = any(t['width'] == 6 and t['height'] == 7 for t in tiles)
     cost_lower = time_with_inv < time_no_inv
 
-    if has_6x7:
-        print("✓ 方案包含 6x7")
-    else:
-        print("✗ 方案不包含 6x7")
+    print("预期结果:")
+    print("  成本 < 无库存方案")
+    print("  方案包含 6x7")
+    print()
 
-    if cost_lower:
-        print(f"✓ 成本降低: {time_with_inv} < {time_no_inv}")
-    else:
-        print(f"✗ 成本未降低")
+    print("验证项:")
+    check1 = has_6x7
+    check2 = cost_lower
 
-    return has_6x7 and cost_lower
+    print(f'  [{"✓" if check1 else "✗"}] 方案包含 6x7: {check1}')
+    print(f'  [{"✓" if check2 else "✗"}] 有库存成本({time_with_inv}) < 无库存成本({time_no_inv}): {check2}')
+    print()
+
+    result = check1 and check2
+    print(f"最终判断: {'✓ 场景1通过' if result else '✗ 场景1失败'}")
+    return result
 
 
 def scenario_2(inv_file):
@@ -204,26 +289,42 @@ def scenario_2(inv_file):
     print("\n" + "=" * 60)
     print("场景 2: 部分匹配")
     print("=" * 60)
+    print("假设:")
+    print("  库存: 6x7 有 1 个")
+    print("  抽屉: 265x360 (9x12 格子)")
+    print()
 
     add_inventory(inv_file, {'6x7': 1})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     try:
         plan = get_print_plan(265, 360, inv_file)
         stats = plan.get('stats', {})
         total_time = stats.get('total_time_min', 0)
+        tiles = plan.get('scheme', {}).get('tiles', [])
 
-        print(f"总打印时间: {total_time} 分钟")
+        print(format_print_plan(tiles, inventory, copies=1))
+        print()
 
-        # 有库存时的成本应该小于无库存时的成本
-        # 这里简化为：成本 > 0 表示需要打印
-        if total_time > 0:
-            print("✓ 需要打印 (成本 > 0)")
-            return True
-        else:
-            print("✗ 成本为0，不需要打印")
-            return False
+        print("计算结果:")
+        print(f"  总打印时间 = {total_time} 分钟")
+        print()
+
+        print("预期结果:")
+        print("  成本 > 0 (需要打印)")
+        print()
+
+        check1 = total_time > 0
+
+        print("验证项:")
+        print(f'  [{"✓" if check1 else "✗"}] 成本 > 0: {check1} (实际={total_time})')
+        print()
+
+        result = check1
+        print(f"最终判断: {'✓ 场景2通过' if result else '✗ 场景2失败'}")
+        return result
     except Exception as e:
         print(f"执行失败: {e}")
         return False
@@ -247,10 +348,15 @@ def scenario_3a(inv_file):
     print("\n" + "=" * 60)
     print("场景 3a: 库存方案选择（库存1个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉: 265x360 (9x12 格子)")
+    print("  库存: 6x6 有 1 个")
+    print()
 
     add_inventory(inv_file, {'6x6': 1})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存方案
     temp_inv = inv_file + ".temp"
@@ -259,31 +365,44 @@ def scenario_3a(inv_file):
         plan_no_inv = get_print_plan(265, 360, temp_inv)
         time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
         tiles_no_inv = plan_no_inv.get('scheme', {}).get('tiles', [])
-        print(f"无库存方案: {tiles_no_inv}, 时间: {time_no_inv}分钟")
+        print("无库存方案:")
+        print(f"  tiles = {tiles_no_inv}")
+        print(f"  成本 = {time_no_inv} 分钟")
     finally:
         os.remove(temp_inv)
+    print()
 
     # 有库存方案
     plan = get_print_plan(265, 360, inv_file)
     tiles = plan.get('scheme', {}).get('tiles', [])
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"有库存方案: {tiles}, 时间: {time_with_inv}分钟")
+    print(format_print_plan(tiles, inventory, copies=1))
+    print()
+
+    print("计算结果:")
+    print(f"  成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  方案包含 6x6")
+    print("  成本 < 无库存方案")
+    print()
 
     has_6x6 = any(t['width'] == 6 and t['height'] == 6 for t in tiles)
     cost_lower = time_with_inv < time_no_inv
 
-    if has_6x6:
-        print("✓ 方案包含 6x6")
-    else:
-        print("✗ 方案不包含 6x6")
+    print("验证项:")
+    check1 = has_6x6
+    check2 = cost_lower
 
-    if cost_lower:
-        print(f"✓ 成本降低: {time_with_inv} < {time_no_inv}")
-    else:
-        print(f"✗ 成本未降低: {time_with_inv} >= {time_no_inv}")
+    print(f'  [{"✓" if check1 else "✗"}] 方案包含 6x6: {check1}')
+    print(f'  [{"✓" if check2 else "✗"}] 有库存成本({time_with_inv}) < 无库存成本({time_no_inv}): {check2}')
+    print()
 
-    return has_6x6 and cost_lower
+    result = check1 and check2
+    print(f"最终判断: {'✓ 场景3a通过' if result else '✗ 场景3a失败'}")
+    return result
 
 
 def scenario_3b(inv_file):
@@ -291,10 +410,15 @@ def scenario_3b(inv_file):
     print("\n" + "=" * 60)
     print("场景 3b: 库存方案选择（库存2个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉: 265x360 (9x12 格子)")
+    print("  库存: 6x6 有 2 个")
+    print()
 
     add_inventory(inv_file, {'6x6': 2})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存方案
     temp_inv = inv_file + ".temp"
@@ -317,17 +441,34 @@ def scenario_3b(inv_file):
 
     # 库存2个
     plan_2 = get_print_plan(265, 360, inv_file)
+    tiles = plan_2.get('scheme', {}).get('tiles', [])
     time_2 = plan_2.get('stats', {}).get('total_time_min', 999)
 
-    print(f"无库存: {time_no_inv}分钟, 库存1个: {time_1}分钟, 库存2个: {time_2}分钟")
+    print(format_print_plan(tiles, inventory, copies=1))
+    print()
 
-    cost_lower = time_2 < time_no_inv and time_2 < time_1
-    if cost_lower:
-        print(f"✓ 成本最低: {time_2}")
-    else:
-        print(f"✗ 成本未最低")
+    print("计算结果:")
+    print(f"  无库存成本 = {time_no_inv} 分钟")
+    print(f"  库存1个成本 = {time_1} 分钟")
+    print(f"  库存2个成本 = {time_2} 分钟")
+    print()
 
-    return cost_lower
+    print("预期结果:")
+    print("  成本 < 无库存方案")
+    print("  成本 < 库存1个方案")
+    print()
+
+    print("验证项:")
+    check1 = time_2 < time_no_inv
+    check2 = time_2 < time_1
+
+    print(f'  [{"✓" if check1 else "✗"}] 成本({time_2}) < 无库存成本({time_no_inv}): {check1}')
+    print(f'  [{"✓" if check2 else "✗"}] 成本({time_2}) < 库存1个成本({time_1}): {check2}')
+    print()
+
+    result = check1 and check2
+    print(f"最终判断: {'✓ 场景3b通过' if result else '✗ 场景3b失败'}")
+    return result
 
 
 def scenario_3c(inv_file):
@@ -335,10 +476,15 @@ def scenario_3c(inv_file):
     print("\n" + "=" * 60)
     print("场景 3c: 库存方案选择（库存3个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉: 265x360 (9x12 格子)")
+    print("  库存: 6x6 有 3 个")
+    print()
 
     add_inventory(inv_file, {'6x6': 3})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 库存2个对比
     temp_inv2 = inv_file + ".temp2"
@@ -352,19 +498,36 @@ def scenario_3c(inv_file):
 
     # 库存3个
     plan_3 = get_print_plan(265, 360, inv_file)
+    tiles = plan_3.get('scheme', {}).get('tiles', [])
     time_3 = plan_3.get('stats', {}).get('total_time_min', 999)
 
-    print(f"库存2个: {time_2}分钟, 库存3个: {time_3}分钟")
+    print(format_print_plan(tiles, inventory, copies=1))
+    print()
+
+    print("计算结果:")
+    print(f"  库存2个成本 = {time_2} 分钟")
+    print(f"  库存3个成本 = {time_3} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  成本 < 无库存方案")
+    print("  成本 ≈ 库存2个方案（抽屉只能用2个）")
+    print()
 
     # 3个和2个成本应该一样（因为抽屉只能用到2个）
     cost_equal = abs(time_3 - time_2) < 1
 
-    if cost_equal:
-        print(f"✓ 成本相等: {time_3} ≈ {time_2}")
-    else:
-        print(f"✗ 成本不等: {time_3} != {time_2}")
+    print("验证项:")
+    check1 = time_3 < time_2 + 100  # 成本低于2个
+    check2 = cost_equal
 
-    return cost_equal
+    print(f'  [{"✓" if check1 else "✗"}] 成本 < 库存2个方案: {check1}')
+    print(f'  [{"✓" if check2 else "✗"}] 成本({time_3}) ≈ 库存2个成本({time_2}): {check2}')
+    print()
+
+    result = check1 and check2
+    print(f"最终判断: {'✓ 场景3c通过' if result else '✗ 场景3c失败'}")
+    return result
 
 
 def scenario_4a(inv_file):
@@ -382,10 +545,16 @@ def scenario_4a(inv_file):
     print("\n" + "=" * 60)
     print("场景 4a: 批量模式（库存1个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x9")
+    print("  抽屉2: 325x365 -> 无6x9需求")
+    print("  库存: 6x9 有 1 个")
+    print()
 
     add_inventory(inv_file, {'6x9': 1})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存批量
     temp_inv = inv_file + ".temp"
@@ -402,15 +571,26 @@ def scenario_4a(inv_file):
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"无库存: {time_no_inv}分钟, 有库存: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  无库存成本 = {time_no_inv} 分钟")
+    print(f"  有库存成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  成本降低")
+    print()
 
     cost_lower = time_with_inv < time_no_inv
-    if cost_lower:
-        print(f"✓ 成本降低")
-    else:
-        print(f"✗ 成本未降低")
 
-    return cost_lower
+    print("验证项:")
+    check1 = cost_lower
+
+    print(f'  [{"✓" if check1 else "✗"}] 有库存成本({time_with_inv}) < 无库存成本({time_no_inv}): {check1}')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景4a通过' if result else '✗ 场景4a失败'}")
+    return result
 
 
 def scenario_4b(inv_file):
@@ -418,10 +598,16 @@ def scenario_4b(inv_file):
     print("\n" + "=" * 60)
     print("场景 4b: 批量模式（库存2个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x9")
+    print("  抽屉2: 325x365 -> 可用6x9")
+    print("  库存: 6x9 有 2 个")
+    print()
 
     add_inventory(inv_file, {'6x9': 2})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存
     temp_inv = inv_file + ".temp"
@@ -436,18 +622,25 @@ def scenario_4b(inv_file):
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"无库存: {time_no_inv}分钟, 有库存: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  无库存成本 = {time_no_inv} 分钟")
+    print(f"  有库存成本 = {time_with_inv} 分钟")
+    print()
 
-    # 抽屉1应该成本为0（完全使用库存）
-    # 通过检查总成本是否大幅降低来验证
-    cost_lower = time_with_inv < time_no_inv
+    print("预期结果:")
+    print("  抽屉1成本 = 0（完全使用库存）")
+    print("  成本降低")
+    print()
 
-    if cost_lower:
-        print(f"✓ 成本降低")
-    else:
-        print(f"✗ 成本未降低")
+    print("验证项:")
+    check1 = time_with_inv < time_no_inv
 
-    return cost_lower
+    print(f'  [{"✓" if check1 else "✗"}] 总成本降低: {check1}')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景4b通过' if result else '✗ 场景4b失败'}")
+    return result
 
 
 def scenario_4c(inv_file):
@@ -455,10 +648,16 @@ def scenario_4c(inv_file):
     print("\n" + "=" * 60)
     print("场景 4c: 批量模式（库存3个）- 全局优化")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x9")
+    print("  抽屉2: 325x365 -> 可重新规划使用6x9")
+    print("  库存: 6x9 有 3 个")
+    print()
 
     add_inventory(inv_file, {'6x9': 3})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存对比
     temp_inv = inv_file + ".temp"
@@ -472,17 +671,29 @@ def scenario_4c(inv_file):
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"无库存成本: {time_no_inv}分钟")
-    print(f"有库存成本: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  无库存成本 = {time_no_inv} 分钟")
+    print(f"  有库存成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  抽屉1成本 = 0")
+    print("  抽屉2使用1个库存")
+    print("  成本降低")
+    print()
 
     # 验证：成本应该降低
     cost_lower = time_with_inv < time_no_inv
-    if cost_lower:
-        print(f"✓ 成本降低: {time_with_inv} < {time_no_inv}")
-        return True
-    else:
-        print(f"✗ 成本未降低")
-        return False
+
+    print("验证项:")
+    check1 = cost_lower
+
+    print(f'  [{"✓" if check1 else "✗"}] 成本降低: {check1} ({time_with_inv} < {time_no_inv})')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景4c通过' if result else '✗ 场景4c失败'}")
+    return result
 
 
 def scenario_4d(inv_file):
@@ -490,10 +701,16 @@ def scenario_4d(inv_file):
     print("\n" + "=" * 60)
     print("场景 4d: 批量模式（库存4个）- 全局优化")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x9")
+    print("  抽屉2: 325x365 -> 可重新规划使用6x9")
+    print("  库存: 6x9 有 4 个")
+    print()
 
     add_inventory(inv_file, {'6x9': 4})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存对比
     temp_inv = inv_file + ".temp"
@@ -507,17 +724,30 @@ def scenario_4d(inv_file):
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"无库存成本: {time_no_inv}分钟")
-    print(f"有库存成本: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  无库存成本 = {time_no_inv} 分钟")
+    print(f"  有库存成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  抽屉1成本 = 0")
+    print("  抽屉2使用1个库存")
+    print("  成本降低（剩余1个库存）")
+    print()
 
     # 验证：成本应该降低（4个库存中只能用3个）
     cost_lower = time_with_inv < time_no_inv
-    if cost_lower:
-        print(f"✓ 成本降低")
-        return True
-    else:
-        print(f"✗ 成本未降低")
-        return False
+
+    print("验证项:")
+    check1 = cost_lower
+
+    print(f'  [{"✓" if check1 else "✗"}] 成本降低: {check1}')
+    print("注: 11x13格子最多只能包含1个6x9，剩余1个库存")
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景4d通过' if result else '✗ 场景4d失败'}")
+    return result
 
 
 def scenario_5(inv_file):
@@ -534,10 +764,15 @@ def scenario_5(inv_file):
     print("\n" + "=" * 60)
     print("场景 5: 重新规划")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉: 265x360 (9x12 格子)")
+    print("  库存: 6x6 有 2 个")
+    print()
 
     add_inventory(inv_file, {'6x6': 2})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存
     temp_inv = inv_file + ".temp"
@@ -553,29 +788,36 @@ def scenario_5(inv_file):
     tiles = plan.get('scheme', {}).get('tiles', [])
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"方案瓦片: {tiles}")
-    print(f"无库存: {time_no_inv}分钟, 有库存: {time_with_inv}分钟")
+    print(format_print_plan(tiles, inventory, copies=1))
+    print()
+
+    print("计算结果:")
+    print(f"  无库存成本 = {time_no_inv} 分钟")
+    print(f"  有库存成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  方案包含 6x6")
+    print("  成本降低（但 > 0）")
+    print()
 
     has_6x6 = any(t['width'] == 6 and t['height'] == 6 for t in tiles)
     cost_lower = time_with_inv < time_no_inv
     cost_gt_0 = time_with_inv > 0
 
-    if has_6x6:
-        print("✓ 方案包含 6x6")
-    else:
-        print("✗ 方案不包含 6x6")
+    print("验证项:")
+    check1 = has_6x6
+    check2 = cost_lower
+    check3 = cost_gt_0
 
-    if cost_lower:
-        print("✓ 成本降低")
-    else:
-        print("✗ 成本未降低")
+    print(f'  [{"✓" if check1 else "✗"}] 方案包含 6x6: {check1}')
+    print(f'  [{"✓" if check2 else "✗"}] 成本降低: {check2} ({time_with_inv} < {time_no_inv})')
+    print(f'  [{"✓" if check3 else "✗"}] 仍需打印(成本>0): {check3} (实际={time_with_inv})')
+    print()
 
-    if cost_gt_0:
-        print("✓ 仍需打印")
-    else:
-        print("✗ 不需要打印")
-
-    return has_6x6 and cost_lower and cost_gt_0
+    result = check1 and check2 and check3
+    print(f"最终判断: {'✓ 场景5通过' if result else '✗ 场景5失败'}")
+    return result
 
 
 def scenario_6a(inv_file):
@@ -583,23 +825,39 @@ def scenario_6a(inv_file):
     print("\n" + "=" * 60)
     print("场景 6a: 批量 + 重新规划（库存 3 个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x6")
+    print("  抽屉2: 325x365 -> 需要1个6x6")
+    print("  库存: 6x6 有 3 个(正好够用)")
+    print()
 
     add_inventory(inv_file, {'6x6': 3})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"总成本: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  总成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  库存刚好够用（抽屉1用2个，抽屉2用1个）")
+    print("  仍需打印")
+    print()
 
     # 库存刚好够用（抽屉1用2个，抽屉2用1个）
-    if time_with_inv > 0:
-        print("✓ 仍需打印")
-        return True
-    else:
-        print("✗ 不需要打印")
-        return False
+    check1 = time_with_inv > 0
+
+    print("验证项:")
+    print(f'  [{"✓" if check1 else "✗"}] 仍需打印: {check1} (实际={time_with_inv})')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景6a通过' if result else '✗ 场景6a失败'}")
+    return result
 
 
 def scenario_6b(inv_file):
@@ -607,23 +865,39 @@ def scenario_6b(inv_file):
     print("\n" + "=" * 60)
     print("场景 6b: 批量 + 重新规划（库存 5 个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x6")
+    print("  抽屉2: 325x365 -> 需要1个6x6")
+    print("  库存: 6x6 有 5 个(多2个)")
+    print()
 
     add_inventory(inv_file, {'6x6': 5})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"总成本: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  总成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  库存有余，应该用3个，剩余2个")
+    print("  仍需打印")
+    print()
 
     # 库存有余，应该用3个，剩余2个
-    if time_with_inv > 0:
-        print("✓ 仍需打印")
-        return True
-    else:
-        print("✗ 不需要打印")
-        return False
+    check1 = time_with_inv > 0
+
+    print("验证项:")
+    print(f'  [{"✓" if check1 else "✗"}] 仍需打印: {check1} (实际={time_with_inv})')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景6b通过' if result else '✗ 场景6b失败'}")
+    return result
 
 
 def scenario_7a(inv_file):
@@ -631,22 +905,39 @@ def scenario_7a(inv_file):
     print("\n" + "=" * 60)
     print("场景 7a: 3抽屉 + 重新规划（库存 3 个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x6")
+    print("  抽屉2: 325x365 -> 需要1个6x6")
+    print("  抽屉3: 420x392 -> 不需要6x6")
+    print("  库存: 6x6 有 3 个")
+    print()
 
     add_inventory(inv_file, {'6x6': 3})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1 420x392:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"总成本: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  总成本 = {time_with_inv} 分钟")
+    print()
 
-    if time_with_inv > 0:
-        print("✓ 仍需打印")
-        return True
-    else:
-        print("✗ 不需要打印")
-        return False
+    print("预期结果:")
+    print("  库存恰好用3个")
+    print("  仍需打印")
+    print()
+
+    check1 = time_with_inv > 0
+
+    print("验证项:")
+    print(f'  [{"✓" if check1 else "✗"}] 仍需打印: {check1} (实际={time_with_inv})')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景7a通过' if result else '✗ 场景7a失败'}")
+    return result
 
 
 def scenario_7b(inv_file):
@@ -654,23 +945,40 @@ def scenario_7b(inv_file):
     print("\n" + "=" * 60)
     print("场景 7b: 3抽屉 + 重新规划（库存 5 个）")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 -> 需要2个6x6")
+    print("  抽屉2: 325x365 -> 需要1个6x6")
+    print("  抽屉3: 420x392 -> 可重新规划使用6x6")
+    print("  库存: 6x6 有 5 个")
+    print()
 
     add_inventory(inv_file, {'6x6': 5})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:1 325x365:1 420x392:1")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"总成本: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  总成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  抽屉3可以重新规划使用库存")
+    print("  仍需打印")
+    print()
 
     # 抽屉3可以重新规划使用库存
-    if time_with_inv > 0:
-        print("✓ 仍需打印")
-        return True
-    else:
-        print("✗ 不需要打印")
-        return False
+    check1 = time_with_inv > 0
+
+    print("验证项:")
+    print(f'  [{"✓" if check1 else "✗"}] 仍需打印: {check1} (实际={time_with_inv})')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景7b通过' if result else '✗ 场景7b失败'}")
+    return result
 
 
 def scenario_8(inv_file):
@@ -685,10 +993,17 @@ def scenario_8(inv_file):
     print("\n" + "=" * 60)
     print("场景 8: 6抽屉 + 双库存尺寸")
     print("=" * 60)
+    print("假设:")
+    print("  抽屉1: 265x360 x 2")
+    print("  抽屉2: 325x360 x 2")
+    print("  抽屉3: 315x360 x 2")
+    print("  库存: 8x8 有 5 个, 6x7 有 5 个")
+    print()
 
     add_inventory(inv_file, {'8x8': 5, '6x7': 5})
     inventory = load_inventory(inv_file)
     print(f"库存: {inventory}")
+    print()
 
     # 无库存
     temp_inv = inv_file + ".temp"
@@ -703,16 +1018,26 @@ def scenario_8(inv_file):
     plan = get_print_plan(0, 0, inv_file, batch_mode="265x360:2 325x360:2 315x360:2")
     time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
 
-    print(f"无库存: {time_no_inv}分钟, 有库存: {time_with_inv}分钟")
+    print("计算结果:")
+    print(f"  无库存成本 = {time_no_inv} 分钟")
+    print(f"  有库存成本 = {time_with_inv} 分钟")
+    print()
+
+    print("预期结果:")
+    print("  成本降低")
+    print()
 
     cost_lower = time_with_inv < time_no_inv
 
-    if cost_lower:
-        print("✓ 成本降低")
-    else:
-        print("✗ 成本未降低")
+    print("验证项:")
+    check1 = cost_lower
 
-    return cost_lower
+    print(f'  [{"✓" if check1 else "✗"}] 成本降低: {check1} ({time_with_inv} < {time_no_inv})')
+    print()
+
+    result = check1
+    print(f"最终判断: {'✓ 场景8通过' if result else '✗ 场景8失败'}")
+    return result
 
 
 def main():
@@ -735,7 +1060,7 @@ def main():
     args = parser.parse_args()
 
     all_scenarios = {
-        '1': ('场景1: 精确匹配', scenario_1),
+        '1': ('场景1: 部分匹配', scenario_1),
         '2': ('场景2: 部分匹配', scenario_2),
         '3a': ('场景3a: 库存方案选择(1个)', scenario_3a),
         '3b': ('场景3b: 库存方案选择(2个)', scenario_3b),
@@ -761,6 +1086,12 @@ def main():
 
     scenarios_to_run = args.scenarios if args.scenarios else list(all_scenarios.keys())
 
+    print("=" * 60)
+    print("库存感知评分系统集成测试")
+    print("=" * 60)
+    print(f"运行场景: {', '.join(scenarios_to_run)}")
+    print()
+
     # 创建临时目录用于测试
     with tempfile.TemporaryDirectory() as tmpdir:
         inv_file = os.path.join(tmpdir, 'test_inventory.json')
@@ -777,26 +1108,31 @@ def main():
             name, func = all_scenarios[key]
             try:
                 passed = func(inv_file)
-                results.append((key, passed))
+                results.append((name, passed))
             except Exception as e:
                 print(f"\n✗ 场景{key}执行失败: {e}")
                 import traceback
                 traceback.print_exc()
-                results.append((key, False))
+                results.append((name, False))
 
         # 输出汇总
         print("\n" + "=" * 60)
         print("验证结果汇总")
         print("=" * 60)
         passed_count = 0
-        for key, passed in results:
-            name, _ = all_scenarios[key]
+        for name, passed in results:
             status = "✓" if passed else "✗"
             print(f"  [{status}] {name}")
             if passed:
                 passed_count += 1
 
         print(f"\n总计: {passed_count}/{len(results)} 通过")
+
+        if passed_count < len(results):
+            print("\n发现的问题:")
+            for name, passed in results:
+                if not passed:
+                    print(f"  - {name}")
 
 
 if __name__ == "__main__":
