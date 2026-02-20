@@ -40,7 +40,7 @@ _config = None
 def get_config_path():
     """获取配置文件路径"""
     skill_dir = Path(__file__).parent.parent
-    return skill_dir / "config.yaml"
+    return skill_dir / "config" / "config.yaml"
 
 
 def load_config():
@@ -81,6 +81,12 @@ def get_projects_dir():
     """获取项目根目录"""
     config = load_config()
     return Path(config.get("projects_dir", "~/opengrid_projects/")).expanduser()
+
+
+def get_inventory():
+    """获取默认库存（当未指定库存文件时使用）"""
+    from scripts.inventory import load_inventory
+    return load_inventory()
 
 
 def reload_config():
