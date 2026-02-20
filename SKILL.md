@@ -187,26 +187,52 @@ python3 scripts/split_calc.py -b "265x365:2 325x365:2"
 
 用户选择方案后，调用 `slicer.py` 生成 STL 文件。
 
-#### 5.1 提取需要打印的瓦片
+#### 5.1 获取方案 JSON
 
-从方案中提取需要打印的瓦片（**不含从库存取的瓦片**）：
+首先获取方案的 JSON 输出（包含所有信息）：
 
-```python
-# 从 scheme 中获取需要打印的瓦片
-# scheme['tiles'] 是所有瓦片 [(w, h), ...]
-# scheme['need_print'] 是需要打印的瓦片 {"6x7": 2, ...}
+```bash
+# 单尺寸
+.venv/bin/python scripts/split_calc.py 265 365 -j > scheme.json
 
-# 构建只需要打印的瓦片列表
-tiles_to_print = []
-for w, h in scheme['tiles']:
-    key = f"{w}x{h}"
-    if key in scheme.get('need_print', {}) and scheme['need_print'][key] > 0:
-        tiles_to_print.append((w, h))
-        # 减少计数
-        scheme['need_print'][key] -= 1
+# 批量
+.venv/bin/python scripts/split_calc.py -b "265x365:2 325x365:2" -j > batch_scheme.json
 ```
 
-#### 5.2 调用 STL 生成
+#### 5.2 提取需要打印的瓦片
+
+从 JSON 中提取需要打印的瓦片（**不含从库存取的瓦片**）：
+
+```python
+import json
+
+# 读取 JSON
+with open('scheme.json') as f:
+    data = json.load(f)
+
+# 提取需要打印的瓦片
+tiles_to_print = []
+
+if 'tiles' in data:
+    # 批量模式
+    for tile in data['tiles']:
+        w, h = tile['width'], tile['height']
+        to_print = tile.get('to_print', 0)
+        if to_print > 0:
+            tiles_to_print.extend([(w, h)] * to_print)
+elif 'inventory' in data and 'need_print' in data['inventory']:
+    # 单尺寸模式
+    need_print = data['inventory']['need_print']
+    tiles = data['scheme']['tiles']
+    for w, h, count in [(t['width'], t['height'], t['count']) for t in tiles]:
+        key = f"{w}x{h}"
+        if key in need_print and need_print[key] > 0:
+            tiles_to_print.extend([(w, h)] * min(count, need_print[key]))
+
+print("需要打印的瓦片:", tiles_to_print)
+```
+
+#### 5.3 调用 STL 生成
 
 调用 `scripts/slicer.py` 中的 `generate_all_stls` 函数：
 
@@ -215,6 +241,7 @@ for w, h in scheme['tiles']:
 cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
 .venv/bin/python -c "
 import sys
+import json
 sys.path.insert(0, 'scripts')
 from slicer import generate_all_stls
 

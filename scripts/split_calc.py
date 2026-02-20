@@ -2017,9 +2017,11 @@ def main():
 
     x, y = get_grid_dimensions(width, depth)
 
-    print(f"输入: {width}mm × {depth}mm")
-    print(f"格子: {x} × {y}")
-    print()
+    # JSON 模式跳过所有人类可读输出
+    if not args.json:
+        print(f"输入: {width}mm × {depth}mm")
+        print(f"格子: {x} × {y}")
+        print()
 
     if x < MIN_TILE or y < MIN_TILE:
         print("错误: 抽屉尺寸太小，无法放置最小瓦片")
@@ -2031,13 +2033,13 @@ def main():
         print("错误: 无法生成有效方案!")
         sys.exit(1)
 
-    print(f"最优: {scheme['unique_sizes']}种尺寸, {scheme['tile_count']}块瓦片")
-    print()
-
-    print_plan(width, depth, scheme, copies, args.verbose, inventory=inventory)
-
+    # JSON 模式只输出 JSON，跳过人类可读输出
     if args.json:
         output_json(width, depth, scheme, copies, inventory=inventory)
+    else:
+        print(f"最优: {scheme['unique_sizes']}种尺寸, {scheme['tile_count']}块瓦片")
+        print()
+        print_plan(width, depth, scheme, copies, args.verbose, inventory=inventory)
 
 if __name__ == "__main__":
     from opengrid.config import ensure_initialized, reload_config
