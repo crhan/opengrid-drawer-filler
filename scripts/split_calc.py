@@ -1960,15 +1960,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python3 split_calc.py 485 425            # 指定尺寸
-  python3 split_calc.py 485 425 -c 3       # 指定份数
-  python3 split_calc.py -p klean           # 使用预设
-  python3 split_calc.py 485 425 -j         # JSON 输出
-
-  # 批量模式（自动合并优化）
-  python3 split_calc.py -b "265x365:2 325x365:2 315x365:2"
-  python3 split_calc.py -b "265x365 325x365 315x365"
-  python3 split_calc.py -b "265 365 2 325 365 2 315 365 2"
+  python3 split_calc.py 485x425              # 单尺寸
+  python3 split_calc.py 485x425 -c 3         # 指定份数
+  python3 split_calc.py 485x425 -j           # JSON 输出
+  python3 split_calc.py 485x425 265x365:2   # 批量
+  python3 split_calc.py -p klean             # 预设
+  python3 split_calc.py -p klean -c 2       # 预设+份数
 
 预设尺寸:
   klean       Klean件盒 270×170mm
