@@ -122,24 +122,24 @@ python3 scripts/slicer.py -o file.stl --slicer bambu
 
 ## 初始化
 
-首次使用前完成配置：
+首次使用前完成配置，运行一次安装脚本即可完成所有设置：
 
-1. 运行 setup.sh：
+```bash
+cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
+./scripts/setup.sh
+```
 
-   ```bash
-   cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
-   ./scripts/setup.sh
-   ```
+脚本自动完成：
+1. 创建 Python venv (`.venv`)
+2. 安装 Python 依赖 (pyyaml, pytest, Pillow)
+3. 安装 OpenSCAD
+4. 克隆 QuackWorks
+5. 安装 BOSL2
 
-2. 复制配置文件：
-
-   ```bash
-   cp config.example.yaml config.yaml
-   ```
-
-3. 编辑 config.yaml，设置 `initialized: true` 和打印机型号
-
-未配置时运行脚本会显示警告，Agent 应检测到并引导用户配置。
+之后运行脚本：
+```bash
+.venv/bin/python scripts/split_calc.py 485 425
+```
 
 ## 配置文件 (config.yaml)
 
@@ -189,8 +189,8 @@ inventory:
 
 **Q: 脚本运行失败？**
 
-- 检查 Python 依赖：`pip install -r requirements.txt`
-- 检查配置文件是否存在
+- 重新运行安装脚本：`./scripts/setup.sh`
+- 确保配置文件存在
 
 **Q: 无法生成有效方案？**
 

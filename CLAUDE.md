@@ -16,6 +16,8 @@ cd {skill_dir}
 ```
 
 脚本安装：
+- Python venv 虚拟环境 (`.venv`)
+- Python 依赖 (pyyaml, pytest, Pillow)
 - OpenSCAD Snapshot (通过 Homebrew)
 - QuackWorks 源码 (克隆到 vendor 目录)
 - BOSL2 库 (OpenSCAD 依赖)
@@ -48,33 +50,35 @@ cp config.example.yaml config.yaml
 
 ## Common Commands
 
+**注意**: 所有 Python 命令都应使用项目 venv (`.venv/bin/python`) 执行。
+
 ```bash
 # Run all tests
-pytest
+.venv/bin/python -m pytest
 
 # Run specific test file
-pytest tests/test_scheme.py
+.venv/bin/python -m pytest tests/test_scheme.py
 
 # Run specific test class
-pytest tests/test_scheme.py::TestFindBestScheme
+.venv/bin/python -m pytest tests/test_scheme.py::TestFindBestScheme
 
 # Run specific test
-pytest tests/test_scheme.py::TestFindBestScheme::test_no_split_needed
+.venv/bin/python -m pytest tests/test_scheme.py::TestFindBestScheme::test_no_split_needed
 
 # Run split calculator (shows help, no interactive input)
-python3 scripts/split_calc.py
+.venv/bin/python scripts/split_calc.py
 
 # Run with specific dimensions
-python3 scripts/split_calc.py 485 425
+.venv/bin/python scripts/split_calc.py 485 425
 
 # Batch mode (auto-merge optimization)
-python3 scripts/split_calc.py -b "265x365:2 325x365:2"
+.venv/bin/python scripts/split_calc.py -b "265x365:2 325x365:2"
 
 # JSON output
-python3 scripts/split_calc.py 485 425 -j
+.venv/bin/python scripts/split_calc.py 485 425 -j
 
 # List available presets
-python3 scripts/split_calc.py --list-presets
+.venv/bin/python scripts/split_calc.py --list-presets
 ```
 
 ## Core Design Principle
@@ -133,7 +137,7 @@ Before starting any feature work or implementation plan, use the `using-git-work
 
 Run tests before claiming completion:
 ```bash
-pytest -v
+.venv/bin/python -m pytest -v
 ```
 
 ## Testing
