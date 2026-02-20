@@ -19,17 +19,17 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
 ### Step 1: 检查配置并展示状态
 
 1. 首先加载配置（使用 Python 直接读取或调用 config 模块）
-2. 直接向用户输出当前状态 Banner：
-   ```
-   ╔═══════════════════════════════════════════════════════════════╗
-   ║  openGrid 抽屉铺满                                           ║
-   ╠═══════════════════════════════════════════════════════════════╣
-   ║  🖨️  打印机: [型号] ([bed_x]×[bed_y]×[max_z]mm)             ║
-   ║  📁  输出目录: [stl_dir]                                      ║
-   ║  📦  库存: [库存列表或"无库存"]                               ║
-   ║  🔧  瓦片类型: [tile_type] | 堆叠: [stacking_method]          ║
-   ╚═══════════════════════════════════════════════════════════════╝
-   ```
+2. 直接向用户输出当前状态：
+
+   **openGrid 抽屉铺满**
+
+   | | |
+   |---|---|
+   | 🖨️ 打印机 | **[型号]** ([bed_x]×[bed_y]×[max_z]mm) |
+   | 📁 输出目录 | `[stl_dir]` |
+   | 📦 库存 | [库存列表或"无库存"] |
+   | 🔧 瓦片类型 | [tile_type] \| 堆叠: [stacking_method] |
+
 3. 读取 `config.yaml` 检查 `initialized` 状态
 4. 如果未初始化，引导用户配置：
    - 复制配置文件：`cp config.example.yaml config.yaml`
@@ -48,7 +48,7 @@ description: Calculates optimal openGrid tile layout for drawer bottom filling w
 **注意：这个环节你必须要和用户交互来确认库存数量是否正确，如果不正确就引导用户更新库存**
 
 1. 检查库存文件 `scripts/inventory.json`
-2. 列出可用瓦片（如有库存）
+2. 列出库存瓦片（如有库存）
 3. 询问用户是否使用库存计算
 
 **库存为空时**：提示用户并询问是继续计算还是先入库
