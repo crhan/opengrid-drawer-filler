@@ -122,6 +122,54 @@ def print_inventory():
     print(f"\n共 {len(inv)} 种尺寸, {total} stack")
 
 
+def format_inventory_for_display(inv=None):
+    """Format inventory for Agent display in Step 1
+
+    Args:
+        inv: inventory dict, if None loads from file
+
+    Returns:
+        str: formatted inventory display
+    """
+    if inv is None:
+        inv = load_inventory()
+
+    if not inv:
+        return """╔════════════════════════════════════════╗
+║  📦 库存状态                          ║
+╚════════════════════════════════════════╝
+
+   库存为空
+
+   共 0 种尺寸, 0 stack"""
+
+    # 格式化库存项为表格
+    lines = ["┌──────────┬──────────┐"]
+    lines.append("│ 瓦片尺寸  │   数量   │")
+    lines.append("├──────────┼──────────┤")
+
+    for key in sorted(inv.keys(), key=lambda x: (int(x.split('x')[0]) * int(x.split('x')[1])), reverse=True):
+        try:
+            w, h = key.split('x')
+            count = inv[key]
+            lines.append(f"│ {w:>6}×{h:<5} │   {count:>3}    │")
+        except (ValueError, AttributeError):
+            lines.append(f"│ [无效: {key:<5}] │   {inv[key]:>3}    │")
+
+    lines.append("└──────────┴──────────┘")
+
+    total = sum(inv.values())
+    unique = len(inv)
+
+    return f"""╔════════════════════════════════════════╗
+║  📦 库存状态                          ║
+╚════════════════════════════════════════╝
+
+{chr(10).join(lines)}
+
+共 **{unique} 种尺寸**, **{total} stack** (可用)"""
+
+
 import sys
 def parse_items(args):
     """Parse '7x5:6' format,最后一个非格式参数作为 reason"""

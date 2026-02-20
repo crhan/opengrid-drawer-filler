@@ -820,50 +820,92 @@ def print_plan(width, depth, scheme, copies=1, verbose=False, inventory=None):
     print("--- 打印时间估算 ---")
     print(f"预计总时间: ~{format_time(total_time)} ({total_prints}次打印)")
 
-    # 如果有库存信息，显示库存利用情况
+    # 预先计算实际打印时间（用于库存节省显示）
+    actual_time = total_time
+    if inventory and scheme.get('tiles'):
+        tiles = scheme['tiles']
+        actual_time, _, _ = calculate_print_cost(tiles, inventory, copies)
+
+    # 如果有库存信息，显示库存利用情况（增强版）
     if 'cost' in scheme and scheme['cost'] is not None:
-        print()
-        print("--- 库存利用 ---")
-
-        # 显示从库存取的瓦片
         from_inv = scheme.get('from_inventory', {})
-        if from_inv:
-            parts = []
-            for key in sorted(from_inv.keys()):
-                w, h = key.split('x')
-                count = from_inv[key]
-                parts.append(f"{w}×{h} ×{count}")
-            print(f"从库存: {', '.join(parts)}")
-
-        # 显示需要打印的瓦片
         need_print = scheme.get('need_print', {})
+
+        # 收集所有需要的瓦片尺寸
+        all_needed = {}
+        if from_inv:
+            for k, v in from_inv.items():
+                all_needed[k] = all_needed.get(k, 0) + v
         if need_print:
-            parts = []
-            for key in sorted(need_print.keys()):
+            for k, v in need_print.items():
+                all_needed[k] = all_needed.get(k, 0) + v
+
+        if all_needed:
+            print()
+            print("╔════════════════════════════════════════╗")
+            print("║  📦 库存利用                            ║")
+            print("╚════════════════════════════════════════╝")
+
+            # 绘制表格
+            print("┌──────────┬──────────┬──────────┬──────────┐")
+            print("│ 瓦片尺寸  │ 库存数量  │ 需要数量  │   状态   │")
+            print("├──────────┼──────────┼──────────┼──────────┤")
+
+            covered = 0
+            total_sizes = 0
+            for key in sorted(all_needed.keys(), key=lambda x: (int(x.split('x')[0]) * int(x.split('x')[1])), reverse=True):
                 w, h = key.split('x')
-                count = need_print[key]
-                parts.append(f"{w}×{h} ×{count}")
-            print(f"需打印: {', '.join(parts)} (成本: {format_time(scheme['cost'])})")
-        else:
-            print("需打印: 无 (成本: 0)")
+                need = all_needed[key]
+                available = inventory.get(key, 0) if inventory else 0
+                total_sizes += 1
+
+                if available >= need:
+                    status = "✅ 充足"
+                    covered += 1
+                elif available > 0:
+                    status = "⚠️ 部分"
+                else:
+                    status = "❌ 需打印"
+
+                print(f"│ {w:>6}×{h:<5} │   {available:>3}    │   {need:>3}    │ {status:<8} │")
+
+            print("└──────────┴──────────┴──────────┴──────────┘")
+
+            # 覆盖率统计
+            coverage = int(covered / total_sizes * 100) if total_sizes > 0 else 0
+            print(f"\n📊 库存覆盖率: {covered}/{total_sizes} 种尺寸 ({coverage}%)")
+
+            # 显示从库存取的瓦片
+            if from_inv:
+                parts = []
+                for key in sorted(from_inv.keys()):
+                    w, h = key.split('x')
+                    count = from_inv[key]
+                    parts.append(f"{w}×{h} ×{count}")
+                print(f"📦 从库存: {', '.join(parts)}")
+
+            # 显示需要打印的瓦片
+            if need_print:
+                parts = []
+                for key in sorted(need_print.keys()):
+                    w, h = key.split('x')
+                    count = need_print[key]
+                    parts.append(f"{w}×{h} ×{count}")
+                print(f"🖨️ 需打印: {', '.join(parts)} (成本: {format_time(scheme['cost'])})")
+            else:
+                print("🖨️ 需打印: 无 (完全使用库存)")
+
+            # 节省信息
+            if actual_time < total_time:
+                saved = total_time - actual_time
+                saved_percent = int(saved / total_time * 100) if total_time > 0 else 0
+                print(f"\n💰 节省: {format_time(saved)} ({saved_percent}%打印时间)")
 
     print()
     print("--- 安装说明 ---")
     print("1. 打印 STL")
     print("2. 使用连接件组装")
     print("3. 放入抽屉")
-
-    # 如果有库存，重新计算实际打印成本
-    actual_time = total_time
-    if inventory and scheme.get('tiles'):
-        tiles = scheme['tiles']
-        actual_cost, from_inv, need_p = calculate_print_cost(tiles, inventory, copies)
-        actual_time = actual_cost
-        if actual_cost < total_time:
-            print()
-            print("--- 实际打印成本（已扣除库存） ---")
-            print(f"全额打印: {format_time(total_time)}")
-            print(f"实际打印: {format_time(actual_cost)} (节省: {format_time(total_time - actual_cost)})")
 
     return {
         'total_main': total_main,
@@ -875,32 +917,144 @@ def print_plan(width, depth, scheme, copies=1, verbose=False, inventory=None):
     }
 
 
-def output_json(width, depth, scheme, copies, stats):
-    """输出 JSON 格式"""
-    # 按尺寸分组
+def build_scheme_data(width, depth, scheme, copies=1, inventory=None):
+    """构建统一的方案数据结构，用于生成人类可读输出和 JSON 输出
+
+    Args:
+        width: 抽屉宽度 (mm)
+        depth: 抽屉深度 (mm)
+        scheme: 分割方案字典
+        copies: 打印份数
+        inventory: 库存字典 {"6x7": 3, ...}
+
+    Returns:
+        包含所有信息的统一字典
+    """
+    x, y = get_grid_dimensions(width, depth)
+    max_stacks = get_max_stacks()
+
+    # 按尺寸分组统计瓦片
     tile_counts = {}
     for w, h in scheme['tiles']:
-        key = f"{w}×{h}"
+        key = f"{w}x{h}"
         tile_counts[key] = tile_counts.get(key, 0) + 1
 
+    # 构建瓦片列表
     tiles_list = []
-    for size, count in tile_counts.items():
-        w, h = map(int, size.split('×'))
+    for size, count in sorted(tile_counts.items(), key=lambda x: (int(x[0].split('x')[0]) * int(x[0].split('x')[1])), reverse=True):
+        w, h = map(int, size.split('x'))
         tiles_list.append({
             "width": w,
             "height": h,
             "count": count
         })
 
-    output = {
-        "drawer": {
-            "width": width,
-            "depth": depth
-        },
-        "grid": {
-            "x": width // TILE_SIZE,
-            "y": depth // TILE_SIZE
-        },
+    # 计算详细打印批次 breakdown
+    breakdown = []
+    total_main = 0
+    total_support = 0
+    total_time = 0
+    total_prints = 0
+
+    for size, count in tile_counts.items():
+        w, h = map(int, size.split('x'))
+        cells = w * h
+        total_stacks = count * copies
+
+        if total_stacks > max_stacks:
+            # 分多次打印
+            num_prints = (total_stacks + max_stacks - 1) // max_stacks
+            stacks_per_print = total_stacks // num_prints
+            remainder = total_stacks % num_prints
+
+            for i in range(num_prints):
+                stacks = stacks_per_print + (1 if i < remainder else 0)
+                if stacks == 0:
+                    continue
+
+                height_mm = stacks * FULL_THICKNESS
+                main_g, support_g, time_min = calculate_filament_and_time(cells, stacks)
+
+                breakdown.append({
+                    "size": size,
+                    "stacks": stacks,
+                    "prints": 1,
+                    "height_mm": round(height_mm, 1),
+                    "filament_g": round(main_g + support_g, 1),
+                    "time_min": int(time_min)
+                })
+
+                total_main += main_g
+                total_support += support_g
+                total_time += time_min
+                total_prints += 1
+        else:
+            # 单次打印
+            height_mm = total_stacks * FULL_THICKNESS
+            main_g, support_g, time_min = calculate_filament_and_time(cells, total_stacks)
+
+            breakdown.append({
+                "size": size,
+                "stacks": total_stacks,
+                "prints": 1,
+                "height_mm": round(height_mm, 1),
+                "filament_g": round(main_g + support_g, 1),
+                "time_min": int(time_min)
+            })
+
+            total_main += main_g
+            total_support += support_g
+            total_time += time_min
+            total_prints += 1
+
+    # 计算实际打印时间（用于库存节省显示）
+    actual_time = total_time
+    if inventory and scheme.get('tiles'):
+        actual_time, _, _ = calculate_print_cost(scheme['tiles'], inventory, copies)
+
+    # 构建库存信息
+    inventory_info = None
+    if 'cost' in scheme and scheme['cost'] is not None:
+        from_inv = scheme.get('from_inventory', {})
+        need_print = scheme.get('need_print', {})
+
+        # 收集所有需要的瓦片尺寸
+        all_needed = {}
+        if from_inv:
+            for k, v in from_inv.items():
+                all_needed[k] = all_needed.get(k, 0) + v
+        if need_print:
+            for k, v in need_print.items():
+                all_needed[k] = all_needed.get(k, 0) + v
+
+        if all_needed:
+            covered = 0
+            total_sizes = 0
+            for key in all_needed.keys():
+                need = all_needed[key]
+                available = inventory.get(key, 0) if inventory else 0
+                total_sizes += 1
+                if available >= need:
+                    covered += 1
+
+            saved_time = total_time - actual_time
+            saved_percent = int(saved_time / total_time * 100) if total_time > 0 else 0
+
+            inventory_info = {
+                "coverage": {
+                    "covered": covered,
+                    "total": total_sizes,
+                    "percent": int(covered / total_sizes * 100) if total_sizes > 0 else 0
+                },
+                "from_inventory": from_inv,
+                "need_print": need_print,
+                "saved_time_min": int(saved_time),
+                "saved_percent": saved_percent
+            }
+
+    return {
+        "drawer": {"width": width, "depth": depth},
+        "grid": {"x": x, "y": y},
         "scheme": {
             "x_parts": scheme['x_parts'],
             "y_parts": scheme['y_parts'],
@@ -911,14 +1065,23 @@ def output_json(width, depth, scheme, copies, stats):
         "stats": {
             "unique_sizes": scheme['unique_sizes'],
             "total_tiles": scheme['tile_count'],
-            "total_filament_g": round(stats['total_filament']),
-            "total_time_min": int(stats['total_time']),
-            "total_prints": stats['total_prints'],
-            "full_time_min": int(stats.get('full_time', stats['total_time']))
-        }
+            "total_filament_g": round(total_main + total_support),
+            "total_time_min": int(actual_time),
+            "total_prints": total_prints,
+            "full_time_min": int(total_time),
+            "breakdown": breakdown
+        },
+        "inventory": inventory_info
     }
 
-    print(json.dumps(output, indent=2, ensure_ascii=False))
+
+def output_json(width, depth, scheme, copies, _stats=None, inventory=None):
+    """输出 JSON 格式
+
+    使用统一的 build_scheme_data 函数生成数据，确保人类输出和 JSON 输出一致。
+    """
+    data = build_scheme_data(width, depth, scheme, copies, inventory)
+    print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def list_presets():
@@ -1265,6 +1428,190 @@ def optimize_batch_global(batch_results, inventory=None):
     }
 
 
+def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=None):
+    """构建统一的批量方案数据结构，用于生成人类可读输出和 JSON 输出
+
+    Args:
+        batch_results: 批量计算结果列表
+        merged_tiles: 合并后的瓦片字典
+        inventory: 库存字典
+        drawer_names: 抽屉名称映射 {index: "name"}
+
+    Returns:
+        包含所有信息的统一字典
+    """
+    if drawer_names is None:
+        drawer_names = {}
+
+    max_stacks = get_max_stacks()
+    sorted_tiles = sorted(merged_tiles.items(), key=lambda x: (x[0][0] * x[0][1], x[0][0]), reverse=True)
+
+    total_main = 0
+    total_support = 0
+    total_time = 0
+    total_prints = 0
+    tiles_output = []
+
+    # 记录库存使用情况
+    from_inventory = {}
+    need_print_tiles = {}
+
+    for (w, h), info in sorted_tiles:
+        cells = w * h
+        total_stacks = info['total']
+
+        # 检查库存
+        key = f"{w}x{h}"
+        available = inventory.get(key, 0) if inventory else 0
+        to_print = max(0, total_stacks - available)
+
+        # 记录库存使用
+        if available > 0:
+            from_inventory[key] = min(available, total_stacks)
+        if to_print > 0:
+            need_print_tiles[key] = to_print
+
+        # 计算实际打印成本（基于需要打印的数量）
+        if to_print > max_stacks:
+            num_prints = (to_print + max_stacks - 1) // max_stacks
+            stacks_per_print = to_print // num_prints
+            remainder = to_print % num_prints
+
+            height = stacks_per_print * FULL_THICKNESS
+            main_per, support_per, time_per = calculate_filament_and_time(cells, stacks_per_print)
+
+            if remainder > 0:
+                total_main += main_per * (num_prints - 1) + remainder * FILAMENT_MAIN_PER_CELL * cells
+                total_support += support_per * (num_prints - 1) + remainder * FILAMENT_SUPPORT_PER_CELL * cells
+                time_main = time_per * (num_prints - 1) + remainder * PRINT_TIME_PER_CELL * cells
+                total_time += time_main
+            else:
+                total_main += main_per * num_prints
+                total_support += support_per * num_prints
+                total_time += time_per * num_prints
+
+            total_prints += num_prints
+        elif to_print > 0:
+            main_g, support_g, time_min = calculate_filament_and_time(cells, to_print)
+            total_main += main_g
+            total_support += support_g
+            total_time += time_min
+            total_prints += 1
+        # to_print == 0 means completely covered by inventory
+
+        tiles_output.append({
+            "width": w,
+            "height": h,
+            "stacks": total_stacks,
+            "prints": total_prints if to_print > 0 else 0,
+            "from_inventory": from_inventory.get(key, 0),
+            "to_print": to_print
+        })
+
+    # 构建 drawers 列表（包含每个抽屉的详细信息）
+    drawers_output = []
+    for r in batch_results:
+        if not r:
+            continue
+        width = r['width']
+        depth = r['depth']
+        copies = r['copies']
+        scheme = r['scheme']
+        idx = r.get('index')
+
+        # 获取抽屉名称
+        name = drawer_names.get(idx, f"{width}×{depth}") if idx is not None else f"{width}×{depth}"
+
+        drawers_output.append({
+            "name": name,
+            "width": width,
+            "depth": depth,
+            "copies": copies,
+            "scheme": {
+                "x_parts": scheme['x_parts'],
+                "y_parts": scheme['y_parts'],
+                "x_splits": scheme['x_splits'],
+                "y_splits": scheme['y_splits'],
+            },
+            "tiles": _format_tiles_from_scheme(scheme),
+            "inventory": _build_single_inventory(scheme, inventory)
+        })
+
+    # 构建输出
+    output = {
+        "drawers": drawers_output,
+        "tiles": tiles_output,
+        "stats": {
+            "total_filament_g": round(total_main + total_support),
+            "total_time_min": int(total_time),
+            "total_prints": total_prints
+        }
+    }
+
+    # 如果有库存，添加库存信息
+    if inventory and (from_inventory or need_print_tiles):
+        output["inventory_usage"] = {
+            "from_inventory": from_inventory,
+            "need_print": need_print_tiles
+        }
+
+    return output
+
+
+def _format_tiles_from_scheme(scheme):
+    """将 scheme['tiles'] (元组列表) 转换为带计数的字典列表"""
+    tiles = scheme.get('tiles', [])
+    if not tiles:
+        return []
+    # 统计每个尺寸的数量
+    counts = {}
+    for w, h in tiles:
+        key = (w, h)
+        counts[key] = counts.get(key, 0) + 1
+    # 转换为列表
+    return [
+        {"width": w, "height": h, "count": c}
+        for (w, h), c in sorted(counts.items(), key=lambda x: x[0][0] * x[0][1], reverse=True)
+    ]
+
+
+def _build_single_inventory(scheme, inventory):
+    """构建单个方案的库存信息"""
+    from_inv = scheme.get('from_inventory', {})
+    need_print = scheme.get('need_print', {})
+
+    # 收集所有需要的瓦片尺寸
+    all_needed = {}
+    if from_inv:
+        for k, v in from_inv.items():
+            all_needed[k] = all_needed.get(k, 0) + v
+    if need_print:
+        for k, v in need_print.items():
+            all_needed[k] = all_needed.get(k, 0) + v
+
+    if not all_needed:
+        return None
+
+    covered = 0
+    total_sizes = 0
+    for key in all_needed.keys():
+        need = all_needed[key]
+        available = inventory.get(key, 0) if inventory else 0
+        total_sizes += 1
+        if available >= need:
+            covered += 1
+
+    return {
+        "coverage": {
+            "covered": covered,
+            "total": total_sizes,
+            "percent": int(covered / total_sizes * 100) if total_sizes > 0 else 0
+        },
+        "from_inventory": from_inv,
+        "need_print": need_print
+    }
+
+
 def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=False, drawer_names=None):
     """打印批量打印计划
 
@@ -1280,103 +1627,18 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
         drawer_names = {}
     # 如果是 JSON 模式，只计算统计信息不打印
     if json_output:
-        max_stacks = get_max_stacks()
-        sorted_tiles = sorted(merged_tiles.items(), key=lambda x: (x[0][0] * x[0][1], x[0][0]), reverse=True)
-
-        total_main = 0
-        total_support = 0
-        total_time = 0
-        total_prints = 0
-        tiles_output = []
-
-        # 记录库存使用情况
-        from_inventory = {}
-        need_print_tiles = {}
-
-        for (w, h), info in sorted_tiles:
-            cells = w * h
-            total_stacks = info['total']
-
-            # 检查库存
-            key = f"{w}x{h}"
-            available = inventory.get(key, 0) if inventory else 0
-            to_print = max(0, total_stacks - available)
-
-            # 记录库存使用
-            if available > 0:
-                from_inventory[key] = min(available, total_stacks)
-            if to_print > 0:
-                need_print_tiles[key] = to_print
-
-            # 计算实际打印成本（基于需要打印的数量）
-            if to_print > max_stacks:
-                num_prints = (to_print + max_stacks - 1) // max_stacks
-                stacks_per_print = to_print // num_prints
-                remainder = to_print % num_prints
-
-                height = stacks_per_print * FULL_THICKNESS
-                main_per, support_per, time_per = calculate_filament_and_time(cells, stacks_per_print)
-
-                if remainder > 0:
-                    total_main += main_per * (num_prints - 1) + remainder * FILAMENT_MAIN_PER_CELL * cells
-                    total_support += support_per * (num_prints - 1) + remainder * FILAMENT_SUPPORT_PER_CELL * cells
-                    time_main = time_per * (num_prints - 1) + remainder * PRINT_TIME_PER_CELL * cells
-                    total_time += time_main
-                else:
-                    total_main += main_per * num_prints
-                    total_support += support_per * num_prints
-                    total_time += time_per * num_prints
-
-                total_prints += num_prints
-            elif to_print > 0:
-                main_g, support_g, time_min = calculate_filament_and_time(cells, to_print)
-                total_main += main_g
-                total_support += support_g
-                total_time += time_min
-                total_prints += 1
-            # to_print == 0 means completely covered by inventory
-
-            tiles_output.append({
-                "width": w,
-                "height": h,
-                "stacks": total_stacks,
-                "prints": total_prints if to_print > 0 else 0,
-                "from_inventory": from_inventory.get(key, 0),
-                "to_print": to_print
-            })
-
-        # 输出 JSON
-        output = {
-            "drawers": [
-                {
-                    "width": r['width'],
-                    "depth": r['depth'],
-                    "copies": r['copies']
-                }
-                for r in batch_results if r
-            ],
-            "tiles": tiles_output,
-            "stats": {
-                "total_filament_g": round(total_main + total_support),
-                "total_time_min": int(total_time),
-                "total_prints": total_prints
-            }
-        }
-
-        # 如果有库存，添加库存信息
-        if inventory and (from_inventory or need_print_tiles):
-            output["inventory_usage"] = {
-                "from_inventory": from_inventory,
-                "need_print": need_print_tiles
-            }
-
+        # 使用统一的批量数据结构
+        output = build_batch_data(batch_results, merged_tiles, inventory, drawer_names)
         print(json.dumps(output, indent=2, ensure_ascii=False))
+        # 返回统计信息字典
+        total_filament = output['stats']['total_filament_g']
+        # 估算主材/支撑比例 (75%/25%)
         return {
-            'total_main': total_main,
-            'total_support': total_support,
-            'total_filament': total_main + total_support,
-            'total_time': total_time,
-            'total_prints': total_prints
+            'total_main': total_filament * 0.75,
+            'total_support': total_filament * 0.25,
+            'total_filament': total_filament,
+            'total_time': output['stats']['total_time_min'],
+            'total_prints': output['stats']['total_prints']
         }
 
     # 人类可读模式
@@ -1772,10 +2034,10 @@ def main():
     print(f"最优: {scheme['unique_sizes']}种尺寸, {scheme['tile_count']}块瓦片")
     print()
 
-    stats = print_plan(width, depth, scheme, copies, args.verbose, inventory=inventory)
+    print_plan(width, depth, scheme, copies, args.verbose, inventory=inventory)
 
     if args.json:
-        output_json(width, depth, scheme, copies, stats)
+        output_json(width, depth, scheme, copies, inventory=inventory)
 
 if __name__ == "__main__":
     from opengrid.config import ensure_initialized, reload_config

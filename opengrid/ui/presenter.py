@@ -44,16 +44,63 @@ def present_schemes(schemes, inventory):
             count = t.get("count", 1)
             tile_strs.append(f"{w}×{h}: {count}")
 
-        # 库存信息
-        inv_match = scheme.get("inventory_match", {})
-        if inv_match and inv_match.get("match_score", 0) > 0:
-            from_inv = inv_match.get("from_inventory", {})
-            need_print = inv_match.get("need_print", {})
-            inv_info = f" (使用库存: {sum(from_inv.values())} 块)"
-        else:
-            inv_info = ""
+        # 库存信息 - 增强版
+        from_inv = scheme.get("from_inventory", {})
+        need_print = scheme.get("need_print", {})
 
-        output.append(f"[{key.upper()}] {name}{inv_info}")
+        if from_inv or need_print:
+            # 收集所有需要的瓦片尺寸
+            all_needed = {}
+            if from_inv:
+                for k, v in from_inv.items():
+                    all_needed[k] = all_needed.get(k, 0) + v
+            if need_print:
+                for k, v in need_print.items():
+                    all_needed[k] = all_needed.get(k, 0) + v
+
+            # 计算覆盖率
+            covered = 0
+            total_sizes = len(all_needed)
+            for size_key, need in all_needed.items():
+                available = inventory.get(size_key, 0) if inventory else 0
+                if available >= need:
+                    covered += 1
+
+            coverage = int(covered / total_sizes * 100) if total_sizes > 0 else 0
+
+            # 库存使用详情
+            inv_parts = []
+            for size_key in sorted(from_inv.keys()):
+                w, h = size_key.split('x')
+                count = from_inv[size_key]
+                inv_parts.append(f"{w}×{h}×{count}")
+
+            # 打印需求详情
+            print_parts = []
+            for size_key in sorted(need_print.keys()):
+                w, h = size_key.split('x')
+                count = need_print[size_key]
+                print_parts.append(f"{w}×{h}×{count}")
+
+            # 构建库存信息行
+            inv_line = ""
+            if inv_parts:
+                inv_line += f"📦 {'+'.join(inv_parts)}"
+            if print_parts:
+                if inv_line:
+                    inv_line += " | "
+                inv_line += f"🖨️ {'+'.join(print_parts)}"
+
+            if coverage > 0:
+                inv_line += f" | 💰 节省 {coverage}%"
+
+            output.append(f"[{key.upper()}] {name}")
+            if inv_line:
+                output.append(f"    {inv_line}")
+        else:
+            # 无库存时显示简单信息
+            output.append(f"[{key.upper()}] {name} (全部需要打印)")
+
         output.append(f"    独特尺寸: {unique_sizes} 种  |  瓦片数: {total_tiles} 块")
         output.append(f"    {', '.join(tile_strs)}")
         output.append("")
