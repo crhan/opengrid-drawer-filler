@@ -73,9 +73,11 @@ def get_print_plan(width, depth, inv_file, batch_mode=None):
     """通过 CLI 获取打印计划，返回统一的数据结构"""
     cmd = [sys.executable, 'split_calc.py']
     if batch_mode:
-        cmd.extend(['-b', batch_mode])
+        # 新语法：直接传入位置参数，不需要 -b
+        cmd.extend(batch_mode.split())
     else:
-        cmd.extend([str(width), str(depth)])
+        # 新语法：宽x高 格式
+        cmd.append(f'{width}x{depth}')
     cmd.extend(['-i', inv_file, '-j'])
 
     result = run_cmd(cmd, cwd=SCRIPTS_DIR)
