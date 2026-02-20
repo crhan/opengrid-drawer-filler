@@ -46,4 +46,5 @@ config.yaml
 
 # Inventory (user-specific data)
 scripts/inventory.json
+inventory/
 .envrc
