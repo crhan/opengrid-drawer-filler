@@ -25,7 +25,7 @@ import sys
 import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from split_calc import (
+from scripts.split_calc import (
     calculate_filament_and_time,
     calculate_print_cost,
     get_grid_dimensions,

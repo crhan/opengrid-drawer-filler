@@ -17,7 +17,7 @@ import sys
 import argparse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from split_calc import (
+from scripts.split_calc import (
     calculate_print_cost,
     calculate_filament_and_time,
     get_grid_dimensions,
