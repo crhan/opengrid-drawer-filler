@@ -37,33 +37,83 @@ PRINTER_PRESETS = {
 _config = None
 
 
-def get_config_path():
-    """获取配置文件路径"""
+def _is_project_mode():
+    """检测是否为项目模式（当前目录存在 opengrid_config.yaml）"""
+    return (Path.cwd() / "opengrid_config.yaml").exists()
+
+
+def get_config_path(scope="auto"):
+    """获取配置文件路径
+
+    Args:
+        scope: "global" | "project" | "auto" (默认自动检测)
+    """
     skill_dir = Path(__file__).parent.parent
+    if scope == "global":
+        return skill_dir / "config" / "config.yaml"
+
+    # auto 或 project
+    project_config = Path.cwd() / "opengrid_config.yaml"
+    if scope == "project" or (scope == "auto" and project_config.exists()):
+        return project_config
+
     return skill_dir / "config" / "config.yaml"
 
 
-def load_config():
-    """加载配置，优先使用 config.yaml，缺失则使用默认值"""
+def get_config_scope():
+    """获取当前配置级别"""
+    if _is_project_mode():
+        return "project"
+    return "global"
+
+
+def load_config(scope="auto"):
+    """加载配置，支持全局/项目级
+
+    Args:
+        scope: "global" | "project" | "auto" (默认自动检测)
+    """
     global _config
     if _config is not None:
         return _config
 
-    config_path = get_config_path()
+    config_path = get_config_path(scope)
+    config = _load_single_config(config_path)
+
+    # 如果是 auto 模式且存在项目配置，合并
+    if scope == "auto" and _is_project_mode():
+        project_path = get_config_path("project")
+        project_config = _load_single_config(project_path)
+        config = _merge_config(config, project_config)
+
+    _config = config
+    return config
+
+
+def _load_single_config(config_path):
+    """加载单个配置文件"""
     if config_path.exists():
         with open(config_path) as f:
             user_config = yaml.safe_load(f) or {}
-        # 合并默认配置
         config = DEFAULTS.copy()
         for section, values in user_config.items():
             if section in config and isinstance(config[section], dict):
                 config[section].update(values)
             else:
                 config[section] = values
-        _config = config
         return config
-    _config = DEFAULTS.copy()
-    return _config
+    return DEFAULTS.copy()
+
+
+def _merge_config(global_config, project_config):
+    """合并配置，项目级覆盖全局"""
+    result = global_config.copy()
+    for section, values in project_config.items():
+        if section in result and isinstance(result[section], dict):
+            result[section].update(values)
+        else:
+            result[section] = values
+    return result
 
 
 def get_printer_config():
@@ -89,11 +139,11 @@ def get_inventory():
     return load_inventory()
 
 
-def reload_config():
+def reload_config(scope="auto"):
     """重新加载配置"""
     global _config
     _config = None
-    return load_config()
+    return load_config(scope)
 
 
 def is_initialized():
