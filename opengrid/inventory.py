@@ -2,12 +2,28 @@
 import json
 import os
 import sys
+import re
 from datetime import datetime
 from pathlib import Path
 
 # Inventory file path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INVENTORY_FILE = os.path.join(SCRIPT_DIR, '..', 'inventory', 'inventory.json')
+
+
+def parse_items(args):
+    """Parse '7x5:6' format,最后一个非格式参数作为 reason"""
+    items = {}
+    reason = ""
+    for arg in args:
+        match = re.match(r'(\d+)x(\d+):(\d+)', arg)
+        if match:
+            key = f"{match.group(1)}x{match.group(2)}"
+            items[key] = int(match.group(3))
+        else:
+            # 最后一个非格式参数作为 reason
+            reason = arg
+    return items, reason
 
 
 def get_inventory_path(config=None):
@@ -43,48 +59,87 @@ def _get_inventory_file(config=None):
 
 
 def _load_data(config=None):
-    """Load inventory data with log"""
-    inv_file = get_inventory_path(config)
+    """Load inventory data with log
+
+    Args:
+        config: config dict, if None uses INVENTORY_FILE constant (for backward compatibility)
+    """
+    if config is None:
+        # Use INVENTORY_FILE constant for backward compatibility with tests
+        inv_file = INVENTORY_FILE
+    else:
+        inv_file = get_inventory_path(config)
     if not os.path.exists(inv_file):
         return {"inventory": {}, "log": []}
     with open(inv_file, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
-def _save_data(data):
-    """Save inventory data"""
-    inv_file = _get_inventory_file()
+def _save_data(data, config=None):
+    """Save inventory data
+
+    Args:
+        data: inventory data dict
+        config: config dict, if None uses INVENTORY_FILE constant (for backward compatibility)
+    """
+    if config is None:
+        # Use INVENTORY_FILE constant for backward compatibility with tests
+        inv_file = INVENTORY_FILE
+    else:
+        inv_file = get_inventory_path(config)
     with open(inv_file, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def load_inventory():
-    """Return current inventory dict"""
-    data = _load_data()
+def load_inventory(config=None):
+    """Return current inventory dict
+
+    Args:
+        config: config dict, if None uses default path
+    """
+    data = _load_data(config)
     return data.get("inventory", {})
 
 
-def save_inventory(inv, log_entry):
-    """Save inventory with log entry"""
-    data = _load_data()
+def save_inventory(inv, log_entry, config=None):
+    """Save inventory with log entry
+
+    Args:
+        inv: inventory dict
+        log_entry: log entry dict
+        config: config dict, if None uses default path
+    """
+    data = _load_data(config)
     data["inventory"] = inv
     log_entry["timestamp"] = datetime.now().isoformat()
     data["log"].append(log_entry)
-    _save_data(data)
+    _save_data(data, config)
 
 
-def add_inventory(items, reason=""):
-    """Add items to inventory"""
-    inv = load_inventory()
+def add_inventory(items, reason="", config=None):
+    """Add items to inventory
+
+    Args:
+        items: dict of items to add
+        reason: reason for the addition
+        config: config dict, if None uses default path
+    """
+    inv = load_inventory(config)
     for key, count in items.items():
         inv[key] = inv.get(key, 0) + count
-    save_inventory(inv, {"action": "add", "items": items, "reason": reason})
+    save_inventory(inv, {"action": "add", "items": items, "reason": reason}, config)
     return inv
 
 
-def deduct_inventory(items, reason=""):
-    """Deduct items from inventory"""
-    inv = load_inventory()
+def deduct_inventory(items, reason="", config=None):
+    """Deduct items from inventory
+
+    Args:
+        items: dict of items to deduct
+        reason: reason for the deduction
+        config: config dict, if None uses default path
+    """
+    inv = load_inventory(config)
     for key, count in items.items():
         available = inv.get(key, 0)
         if available < count:
@@ -93,13 +148,20 @@ def deduct_inventory(items, reason=""):
         inv[key] -= count
         if inv[key] == 0:
             del inv[key]
-    save_inventory(inv, {"action": "deduct", "items": items, "reason": reason})
+    save_inventory(inv, {"action": "deduct", "items": items, "reason": reason}, config)
     return inv
 
 
-def undo_last():
-    """Undo last operation"""
-    data = _load_data()
+def undo_last(config=None):
+    """Undo last operation
+
+    Args:
+        config: config dict, if None uses default path
+
+    Raises:
+        ValueError: if no operation to undo
+    """
+    data = _load_data(config)
     log = data.get("log", [])
 
     last_entry = None
@@ -127,7 +189,7 @@ def undo_last():
     log.append({"action": "undo", "items": items, "reason": f"撤销 {last_entry['action']}"})
 
     data["inventory"] = inv
-    _save_data(data)
+    _save_data(data, config)
     return inv
 
 
@@ -195,20 +257,6 @@ def format_inventory_for_display(inv=None):
 {chr(10).join(lines)}
 
 共 **{unique} 种尺寸**, **{total} stack** (可用)"""
-
-    """Parse '7x5:6' format,最后一个非格式参数作为 reason"""
-    import re
-    items = {}
-    reason = ""
-    for arg in args:
-        match = re.match(r'(\d+)x(\d+):(\d+)', arg)
-        if match:
-            key = f"{match.group(1)}x{match.group(2)}"
-            items[key] = int(match.group(3))
-        else:
-            # 最后一个非格式参数作为 reason
-            reason = arg
-    return items, reason
 
 
 def get_inventory_match(tiles, copies, inv):
