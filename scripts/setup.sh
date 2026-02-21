@@ -42,7 +42,7 @@ install_venv() {
 # 安装 Python 依赖
 install_python_deps() {
     echo "安装 Python 依赖..."
-    "$VENV_DIR/bin/pip" install --quiet pyyaml pytest Pillow
+    "$VENV_DIR/bin/pip" install --quiet pyyaml pytest pytest-timeout Pillow
     echo -e "${GREEN}Python 依赖安装完成${NC}"
 }
 

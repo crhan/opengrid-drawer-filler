@@ -133,14 +133,25 @@ def validate_tile(w, h):
     return MIN_TILE <= w <= MAX_X and MIN_TILE <= h <= MAX_Y
 
 
-def split_with_limit(n, parts, max_val):
-    """将数字n分割为parts个部分，每个部分不超过max_val"""
+def split_with_limit(n, parts, max_val, max_results=1000):
+    """将数字n分割为parts个部分，每个部分不超过max_val
+
+    Args:
+        n: 要分割的数字
+        parts: 分割的部分数
+        max_val: 每个部分的最大值
+        max_results: 最大返回结果数，防止组合爆炸
+    """
     if parts == 1:
         return [[n]] if n <= max_val else []
 
     results = []
 
     def recurse(remaining, current):
+        # 提前终止：超过最大结果数
+        if len(results) >= max_results:
+            return
+
         if len(current) == parts - 1:
             if MIN_TILE <= remaining <= max_val:
                 current.append(remaining)
@@ -162,6 +173,9 @@ def split_with_limit(n, parts, max_val):
             current.append(i)
             recurse(remaining - i, current)
             current.pop()
+            # 提前终止检查
+            if len(results) >= max_results:
+                return
 
     recurse(n, [])
     return results
@@ -467,12 +481,14 @@ def _find_best_scheme_impl(x, y, verbose=False):
     min_x_parts = max(1, int((x + MAX_X - 1) / MAX_X))
     min_y_parts = max(1, int((y + MAX_Y - 1) / MAX_Y))
 
+    # 大网格标志
+    is_large_grid = min_x_parts >= 4 or min_y_parts >= 4
+
     # 智能限制搜索范围：只搜索必要的组合
-    # 对于较大网格（>20格），使用更激进的限制
-    if min_x_parts >= 4 or min_y_parts >= 4:
-        # 大网格：只搜索最小需要的分割数 +/- 1
-        x_search = range(max(1, min_x_parts - 1), min_x_parts + 2)
-        y_search = range(max(1, min_y_parts - 1), min_y_parts + 2)
+    if is_large_grid:
+        # 大网格：只搜索最小需要的分割数
+        x_search = range(min_x_parts, min_x_parts + 1)
+        y_search = range(min_y_parts, min_y_parts + 1)
     else:
         # 小网格：使用原有搜索范围
         x_search = range(2, 8)
@@ -483,27 +499,23 @@ def _find_best_scheme_impl(x, y, verbose=False):
             total_tiles = x_parts * y_parts
             # 大网格需要更多瓦片
             min_required = min_x_parts * min_y_parts
-            max_allowed = max(28, min_required * 2)  # 允许最多 2 倍
+            # 严格限制：只允许最小需要的 1.1 倍
+            max_allowed = max(28, int(min_required * 1.1))
             if total_tiles > max_allowed:
                 continue
 
+            # 大网格使用更小的 max_results
+            max_split_results = 100 if is_large_grid else 1000
+
             # 生成有效的 X 分割
-            x_splits = split_with_limit(x, x_parts, MAX_X)
+            x_splits = split_with_limit(x, x_parts, MAX_X, max_split_results)
             if not x_splits:
                 continue
 
             # 生成有效的 Y 分割
-            y_splits = split_with_limit(y, y_parts, MAX_Y)
+            y_splits = split_with_limit(y, y_parts, MAX_Y, max_split_results)
             if not y_splits:
                 continue
-
-            # 限制每个方向的分割数量，避免组合爆炸
-            max_splits_per_axis = 100
-            if len(x_splits) > max_splits_per_axis:
-                # 只取前 N 个（更均衡的分割通常在中间）
-                x_splits = x_splits[:max_splits_per_axis]
-            if len(y_splits) > max_splits_per_axis:
-                y_splits = y_splits[:max_splits_per_axis]
 
             # 遍历所有组合，找最优
             for xs in x_splits:
