@@ -1,5 +1,6 @@
 """配置管理模块"""
 
+import copy
 import os
 import yaml
 from pathlib import Path
@@ -34,7 +35,7 @@ PRINTER_PRESETS = {
     "h2d": {"bed_x": 300, "bed_y": 320, "max_z": 325},
 }
 
-_config = None
+_config = {}  # 使用字典缓存不同 scope 的配置
 
 
 def _is_project_mode():
@@ -74,8 +75,14 @@ def load_config(scope="auto"):
         scope: "global" | "project" | "auto" (默认自动检测)
     """
     global _config
-    if _config is not None:
-        return _config
+
+    # 如果是 auto，先解析为具体 scope
+    if scope == "auto":
+        scope = get_config_scope()
+
+    # 检查缓存
+    if scope in _config:
+        return _config[scope]
 
     config_path = get_config_path(scope)
     config = _load_single_config(config_path)
@@ -86,7 +93,7 @@ def load_config(scope="auto"):
         project_config = _load_single_config(project_path)
         config = _merge_config(config, project_config)
 
-    _config = config
+    _config[scope] = config
     return config
 
 
@@ -107,7 +114,7 @@ def _load_single_config(config_path):
 
 def _merge_config(global_config, project_config):
     """合并配置，项目级覆盖全局"""
-    result = global_config.copy()
+    result = copy.deepcopy(global_config)
     for section, values in project_config.items():
         if section in result and isinstance(result[section], dict):
             result[section].update(values)
@@ -142,7 +149,7 @@ def get_inventory():
 def reload_config(scope="auto"):
     """重新加载配置"""
     global _config
-    _config = None
+    _config = {}  # 清空所有缓存
     return load_config(scope)
 
 
