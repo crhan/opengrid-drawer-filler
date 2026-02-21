@@ -59,8 +59,6 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 9. **确认库存数量是否正确**，如不正确引导用户更新库存：
 
-```
-
 ### 库存管理
 
 **严格禁止直接编辑 `inventory/inventory.json` 文件。**
