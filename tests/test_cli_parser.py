@@ -42,3 +42,19 @@ class TestParseDimensions:
         """测试预设带份数"""
         result = parse_preset('klean', copies=3)
         assert result == [(270, 170, 3)]
+
+    def test_large_dimension(self):
+        """测试超大尺寸解析（应被限制到 100x100 格子）"""
+        result = parse_dimensions(['28000x28000'])
+        # 解析正确，但后续会被限制
+        assert result == [(28000, 28000, 1)]
+
+    def test_space_separated_format(self):
+        """测试空格分隔格式"""
+        result = parse_dimensions(['265 365'])
+        assert result == [(265, 365, 1)]
+
+    def test_dimension_with_space_and_copies(self):
+        """测试空格分隔带份数"""
+        result = parse_dimensions(['265 365 3'])
+        assert result == [(265, 365, 3)]

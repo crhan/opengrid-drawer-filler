@@ -67,6 +67,8 @@ def parse_dimensions(args):
     支持格式:
     - 485x425 -> (485, 425, 1)
     - 265x365:2 -> (265, 365, 2)
+    - 265 365 -> (265, 365, 1)
+    - 265 365 2 -> (265, 365, 2)
 
     Args:
         args: 位置参数列表
@@ -85,6 +87,13 @@ def parse_dimensions(args):
             h = int(match.group(2))
             c = int(match.group(3)) if match.group(3) else 1
             items.append((w, h, c))
+        else:
+            # 尝试空格分隔格式: w h 或 w h c
+            parts = arg.split()
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                items.append((int(parts[0]), int(parts[1]), 1))
+            elif len(parts) == 3 and all(p.isdigit() for p in parts):
+                items.append((int(parts[0]), int(parts[1]), int(parts[2])))
 
     return items
 
@@ -111,9 +120,11 @@ def get_max_stacks():
 
 
 def get_grid_dimensions(width_mm, depth_mm):
-    """计算可用格子数"""
-    x = width_mm // TILE_SIZE
-    y = depth_mm // TILE_SIZE
+    """计算可用格子数，最大限制为 100x100 (2800x2800mm)"""
+    # 最大格子数限制
+    MAX_GRID = 100
+    x = min(width_mm // TILE_SIZE, MAX_GRID)
+    y = min(depth_mm // TILE_SIZE, MAX_GRID)
     return x, y
 
 
@@ -457,10 +468,11 @@ def _find_best_scheme_impl(x, y, verbose=False):
     min_y_parts = max(1, int((y + MAX_Y - 1) / MAX_Y))
 
     # 智能限制搜索范围：只搜索必要的组合
-    if min_x_parts >= 6 or min_y_parts >= 5:
-        # 大网格：使用更宽的搜索范围
-        x_search = range(max(2, min_x_parts - 1), min_x_parts + 3)
-        y_search = range(max(1, min_y_parts - 1), min_y_parts + 3)
+    # 对于较大网格（>20格），使用更激进的限制
+    if min_x_parts >= 4 or min_y_parts >= 4:
+        # 大网格：只搜索最小需要的分割数 +/- 1
+        x_search = range(max(1, min_x_parts - 1), min_x_parts + 2)
+        y_search = range(max(1, min_y_parts - 1), min_y_parts + 2)
     else:
         # 小网格：使用原有搜索范围
         x_search = range(2, 8)
@@ -471,7 +483,7 @@ def _find_best_scheme_impl(x, y, verbose=False):
             total_tiles = x_parts * y_parts
             # 大网格需要更多瓦片
             min_required = min_x_parts * min_y_parts
-            max_allowed = max(28, min_required)
+            max_allowed = max(28, min_required * 2)  # 允许最多 2 倍
             if total_tiles > max_allowed:
                 continue
 
@@ -484,6 +496,14 @@ def _find_best_scheme_impl(x, y, verbose=False):
             y_splits = split_with_limit(y, y_parts, MAX_Y)
             if not y_splits:
                 continue
+
+            # 限制每个方向的分割数量，避免组合爆炸
+            max_splits_per_axis = 100
+            if len(x_splits) > max_splits_per_axis:
+                # 只取前 N 个（更均衡的分割通常在中间）
+                x_splits = x_splits[:max_splits_per_axis]
+            if len(y_splits) > max_splits_per_axis:
+                y_splits = y_splits[:max_splits_per_axis]
 
             # 遍历所有组合，找最优
             for xs in x_splits:
@@ -532,6 +552,12 @@ def _find_best_scheme_impl(x, y, verbose=False):
                     if len(unique) == 1:
                         if verbose:
                             print(f"  [DEBUG] Checked {candidates_checked} candidates")
+                        return best
+
+                    # 提前终止：如果已经检查了太多候选且找到了合理方案
+                    if candidates_checked > 5000 and best is not None and best['unique_sizes'] <= 3:
+                        if verbose:
+                            print(f"  [DEBUG] Checked {candidates_checked} candidates, early stop")
                         return best
 
     if verbose:
@@ -2091,7 +2117,7 @@ def main():
                 sys.exit(1)
     else:
         # 自动加载默认库存文件
-        inventory = get_inventory(config)
+        inventory = get_inventory()
         if inventory and args.verbose:
             print(f"[DEBUG] 自动加载库存: {inventory}")
 
