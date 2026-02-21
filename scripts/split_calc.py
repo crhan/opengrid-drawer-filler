@@ -2037,11 +2037,18 @@ def main():
                        help='尺寸列表，如 485x425 或 265x365:2')
     parser.add_argument('-c', '--copies', type=int, default=None, help='打印份数 (默认1)')
     parser.add_argument('-p', '--preset', type=str, help='预设尺寸 (klean, ikea-sunda, ikea-kal, ikea-alex, standard, small, medium, large)')
+    parser.add_argument('-l', '--level', choices=['auto', 'global', 'project'], default='auto',
+                        help='配置级别: auto (自动检测), global (全局), project (项目)')
     parser.add_argument('-i', '--inventory', type=str, help='库存文件路径 (JSON格式)')
     parser.add_argument('-j', '--json', action='store_true', help='JSON 格式输出')
     parser.add_argument('-v', '--verbose', action='store_true', help='详细输出')
     parser.add_argument('--list-presets', action='store_true', help='列出所有预设')
     args = parser.parse_args()
+
+    # 设置配置 scope 并重新加载配置
+    scope = args.level
+    from opengrid.config import reload_config
+    config = reload_config(scope)
 
     # 读取库存文件
     # 默认自动加载 scripts/inventory.json，可以通过 -i 参数指定其他文件
@@ -2066,7 +2073,7 @@ def main():
                 sys.exit(1)
     else:
         # 自动加载默认库存文件
-        inventory = get_inventory()
+        inventory = get_inventory(config)
         if inventory and args.verbose:
             print(f"[DEBUG] 自动加载库存: {inventory}")
 
