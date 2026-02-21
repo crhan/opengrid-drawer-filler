@@ -12,16 +12,24 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 **Agent 负责用户交互，脚本负责计算和生成。**
 
-- 脚本不应有 `input()` 交互代码
 - Agent 询问用户需求，调用脚本获取结果，展示给用户
 
 ## Agent 工作流
 
 ### Step 1: 检查配置、加载库存、展示状态
 
-1. 加载配置（使用 Python 直接读取或调用 config 模块）
-2. 加载库存文件 `inventory/inventory.json`
-3. 向用户输出当前状态（库存信息突出展示）：
+1. 检查配置级别（全局/项目）
+   - 项目级：当前目录存在 `opengrid_config.yaml`
+   - 全局：技能目录的 `config/config.yaml`
+2. 加载对应级别的配置
+3. 从配置的 `inventory_path` 读取库存位置
+4. 检查 `config.yaml` 的 `initialized` 状态
+5. 如未初始化，引导用户配置：
+   - 复制配置文件：`cp config/config.example.yaml config/config.yaml`
+   - 编辑设置 `initialized: true` 和打印机型号
+6. 加载配置（使用 Python 直接读取或调用 config 模块）
+7. 加载库存文件（从配置的 `inventory_path` 读取）
+8. 向用户输出当前状态（库存信息突出展示）：
 
    **openGrid 抽屉铺满**
 
@@ -49,12 +57,9 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
    共 **3 种尺寸**, **17 stack** (可用)
    ```
 
-4. 检查 `config/config.yaml` 的 `initialized` 状态
-5. 如未初始化，引导用户配置：
-   - 复制配置文件：`cp config/config.example.yaml config/config.yaml`
-   - 编辑设置 `initialized: true` 和打印机型号
-6. **确认库存数量是否正确**，如不正确引导用户更新
+9. **确认库存数量是否正确**，如不正确引导用户更新库存：
 
+````
 ### 库存管理
 
 **严格禁止直接编辑 `inventory/inventory.json` 文件。**
@@ -73,9 +78,10 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 # 撤销上次操作
 .venv/bin/python scripts/inventory.py undo
-```
+````
 
 **关键约束**：
+
 - 禁止直接编辑 inventory.json
 - 必须提供原因说明
 - 每次操作自动记录到日志
@@ -101,10 +107,10 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ```bash
 # 方案 A：不使用库存（用于对比）
-python3 scripts/split_calc.py -b "265x365:2 325x365:2" -i ""
+python3 scripts/split_calc.py 265x365:2 325x365:2 -i ""
 
 # 方案 B：使用库存（默认）
-python3 scripts/split_calc.py -b "265x365:2 325x365:2"
+python3 scripts/split_calc.py 265x365:2 325x365:2
 ```
 
 **注意**：当库存充足时，方案 B 可能打印次数更少；当库存不匹配时，方案 A 可能反而更优。
@@ -120,6 +126,7 @@ python3 scripts/split_calc.py -b "265x365:2 325x365:2"
 **1. 库存覆盖率表格**（必须展示）
 
 脚本已输出增强版库存展示，包含框线表格：
+
 ```
 ╔════════════════════════════════════════╗
 ║  📦 库存利用                            ║
@@ -196,7 +203,7 @@ python3 scripts/split_calc.py -b "265x365:2 325x365:2"
 .venv/bin/python scripts/split_calc.py 265 365 -j > scheme.json
 
 # 批量
-.venv/bin/python scripts/split_calc.py -b "265x365:2 325x365:2" -j > batch_scheme.json
+.venv/bin/python scripts/split_calc.py 265x365:2 325x365:2 -j > batch_scheme.json
 ```
 
 #### 5.2 提取需要打印的瓦片
@@ -310,7 +317,7 @@ open_in_slicer(stl_files, slicer="orca")
 
 ```bash
 # 批量计算
-python3 scripts/split_calc.py -b "265x365:2 325x365:2"
+python3 scripts/split_calc.py 265x365:2 325x365:2
 
 # 单尺寸计算
 python3 scripts/split_calc.py 485 425
@@ -318,11 +325,43 @@ python3 scripts/split_calc.py 485 425
 # 使用预设
 python3 scripts/split_calc.py -p klean
 
+# 使用项目级配置
+python3 scripts/split_calc.py 265x365:2 -l project
+
+# 使用全局配置
+python3 scripts/split_calc.py 265x365:2 -l global
+
 # 生成 STL
 python3 scripts/slicer.py -g 7x5x3 10x5x3
 ```
 
 详细命令、配置说明、算法规则等请参考 [references/](references/) 目录。
+
+## 配置文件
+
+openGrid 支持两级配置文件：全局配置和项目配置。项目配置会覆盖全局配置的同名字段。
+
+### 全局配置
+
+位置：`{skill_dir}/config/config.yaml`
+
+### 项目配置
+
+位置：`{当前目录}/opengrid_config.yaml`
+
+项目配置示例：
+
+```yaml
+printer:
+  model: h2d  # 覆盖全局
+inventory_path: ./my_project/inventory.json  # 项目库存
+output:
+  stl_dir: ./stl_output/  # 项目输出目录
+```
+
+配置级别检测顺序：
+1. 检查当前目录是否存在 `opengrid_config.yaml`（项目级）
+2. 如不存在，使用技能目录的 `config/config.yaml`（全局级）
 
 ## 初始化
 
