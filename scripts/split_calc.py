@@ -2047,8 +2047,26 @@ def main():
 
     # 设置配置 scope 并重新加载配置
     scope = args.level
-    from opengrid.config import reload_config
+    from opengrid.config import reload_config, get_printer_config
     config = reload_config(scope)
+
+    # 重新计算模块级常量
+    _printer = get_printer_config()
+    TILE_SIZE = config["opengrid"].get("tile_size", 28)
+    MAX_Z = _printer["max_z"]
+    MAX_X = _printer["bed_x"] // TILE_SIZE
+    MAX_Y = _printer["bed_y"] // TILE_SIZE
+
+    # 计算每层厚度
+    tile_type = config["opengrid"].get("tile_type", "Full")
+    interface_separation = config["opengrid"].get("interface_separation", 0.2)
+    stacking_method = config["opengrid"].get("stacking_method", "Ironing")
+
+    if stacking_method == "Ironing":
+        FULL_THICKNESS = TILE_THICKNESS.get(tile_type, 6.8) + 2 * interface_separation
+    else:
+        # Interface Layer: tile_thickness + interface_thickness + 2 * interface_separation
+        FULL_THICKNESS = TILE_THICKNESS.get(tile_type, 6.8) + 0.4 + 2 * interface_separation
 
     # 读取库存文件
     # 默认自动加载 scripts/inventory.json，可以通过 -i 参数指定其他文件
