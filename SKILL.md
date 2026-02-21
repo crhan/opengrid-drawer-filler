@@ -59,7 +59,8 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 9. **确认库存数量是否正确**，如不正确引导用户更新库存：
 
-````
+```
+
 ### 库存管理
 
 **严格禁止直接编辑 `inventory/inventory.json` 文件。**
@@ -78,7 +79,7 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 # 撤销上次操作
 .venv/bin/python scripts/inventory.py undo
-````
+```
 
 **关键约束**：
 
@@ -265,7 +266,7 @@ print('Generated:', result)
 .venv/bin/python scripts/slicer.py -g 7x5x2 3x5x2
 ```
 
-#### 5.3 展示生成结果
+#### 5.4 展示生成结果
 
 STL 生成完成后，向用户展示结果：
 
@@ -278,7 +279,7 @@ STL 生成完成后，向用户展示结果：
   3×5: 2 stack (~/3D打印/opengrid/3x5_Full/opengrid_3x5_Full_s2.stl)
 ```
 
-#### 5.4 后续操作
+#### 5.5 后续操作
 
 询问用户是否需要后续操作：
 
