@@ -1,23 +1,50 @@
 """Inventory CRUD operations"""
 import json
 import os
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Inventory file path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INVENTORY_FILE = os.path.join(SCRIPT_DIR, '..', 'inventory', 'inventory.json')
 
 
-def _get_inventory_file():
-    """Get inventory file path - can be overridden for testing"""
-    if hasattr(sys.modules.get('inventory', None), 'INVENTORY_FILE'):
-        return sys.modules['inventory'].INVENTORY_FILE
-    return INVENTORY_FILE
+def get_inventory_path(config=None):
+    """从配置获取库存文件路径
+
+    Args:
+        config: 配置字典，如为 None 则自动加载
+
+    Returns:
+        Path: 库存文件路径
+    """
+    if config is None:
+        from opengrid.config import load_config
+        config = load_config()
+
+    inventory_path = config.get("inventory_path")
+    if inventory_path:
+        p = Path(inventory_path)
+        if p.is_absolute():
+            return p
+        # 相对路径相对于配置文件所在目录
+        config_dir = Path.cwd()
+        return config_dir / p
+
+    # 默认使用全局 inventory
+    skill_dir = Path(__file__).parent.parent
+    return skill_dir / "inventory" / "inventory.json"
 
 
-def _load_data():
+def _get_inventory_file(config=None):
+    """Get inventory file path - 支持配置指定"""
+    return str(get_inventory_path(config))
+
+
+def _load_data(config=None):
     """Load inventory data with log"""
-    inv_file = _get_inventory_file()
+    inv_file = get_inventory_path(config)
     if not os.path.exists(inv_file):
         return {"inventory": {}, "log": []}
     with open(inv_file, 'r', encoding='utf-8') as f:
@@ -169,9 +196,6 @@ def format_inventory_for_display(inv=None):
 
 共 **{unique} 种尺寸**, **{total} stack** (可用)"""
 
-
-import sys
-def parse_items(args):
     """Parse '7x5:6' format,最后一个非格式参数作为 reason"""
     import re
     items = {}
