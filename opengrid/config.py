@@ -102,14 +102,14 @@ def _load_single_config(config_path):
     if config_path.exists():
         with open(config_path) as f:
             user_config = yaml.safe_load(f) or {}
-        config = DEFAULTS.copy()
+        config = copy.deepcopy(DEFAULTS)
         for section, values in user_config.items():
             if section in config and isinstance(config[section], dict):
                 config[section].update(values)
             else:
                 config[section] = values
         return config
-    return DEFAULTS.copy()
+    return copy.deepcopy(DEFAULTS)
 
 
 def _merge_config(global_config, project_config):
