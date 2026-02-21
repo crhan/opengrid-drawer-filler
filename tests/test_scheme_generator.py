@@ -6,8 +6,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "opengrid"))
 
 from opengrid.scheme_generator import generate_schemes, generate_inventory_aware_scheme
-import inventory as inventory_module
-import inventory as inventory_impl
+from opengrid import inventory as inventory_module
+from opengrid import inventory as inventory_impl
 
 
 @pytest.fixture

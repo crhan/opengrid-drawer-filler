@@ -7,8 +7,8 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'opengrid'))
 
-import inventory as inventory_module
-import inventory as inventory_impl
+from opengrid import inventory as inventory_module
+from opengrid import inventory as inventory_impl
 
 
 @pytest.fixture
