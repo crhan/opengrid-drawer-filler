@@ -17,15 +17,15 @@ class TestConfigScope:
         from opengrid.config import get_config_path, reload_config
         reload_config("global")
         path = get_config_path("global")
-        assert "config.yaml" in str(path)
+        assert str(path).endswith("config.yaml")
 
-    def test_get_config_path_project_nonexistent(self):
+    def test_get_config_path_auto_returns_global_when_no_project_config(self):
         """测试项目配置不存在时返回全局"""
         from opengrid.config import get_config_path, reload_config
         reload_config("auto")
         path = get_config_path("auto")
         # 应该返回全局配置（因为当前目录没有 opengrid_config.yaml）
-        assert "config.yaml" in str(path)
+        assert str(path).endswith("config.yaml")
 
     def test_config_scope_detection(self):
         """测试 scope 检测功能"""
@@ -46,7 +46,7 @@ class TestInventoryPath:
         reload_config("global")
         config = load_config("global")
         path = get_inventory_path(config)
-        assert "inventory.json" in str(path)
+        assert str(path).endswith("inventory.json")
 
     def test_custom_inventory_path(self):
         """测试自定义库存路径"""
