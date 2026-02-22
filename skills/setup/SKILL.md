@@ -1,5 +1,5 @@
 ---
-name: opengrid-drawer-filler-setup
+name: setup
 description: 初始化 openGrid 抽屉铺满环境。包括运行安装脚本、配置 config.yaml、验证配置级别和初始化状态。当用户首次使用或需要重新初始化环境时使用此技能。
 compatibility: 需要 Python 3.12+, OpenSCAD, Homebrew
 ---
@@ -18,6 +18,7 @@ cd ${CLAUDE_PLUGIN_ROOT}
 ```
 
 脚本自动完成：
+
 1. 创建 Python venv (`.venv`)
 2. 安装 Python 依赖 (pyyaml, pytest, Pillow)
 3. 安装 OpenSCAD (通过 Homebrew)
@@ -73,6 +74,7 @@ openGrid 支持两级配置，按优先级：
 2. **全局级**: 技能目录的 `config/config.yaml`
 
 检测逻辑：
+
 ```
 if exists("opengrid_config.yaml"):
     use 项目级配置
@@ -86,10 +88,10 @@ else:
 
 ```yaml
 printer:
-  model: x1c  # 覆盖全局
-inventory_path: ./my_project/inventory.json  # 项目专属库存
+  model: x1c # 覆盖全局
+inventory_path: ./my_project/inventory.json # 项目专属库存
 output:
-  stl_dir: ./stl_output/  # 项目专属输出
+  stl_dir: ./stl_output/ # 项目专属输出
 ```
 
 ### Step 4: 验证初始化状态
