@@ -49,10 +49,9 @@ if not is_project_registered(cwd):
 
 如果用户选择 `[2] 切换到已有项目`，提示用户输入项目编号，然后 `cd` 到对应目录继续执行。
 3. 从配置的 `inventory_path` 读取库存位置
-4. 检查 `config.yaml` 的 `initialized` 状态
+4. 检查 `opengrid_config.yaml` 的 `initialized` 状态
 5. 如未初始化，引导用户配置：
-   - 复制配置文件：`cp config/config.example.yaml config/config.yaml`
-   - 编辑设置 `initialized: true` 和打印机型号
+   - 编辑 `opengrid_config.yaml` 设置 `initialized: true` 和打印机型号
 6. 加载配置（使用 Python 直接读取或调用 config 模块）
 7. 加载库存文件（从配置的 `inventory_path` 读取）
 8. 向用户输出当前状态（库存信息突出展示）：
@@ -111,10 +110,9 @@ ${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.p
 **重要**：执行 inventory 命令时必须：
 
 1. **切换到项目目录**（有 `opengrid_config.yaml` 的目录）
-2. **使用 `-l project` 参数**（或确保当前目录有 `opengrid_config.yaml`）
-3. **使用绝对路径**调用 `.venv` 和 `scripts/inventory.py`
+2. 使用绝对路径调用 `.venv` 和 `scripts/inventory.py`
 
-如果不在项目目录下，会使用全局配置，无法找到项目库存。
+如果不在项目目录下，会报错找不到配置文件。
 
 **关键约束**：
 
@@ -142,14 +140,14 @@ ${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.p
 调用 `split_calc.py`：
 
 ```bash
-# 方案 A：不使用库存（用于对比）
+# 方案 A：不使用库存
 python3 scripts/split_calc.py 265x365:2 325x365:2 -i ""
 
-# 方案 B：使用库存（默认）
-python3 scripts/split_calc.py 265x365:2 325x365:2
+# 方案 B：使用库存（通过 -i 指定库存文件）
+python3 scripts/split_calc.py 265x365:2 325x365:2 -i inventory.json
 ```
 
-**注意**：当库存充足时，方案 B 可能打印次数更少；当库存不匹配时，方案 A 可能反而更优。
+**注意**：必须通过 `-i` 参数显式指定库存文件路径，否则不会使用库存。
 
 ### Step 4: 展示方案
 
@@ -361,11 +359,11 @@ python3 scripts/split_calc.py 485 425
 # 使用预设
 python3 scripts/split_calc.py -p klean
 
-# 使用项目级配置
-python3 scripts/split_calc.py 265x365:2 -l project
+# 使用库存（必须通过 -i 指定库存文件）
+python3 scripts/split_calc.py 265x365:2 -i inventory.json
 
-# 使用全局配置
-python3 scripts/split_calc.py 265x365:2 -l global
+# 不使用库存
+python3 scripts/split_calc.py 265x365:2 -i ""
 
 # 生成 STL
 python3 scripts/slicer.py -g 7x5x3 10x5x3
@@ -375,11 +373,7 @@ python3 scripts/slicer.py -g 7x5x3 10x5x3
 
 ## 配置文件
 
-openGrid 支持两级配置文件：全局配置和项目配置。项目配置会覆盖全局配置的同名字段。
-
-### 全局配置
-
-位置：`{skill_dir}/config/config.yaml`
+openGrid 使用项目级配置文件，必须在项目目录下存在 `opengrid_config.yaml`。
 
 ### 项目配置
 
@@ -388,16 +382,15 @@ openGrid 支持两级配置文件：全局配置和项目配置。项目配置�
 项目配置示例：
 
 ```yaml
+initialized: true
 printer:
-  model: h2d  # 覆盖全局
-inventory_path: ./inventory.json  # 项目库存
+  model: h2d
+inventory_path: ./inventory.json  # 项目库存文件路径
 output:
   stl_dir: ./stl_output/  # 项目输出目录
 ```
 
-配置级别检测顺序：
-1. 检查当前目录是否存在 `opengrid_config.yaml`（项目级）
-2. 如不存在，使用技能目录的 `config/config.yaml`（全局级）
+**注意**：脚本必须在有 `opengrid_config.yaml` 的目录下运行，否则会报错。
 
 ## 初始化
 
