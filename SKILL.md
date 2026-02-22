@@ -66,18 +66,29 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 所有库存修改必须通过脚本进行，并记录修改原因：
 
 ```bash
-# 查看当前库存
-.venv/bin/python scripts/inventory.py list
+# 变量定义
+SKILL_DIR=/Users/ruohanc/.claude/skills/opengrid-drawer-filler
+
+# 查看当前库存（使用项目级配置）
+cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project list
 
 # 添加库存 (格式: 宽x高:数量)
-.venv/bin/python scripts/inventory.py add 8x8:5 6x7:3 "入库原因：购买新材料"
+cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project add 8x8:5 6x7:3 "入库原因：购买新材料"
 
 # 扣减库存
-.venv/bin/python scripts/inventory.py deduct 8x8:2 "扣减原因：打印使用"
+cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project deduct 8x8:2 "扣减原因：打印使用"
 
 # 撤销上次操作
-.venv/bin/python scripts/inventory.py undo
+cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project undo
 ```
+
+**重要**：执行 inventory 命令时必须：
+
+1. **切换到项目目录**（有 `opengrid_config.yaml` 的目录）
+2. **使用 `-l project` 参数**（或确保当前目录有 `opengrid_config.yaml`）
+3. **使用绝对路径**调用 `.venv` 和 `scripts/inventory.py`
+
+如果不在项目目录下，会使用全局配置，无法找到项目库存。
 
 **关键约束**：
 
