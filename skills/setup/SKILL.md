@@ -55,7 +55,7 @@ output:
   stl_dir: ~/3D打印/opengrid/  # STL 输出目录
 
 # 库存配置
-inventory_path: ./inventory/inventory.json  # 库存文件位置
+inventory_path: ./inventory.json  # 项目专属库存文件
 
 # 瓦片配置
 tiles:
@@ -65,6 +65,22 @@ tiles:
 # 初始化状态 (首次配置后设为 true)
 initialized: true
 ```
+
+### Step 2.5: 注册项目到索引
+
+首次配置项目时，运行以下命令注册项目：
+
+```bash
+.venv/bin/python -c "
+from opengrid.projects import register_project
+import os
+name = input('请输入项目名称（如"厨房抽屉"）: ')
+register_project(name, os.getcwd())
+print('项目已注册到索引')
+"
+```
+
+这会将当前目录注册到全局项目索引 (`~/.opengrid/projects.json`)。
 
 ### Step 3: 配置级别检测
 
@@ -89,7 +105,7 @@ else:
 ```yaml
 printer:
   model: x1c # 覆盖全局
-inventory_path: ./my_project/inventory.json # 项目专属库存
+inventory_path: ./inventory.json # 项目专属库存
 output:
   stl_dir: ./stl_output/ # 项目专属输出
 ```
@@ -150,6 +166,7 @@ def check_initialized(config):
 ## 快速检查清单
 
 - [ ] 运行 `./scripts/setup.sh` 完成安装
-- [ ] 复制 `config/config.example.yaml` → `config/config.yaml`
-- [ ] 编辑配置: 设置 `initialized: true` 和打印机型号
+- [ ] 复制 `config/config.example.yaml` → `opengrid_config.yaml`（项目级）或 `config/config.yaml`（全局级）
+- [ ] 编辑配置: 设置 `initialized: true`、打印机型号、项目库存路径
+- [ ] 注册项目到索引（项目级配置必需）
 - [ ] 验证: 运行 `split_calc.py 485 425` 确认配置正确
