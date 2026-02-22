@@ -18,6 +18,7 @@ def main():
     # 注册子命令
     commands.split.add_parser(subparsers)
     commands.inventory.add_parser(subparsers)
+    commands.slicer.add_parser(subparsers)
 
     args = parser.parse_args()
 
