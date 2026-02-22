@@ -4,6 +4,8 @@ from opengrid.core import (
     TILE_SIZE, MAX_X, MAX_Y, MIN_TILE, MAX_Z, FULL_THICKNESS,
     TILE_THICKNESS, PRESETS as CORE_PRESETS,
 )
+# SWAP_PENALTY is defined in constants.py but not exported
+SWAP_PENALTY = 60
 from opengrid.core.grid import get_max_stacks, get_grid_dimensions, validate_tile
 from opengrid.core.splitter import split_with_limit, calc_balance, calc_scheme_balance
 from opengrid.core.scheme import find_best_scheme, find_all_schemes, normalize_tiles, validate_tiles
