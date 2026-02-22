@@ -5,8 +5,12 @@ from typing import Any
 
 def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
     """打印人类可读的方案"""
+    # 计算网格尺寸
+    grid_w = max(scheme.get('x_splits', [])) if scheme.get('x_splits') else 0
+    grid_h = max(scheme.get('y_splits', [])) if scheme.get('y_splits') else 0
+
     print(f"抽屉尺寸: {width} x {depth} mm (x{copies})")
-    print(f"网格: {scheme.get('grid_w')} x {scheme.get('grid_h')}")
+    print(f"网格: {grid_w} x {grid_h}")
     print("瓦片分割:")
     for tile in scheme.get('tiles', []):
         print(f"  {tile[0]}x{tile[1]}")
