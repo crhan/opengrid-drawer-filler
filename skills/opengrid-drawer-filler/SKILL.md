@@ -18,10 +18,36 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ### Step 1: 检查配置、加载库存、展示状态
 
-1. 检查配置级别（全局/项目）
-   - 项目级：当前目录存在 `opengrid_config.yaml`
-   - 全局：技能目录的 `config/config.yaml`
-2. 加载对应级别的配置
+**首先检测当前目录是否为已注册项目：**
+
+```python
+import os
+from opengrid.projects import is_project_registered, list_projects, get_last_active
+
+cwd = os.getcwd()
+
+if not is_project_registered(cwd):
+    # 当前目录不是已注册项目
+    projects = list_projects()
+    last_active = get_last_active()
+
+    print("⚠️ 当前目录不是已注册的项目")
+    print()
+
+    if projects:
+        print("已注册的项目：")
+        for i, p in enumerate(projects, 1):
+            marker = " ← 上次使用" if p["path"] == last_active else ""
+            print(f"  {i}. {p['name']} ({p['path']}){marker}")
+        print()
+        print("请选择操作：")
+        print("  [1] 初始化新项目（调用 setup skill）")
+        print("  [2] 切换到已有项目")
+    else:
+        print("没有已注册的项目，请先初始化新项目（调用 setup skill）")
+```
+
+如果用户选择 `[2] 切换到已有项目`，提示用户输入项目编号，然后 `cd` 到对应目录继续执行。
 3. 从配置的 `inventory_path` 读取库存位置
 4. 检查 `config.yaml` 的 `initialized` 状态
 5. 如未初始化，引导用户配置：
@@ -61,23 +87,25 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ### 库存管理
 
-**严格禁止直接编辑 `inventory/inventory.json` 文件。**
+**项目级库存**：每个项目独立管理自己的库存（通过 `inventory_path` 配置指定）。
+
+**严格禁止直接编辑库存文件。**
 
 所有库存修改必须通过脚本进行，并记录修改原因：
 
 ```bash
 # 使用 ${CLAUDE_PLUGIN_ROOT} 变量引用插件根目录
-# 查看当前库存（使用项目级配置）
-cd /path/to/your/project && ${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py -l project list
+# 查看当前库存
+${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py list
 
 # 添加库存 (格式: 宽x高:数量)
-cd /path/to/your/project && ${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py -l project add 8x8:5 6x7:3 "入库原因：购买新材料"
+${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py add 8x8:5 6x7:3 "入库原因：购买新材料"
 
 # 扣减库存
-cd /path/to/your/project && ${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py -l project deduct 8x8:2 "扣减原因：打印使用"
+${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py deduct 8x8:2 "扣减原因：打印使用"
 
 # 撤销上次操作
-cd /path/to/your/project && ${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py -l project undo
+${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py undo
 ```
 
 **重要**：执行 inventory 命令时必须：
@@ -362,7 +390,7 @@ openGrid 支持两级配置文件：全局配置和项目配置。项目配置�
 ```yaml
 printer:
   model: h2d  # 覆盖全局
-inventory_path: ./my_project/inventory.json  # 项目库存
+inventory_path: ./inventory.json  # 项目库存
 output:
   stl_dir: ./stl_output/  # 项目输出目录
 ```
