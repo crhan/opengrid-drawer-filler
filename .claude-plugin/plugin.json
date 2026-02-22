@@ -1,0 +1,14 @@
+{
+  "name": "opengrid-drawer-filler",
+  "description": "计算抽屉最优瓦片分割方案并生成 STL 文件用于 3D 打印。根据抽屉尺寸计算最优 openGrid 瓦片布局，支持库存管理和批量计算。",
+  "version": "1.0.0",
+  "author": {
+    "name": "Ruohan Chen",
+    "url": "https://github.com/ruohanc/opengrid-drawer-filler"
+  },
+  "homepage": "https://github.com/ruohanc/opengrid-drawer-filler",
+  "repository": "https://github.com/ruohanc/opengrid-drawer-filler",
+  "license": "MIT",
+  "keywords": ["3d-printing", "opengrid", "drawer", "stl", "organization"],
+  "skills": "./skills"
+}
