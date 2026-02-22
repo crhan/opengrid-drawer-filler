@@ -12,7 +12,7 @@ import sys
 
 # 导入配置模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
-from opengrid.config import load_config, get_printer_config, get_inventory
+from opengrid.config import load_config, get_printer_config
 
 # 加载配置
 _config = load_config()
@@ -2075,18 +2075,15 @@ def main():
                        help='尺寸列表，如 485x425 或 265x365:2')
     parser.add_argument('-c', '--copies', type=int, default=None, help='打印份数 (默认1)')
     parser.add_argument('-p', '--preset', type=str, help='预设尺寸 (klean, ikea-sunda, ikea-kal, ikea-alex, standard, small, medium, large)')
-    parser.add_argument('-l', '--level', choices=['auto', 'global', 'project'], default='auto',
-                        help='配置级别: auto (自动检测), global (全局), project (项目)')
     parser.add_argument('-i', '--inventory', type=str, help='库存文件路径 (JSON格式)')
     parser.add_argument('-j', '--json', action='store_true', help='JSON 格式输出')
     parser.add_argument('-v', '--verbose', action='store_true', help='详细输出')
     parser.add_argument('--list-presets', action='store_true', help='列出所有预设')
     args = parser.parse_args()
 
-    # 设置配置 scope 并重新加载配置
-    scope = args.level
-    from opengrid.config import reload_config, get_printer_config
-    config = reload_config(scope)
+    # 加载项目配置
+    from opengrid.config import load_config, get_printer_config
+    config = load_config()
 
     # 重新计算模块级常量
     _printer = get_printer_config()
@@ -2107,8 +2104,7 @@ def main():
         FULL_THICKNESS = TILE_THICKNESS.get(tile_type, 6.8) + 0.4 + 2 * interface_separation
 
     # 读取库存文件
-    # 默认自动加载 scripts/inventory.json，可以通过 -i 参数指定其他文件
-    # 传入 -i "" 可以禁用库存
+    # 必须通过 -i 参数显式指定库存文件
     inventory = None
     if args.inventory is not None:
         # 用户显式指定了库存文件路径
@@ -2127,11 +2123,7 @@ def main():
             except json.JSONDecodeError as e:
                 print(f"错误: 库存文件格式错误: {e}")
                 sys.exit(1)
-    else:
-        # 自动加载默认库存文件
-        inventory = get_inventory()
-        if inventory and args.verbose:
-            print(f"[DEBUG] 自动加载库存: {inventory}")
+    # 如果未指定 -i 参数，不自动加载库存
 
     # 列出预设
     if args.list_presets:
@@ -2202,7 +2194,4 @@ def main():
         batch_mode(' '.join(batch_items), args.verbose, inventory=inventory, json_output=args.json)
 
 if __name__ == "__main__":
-    from opengrid.config import ensure_initialized, reload_config
-    ensure_initialized()
-    reload_config()
     main()

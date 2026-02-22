@@ -478,6 +478,4 @@ def main():
 
 
 if __name__ == "__main__":
-    from opengrid.config import ensure_initialized
-    ensure_initialized()
     main()
