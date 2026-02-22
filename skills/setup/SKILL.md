@@ -8,13 +8,22 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Homebrew
 
 首次使用 openGrid 前完成环境配置。
 
+> **重要**: 所有操作在用户项目目录下进行，不使用 cd 命令。
+
+**插件目录路径**（在所有命令中使用）:
+```bash
+PLUGIN_ROOT="/Users/ruohanc/Documents/projects/opengrid_plugin"
+```
+
 ## 工作流程
 
 ### Step 1: 运行安装脚本
 
+安装脚本在插件目录下安装依赖，使用绝对路径调用：
+
 ```bash
-cd ${CLAUDE_PLUGIN_ROOT}
-./scripts/setup.sh
+# 运行安装脚本（无需 cd）
+"$PLUGIN_ROOT/scripts/setup.sh"
 ```
 
 脚本自动完成：
@@ -83,10 +92,11 @@ opengrid:
 首次配置项目时，运行以下命令注册项目：
 
 ```bash
-.venv/bin/python -c "
+# 注册项目（无需 cd）
+PYTHONPATH="$PLUGIN_ROOT" "$PLUGIN_ROOT/.venv/bin/python" -c "
 from opengrid.projects import register_project
 import os
-name = input('请输入项目名称（如"厨房抽屉"）: ')
+name = input('请输入项目名称（如\"厨房抽屉\"）: ')
 register_project(name, os.getcwd())
 print('项目已注册到索引')
 "
@@ -109,17 +119,17 @@ echo '{"inventory": {}, "log": []}' > inventory.json
 
 ```bash
 # 测试配置加载（在项目目录下）
-.venv/bin/python -c "from opengrid.config import load_config; c = load_config(); print('initialized:', c.get('initialized'))"
+"$PLUGIN_ROOT/.venv/bin/python" -c "from opengrid.config import load_config; c = load_config(); print('initialized:', c.get('initialized'))"
 
 # 测试方案计算
-.venv/bin/python scripts/split_calc.py 485 425 -i inventory.json
+"$PLUGIN_ROOT/.venv/bin/python" "$PLUGIN_ROOT/scripts/split_calc.py" 485 425 -i inventory.json
 ```
 
 ## 快速检查清单
 
-- [ ] 运行 `./scripts/setup.sh` 完成安装
+- [ ] 运行 `"$PLUGIN_ROOT/scripts/setup.sh"` 完成安装
 - [ ] 在项目目录下创建 `opengrid_config.yaml`
 - [ ] 编辑配置: 设置 `initialized: true`、打印机型号、库存路径
 - [ ] 创建 `inventory.json` 文件
 - [ ] 注册项目到索引（可选）
-- [ ] 验证: 运行 `split_calc.py 485 425 -i inventory.json` 确认配置正确
+- [ ] 验证: 运行 `"$PLUGIN_ROOT/.venv/bin/python" "$PLUGIN_ROOT/scripts/split_calc.py" 485 425 -i inventory.json` 确认配置正确
