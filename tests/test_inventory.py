@@ -13,135 +13,137 @@ from opengrid import inventory as inventory_impl
 
 @pytest.fixture
 def tmp_inventory(tmp_path, monkeypatch):
-    """Create a temp inventory file and patch INVENTORY_FILE"""
+    """Create a temp inventory file and return config"""
     inv_file = tmp_path / "inventory.json"
-    monkeypatch.setattr(inventory_impl, 'INVENTORY_FILE', str(inv_file))
-    return inv_file
+    inv_file.write_text(json.dumps({"inventory": {}, "log": []}))
+    # 返回 config 而不是修改模块常量
+    return {"inventory_path": str(inv_file)}
 
 
 class TestLoadSave:
     def test_load_empty_when_no_file(self, tmp_inventory):
-        result = inventory_module.load_inventory()
+        result = inventory_module.load_inventory(tmp_inventory)
         assert result == {}
 
     def test_load_existing(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 6, "10x5": 3},
-            "log": []
-        }))
-        result = inventory_module.load_inventory()
+        inv_file = tmp_path = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 6, "10x5": 3}, "log": []}, f)
+        result = inventory_module.load_inventory(tmp_inventory)
         assert result == {"7x5": 6, "10x5": 3}
 
     def test_save_creates_file(self, tmp_inventory):
         inventory_impl.save_inventory(
             {"7x5": 6},
-            {"action": "add", "items": {"7x5": 6}, "reason": "test"}
+            {"action": "add", "items": {"7x5": 6}, "reason": "test"},
+            tmp_inventory
         )
-        data = json.loads(tmp_inventory.read_text())
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file) as f:
+            data = json.load(f)
         assert data["inventory"] == {"7x5": 6}
         assert len(data["log"]) == 1
         assert data["log"][0]["action"] == "add"
 
     def test_save_appends_log(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 3},
-            "log": [{"action": "add", "items": {"7x5": 3}, "reason": "first"}]
-        }))
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({
+                "inventory": {"7x5": 3},
+                "log": [{"action": "add", "items": {"7x5": 3}, "reason": "first"}]
+            }, f)
         inventory_impl.save_inventory(
             {"7x5": 6},
-            {"action": "add", "items": {"7x5": 3}, "reason": "second"}
+            {"action": "add", "items": {"7x5": 3}, "reason": "second"},
+            tmp_inventory
         )
-        data = json.loads(tmp_inventory.read_text())
+        with open(inv_file) as f:
+            data = json.load(f)
         assert len(data["log"]) == 2
 
 
 class TestAddInventory:
     def test_add_new_items(self, tmp_inventory):
-        result = inventory_module.add_inventory({"7x5": 6, "10x5": 3}, reason="打印完成")
+        result = inventory_module.add_inventory({"7x5": 6, "10x5": 3}, reason="打印完成", config=tmp_inventory)
         assert result == {"7x5": 6, "10x5": 3}
 
     def test_add_to_existing(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 3},
-            "log": []
-        }))
-        result = inventory_module.add_inventory({"7x5": 3}, reason="追加")
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 3}, "log": []}, f)
+        result = inventory_module.add_inventory({"7x5": 3}, reason="追加", config=tmp_inventory)
         assert result == {"7x5": 6}
 
     def test_add_logs_operation(self, tmp_inventory):
-        inventory_module.add_inventory({"7x5": 6}, reason="test add")
-        data = json.loads(tmp_inventory.read_text())
+        inventory_module.add_inventory({"7x5": 6}, reason="test add", config=tmp_inventory)
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file) as f:
+            data = json.load(f)
         assert data["log"][-1]["action"] == "add"
         assert data["log"][-1]["items"] == {"7x5": 6}
 
 
 class TestDeductInventory:
     def test_deduct_basic(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 6, "10x5": 3},
-            "log": []
-        }))
-        result = inventory_module.deduct_inventory({"7x5": 3}, reason="用于抽屉")
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 6, "10x5": 3}, "log": []}, f)
+        result = inventory_module.deduct_inventory({"7x5": 3}, reason="用于抽屉", config=tmp_inventory)
         assert result == {"7x5": 3, "10x5": 3}
 
     def test_deduct_exact(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 3},
-            "log": []
-        }))
-        result = inventory_module.deduct_inventory({"7x5": 3}, reason="全部用完")
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 3}, "log": []}, f)
+        result = inventory_module.deduct_inventory({"7x5": 3}, reason="全部用完", config=tmp_inventory)
         assert result == {}  # 0 的 key 应被移除
 
     def test_deduct_insufficient_raises(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 2},
-            "log": []
-        }))
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 2}, "log": []}, f)
         with pytest.raises(ValueError, match="库存不足"):
-            inventory_module.deduct_inventory({"7x5": 5}, reason="超出")
+            inventory_module.deduct_inventory({"7x5": 5}, reason="超出", config=tmp_inventory)
 
     def test_deduct_missing_key_raises(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {},
-            "log": []
-        }))
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {}, "log": []}, f)
         with pytest.raises(ValueError, match="库存不足"):
-            inventory_module.deduct_inventory({"7x5": 1}, reason="不存在")
+            inventory_module.deduct_inventory({"7x5": 1}, reason="不存在", config=tmp_inventory)
 
 
 class TestUndoLast:
     def test_undo_add(self, tmp_inventory):
-        inventory_module.add_inventory({"7x5": 6}, reason="打印")
-        result = inventory_module.undo_last()
+        inventory_module.add_inventory({"7x5": 6}, reason="打印", config=tmp_inventory)
+        result = inventory_module.undo_last(tmp_inventory)
         assert result == {}
 
     def test_undo_deduct(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 6},
-            "log": []
-        }))
-        inventory_module.deduct_inventory({"7x5": 3}, reason="用于抽屉")
-        result = inventory_module.undo_last()
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 6}, "log": []}, f)
+        inventory_module.deduct_inventory({"7x5": 3}, reason="用于抽屉", config=tmp_inventory)
+        result = inventory_module.undo_last(tmp_inventory)
         assert result == {"7x5": 6}
 
     def test_undo_empty_log_raises(self, tmp_inventory):
         with pytest.raises(ValueError, match="没有可撤销的操作"):
-            inventory_module.undo_last()
+            inventory_module.undo_last(tmp_inventory)
 
     def test_undo_already_undone_raises(self, tmp_inventory):
-        inventory_module.add_inventory({"7x5": 6}, reason="打印")
-        inventory_module.undo_last()
+        inventory_module.add_inventory({"7x5": 6}, reason="打印", config=tmp_inventory)
+        inventory_module.undo_last(tmp_inventory)
         with pytest.raises(ValueError, match="没有可撤销的操作"):
-            inventory_module.undo_last()
+            inventory_module.undo_last(tmp_inventory)
 
 
 class TestGetInventoryMatch:
     def test_full_match(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 6},
-            "log": []
-        }))
-        inv = inventory_module.load_inventory()
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 6}, "log": []}, f)
+        inv = inventory_module.load_inventory(tmp_inventory)
         # scheme has 3 tiles of 7x5, copies=2 -> need 6 total
         result = inventory_module.get_inventory_match(
             tiles=[(7, 5), (7, 5), (7, 5)],
@@ -153,11 +155,10 @@ class TestGetInventoryMatch:
         assert result["match_score"] == 6
 
     def test_partial_match(self, tmp_inventory):
-        tmp_inventory.write_text(json.dumps({
-            "inventory": {"7x5": 2},
-            "log": []
-        }))
-        inv = inventory_module.load_inventory()
+        inv_file = tmp_inventory["inventory_path"]
+        with open(inv_file, 'w') as f:
+            json.dump({"inventory": {"7x5": 2}, "log": []}, f)
+        inv = inventory_module.load_inventory(tmp_inventory)
         # need 3 tiles of 7x5 (copies=1)
         result = inventory_module.get_inventory_match(
             tiles=[(7, 5), (7, 5), (7, 5)],

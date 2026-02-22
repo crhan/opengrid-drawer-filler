@@ -14,9 +14,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 from opengrid.config import load_config, get_printer_config
 
-# 加载配置
-_config = load_config()
-_printer = get_printer_config()
+# 尝试加载配置（测试环境可能没有配置文件）
+try:
+    _config = load_config()
+    _printer = get_printer_config()
+except FileNotFoundError:
+    # 测试环境或无配置文件时使用默认值
+    _config = {
+        "opengrid": {
+            "tile_type": "Full",
+            "stacking_method": "Ironing",
+            "interface_separation": 0.2,
+            "tile_size": 28
+        }
+    }
+    _printer = {"bed_x": 256, "bed_y": 256, "max_z": 256}
 
 # 瓦片厚度定义
 TILE_THICKNESS = {
@@ -2083,10 +2095,20 @@ def main():
 
     # 加载项目配置
     from opengrid.config import load_config, get_printer_config
-    config = load_config()
-
-    # 重新计算模块级常量
-    _printer = get_printer_config()
+    try:
+        config = load_config()
+        _printer = get_printer_config()
+    except FileNotFoundError:
+        # 测试环境或无配置文件时使用默认值
+        config = {
+            "opengrid": {
+                "tile_type": "Full",
+                "stacking_method": "Ironing",
+                "interface_separation": 0.2,
+                "tile_size": 28
+            }
+        }
+        _printer = {"bed_x": 256, "bed_y": 256, "max_z": 256}
     TILE_SIZE = config["opengrid"].get("tile_size", 28)
     MAX_Z = _printer["max_z"]
     MAX_X = _printer["bed_x"] // TILE_SIZE

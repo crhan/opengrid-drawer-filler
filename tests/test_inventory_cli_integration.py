@@ -42,7 +42,7 @@ printer:
 def run_inventory_cli(args, cwd):
     """运行 inventory.py CLI 并返回结果"""
     result = subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py"), "-l", "project"] + args,
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py")] + args,
         capture_output=True,
         text=True,
         cwd=cwd
