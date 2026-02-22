@@ -6,10 +6,6 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-# Inventory file path
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INVENTORY_FILE = os.path.join(SCRIPT_DIR, '..', 'inventory', 'inventory.json')
-
 
 def parse_items(args):
     """Parse '7x5:6' format,最后一个非格式参数作为 reason"""
@@ -26,88 +22,98 @@ def parse_items(args):
     return items, reason
 
 
-def get_inventory_path(config=None):
+def get_inventory_path(config):
     """从配置获取库存文件路径
 
     Args:
-        config: 配置字典，如为 None 则自动加载
+        config: 配置字典，必须包含 inventory_path
 
     Returns:
         Path: 库存文件路径
+
+    Raises:
+        ValueError: 如果未配置 inventory_path
     """
     if config is None:
-        from opengrid.config import load_config
-        config = load_config()
+        raise ValueError(
+            "未配置 inventory_path\n"
+            "请在 opengrid_config.yaml 中设置 inventory_path"
+        )
 
     inventory_path = config.get("inventory_path")
-    if inventory_path:
-        p = Path(inventory_path)
-        if p.is_absolute():
-            return p
-        # 相对路径相对于配置文件所在目录
-        config_dir = Path.cwd()
-        return config_dir / p
+    if not inventory_path:
+        raise ValueError(
+            "未配置 inventory_path\n"
+            "请在 opengrid_config.yaml 中设置 inventory_path"
+        )
 
-    # 默认使用全局 inventory
-    skill_dir = Path(__file__).parent.parent
-    return skill_dir / "inventory" / "inventory.json"
+    p = Path(inventory_path)
+    if p.is_absolute():
+        return p
+    # 相对路径相对于当前工作目录
+    return Path.cwd() / p
 
 
-def _get_inventory_file(config=None):
-    """Get inventory file path - 支持配置指定"""
+def _get_inventory_file(config):
+    """Get inventory file path
+
+    Args:
+        config: 配置字典
+
+    Returns:
+        str: 库存文件路径
+    """
     return str(get_inventory_path(config))
 
 
-def _load_data(config=None):
+def _load_data(config):
     """Load inventory data with log
 
     Args:
-        config: config dict, if None uses INVENTORY_FILE constant (for backward compatibility)
+        config: 配置字典，必须包含 inventory_path
+
+    Returns:
+        dict: 库存数据
     """
-    if config is None:
-        # Use INVENTORY_FILE constant for backward compatibility with tests
-        inv_file = INVENTORY_FILE
-    else:
-        inv_file = get_inventory_path(config)
+    inv_file = get_inventory_path(config)
     if not os.path.exists(inv_file):
         return {"inventory": {}, "log": []}
     with open(inv_file, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
-def _save_data(data, config=None):
+def _save_data(data, config):
     """Save inventory data
 
     Args:
         data: inventory data dict
-        config: config dict, if None uses INVENTORY_FILE constant (for backward compatibility)
+        config: 配置字典，必须包含 inventory_path
     """
-    if config is None:
-        # Use INVENTORY_FILE constant for backward compatibility with tests
-        inv_file = INVENTORY_FILE
-    else:
-        inv_file = get_inventory_path(config)
+    inv_file = get_inventory_path(config)
     with open(inv_file, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def load_inventory(config=None):
+def load_inventory(config):
     """Return current inventory dict
 
     Args:
-        config: config dict, if None uses default path
+        config: 配置字典，必须包含 inventory_path
+
+    Returns:
+        dict: 库存数据
     """
     data = _load_data(config)
     return data.get("inventory", {})
 
 
-def save_inventory(inv, log_entry, config=None):
+def save_inventory(inv, log_entry, config):
     """Save inventory with log entry
 
     Args:
         inv: inventory dict
         log_entry: log entry dict
-        config: config dict, if None uses default path
+        config: 配置字典，必须包含 inventory_path
     """
     data = _load_data(config)
     data["inventory"] = inv
@@ -116,13 +122,13 @@ def save_inventory(inv, log_entry, config=None):
     _save_data(data, config)
 
 
-def add_inventory(items, reason="", config=None):
+def add_inventory(items, reason, config):
     """Add items to inventory
 
     Args:
         items: dict of items to add
         reason: reason for the addition
-        config: config dict, if None uses default path
+        config: 配置字典，必须包含 inventory_path
     """
     inv = load_inventory(config)
     for key, count in items.items():
@@ -131,13 +137,13 @@ def add_inventory(items, reason="", config=None):
     return inv
 
 
-def deduct_inventory(items, reason="", config=None):
+def deduct_inventory(items, reason, config):
     """Deduct items from inventory
 
     Args:
         items: dict of items to deduct
         reason: reason for the deduction
-        config: config dict, if None uses default path
+        config: 配置字典，必须包含 inventory_path
     """
     inv = load_inventory(config)
     for key, count in items.items():
@@ -152,11 +158,11 @@ def deduct_inventory(items, reason="", config=None):
     return inv
 
 
-def undo_last(config=None):
+def undo_last(config):
     """Undo last operation
 
     Args:
-        config: config dict, if None uses default path
+        config: 配置字典，必须包含 inventory_path
 
     Raises:
         ValueError: if no operation to undo
@@ -193,9 +199,13 @@ def undo_last(config=None):
     return inv
 
 
-def print_inventory():
-    """Print current inventory"""
-    inv = load_inventory()
+def print_inventory(config):
+    """Print current inventory
+
+    Args:
+        config: 配置字典，必须包含 inventory_path
+    """
+    inv = load_inventory(config)
     if not inv:
         print("库存为空")
         return
@@ -215,13 +225,13 @@ def format_inventory_for_display(inv=None):
     """Format inventory for Agent display in Step 1
 
     Args:
-        inv: inventory dict, if None loads from file
+        inv: inventory dict, if None returns empty message
 
     Returns:
         str: formatted inventory display
     """
     if inv is None:
-        inv = load_inventory()
+        inv = {}
 
     if not inv:
         return """╔════════════════════════════════════════╗
@@ -308,33 +318,42 @@ def main():
         print("用法: inventory.py list|add|deduct|undo ...")
         sys.exit(1)
 
+    # 直接加载项目配置
+    from opengrid.config import load_config
+    config = load_config()
+
+    # 构建 config 字典用于库存操作
+    from opengrid.inventory import get_inventory_path
+    inv_path = get_inventory_path(config)
+    inventory_config = {"inventory_path": str(inv_path)}
+
     cmd = sys.argv[1]
 
     if cmd == "list":
-        print_inventory()
+        print_inventory(inventory_config)
     elif cmd == "add":
         items, reason = parse_items(sys.argv[2:])
-        result = add_inventory(items, reason=reason if reason else "手动入库")
+        result = add_inventory(items, reason=reason if reason else "手动入库", config=inventory_config)
         print("入库完成:")
         for key, count in items.items():
             print(f"  {key}: +{count}")
-        print_inventory()
+        print_inventory(inventory_config)
     elif cmd == "deduct":
         items, reason = parse_items(sys.argv[2:])
         try:
-            result = deduct_inventory(items, reason=reason if reason else "手动扣库")
+            result = deduct_inventory(items, reason=reason if reason else "手动扣库", config=inventory_config)
             print("扣库完成:")
             for key, count in items.items():
                 print(f"  {key}: -{count}")
-            print_inventory()
+            print_inventory(inventory_config)
         except ValueError as e:
             print(f"错误: {e}")
             sys.exit(1)
     elif cmd == "undo":
         try:
-            result = undo_last()
+            result = undo_last(config=inventory_config)
             print("已撤销上次操作")
-            print_inventory()
+            print_inventory(inventory_config)
         except ValueError as e:
             print(f"错误: {e}")
             sys.exit(1)
