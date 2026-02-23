@@ -1,5 +1,5 @@
 """inventory 子命令实现"""
-from opengrid.config import load_config
+from opengrid.config import load_config_or_default
 from opengrid.inventory import (
     load_inventory,
     add_inventory,
@@ -42,7 +42,7 @@ def _build_inventory_config(config):
 
 def handle_inventory(args):
     """处理 inventory 命令"""
-    config = load_config()
+    config = load_config_or_default()
     inv_config = _build_inventory_config(config)
 
     cmd = args.inventory_command

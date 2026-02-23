@@ -1,8 +1,43 @@
 """split 子命令实现"""
+import json
 from opengrid.cli.utils import parse_dimensions
 from opengrid.cli.formatters import print_plan, output_json
 from opengrid.core import find_best_scheme, get_grid_dimensions, get_max_stacks, MIN_TILE
 from opengrid.core.stats import calculate_filament_and_time, format_time
+from opengrid.core.constants import recalculate_derived_constants
+from opengrid.config import load_config_or_default, get_printer_config_or_default
+
+# 初始化常量（支持无配置文件模式）- 延迟初始化避免测试干扰
+_initialized = False
+
+
+def _init_constants():
+    """初始化核心常量，支持无配置文件模式"""
+    global _initialized
+    if _initialized:
+        return
+
+    config = load_config_or_default()
+    printer = get_printer_config_or_default()
+
+    tile_size = config.get("opengrid", {}).get("tile_size", 28)
+    max_z = printer.get("max_z", 256)
+    bed_x = printer.get("bed_x", 256)
+    bed_y = printer.get("bed_y", 256)
+    tile_type = config.get("opengrid", {}).get("tile_type", "Full")
+    interface_separation = config.get("opengrid", {}).get("interface_separation", 0.2)
+    stacking_method = config.get("opengrid", {}).get("stacking_method", "Ironing")
+
+    recalculate_derived_constants(
+        tile_size=tile_size,
+        max_z=max_z,
+        bed_x=bed_x,
+        bed_y=bed_y,
+        tile_type=tile_type,
+        interface_separation=interface_separation,
+        stacking_method=stacking_method
+    )
+    _initialized = True
 
 
 def add_parser(subparsers):
@@ -18,6 +53,9 @@ def add_parser(subparsers):
 
 def handle_split(args):
     """处理 split 命令"""
+    # 初始化常量
+    _init_constants()
+
     # 加载库存文件（如果指定）
     inventory = None
     if args.inventory:

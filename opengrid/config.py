@@ -58,6 +58,33 @@ def load_config():
     return config
 
 
+def load_config_or_default():
+    """加载配置，如果不存在则返回默认值（用于无项目目录场景）"""
+    global _config
+
+    # 检查缓存
+    if "project" in _config:
+        return _config["project"]
+
+    try:
+        config_path = get_config_path()
+        config = _load_single_config(config_path)
+    except FileNotFoundError:
+        # 无配置文件时使用默认值
+        config = copy.deepcopy(DEFAULTS)
+
+    _config["project"] = config
+    return config
+
+
+def get_printer_config_or_default():
+    """获取打印机配置，如果无配置则返回默认值"""
+    try:
+        return get_printer_config()
+    except FileNotFoundError:
+        return PRINTER_PRESETS["p1p"]
+
+
 def _load_single_config(config_path):
     """加载配置文件"""
     if config_path.exists():
