@@ -1,6 +1,7 @@
 """CLI 输出格式化函数"""
 import json
 from typing import Any
+from opengrid.core.constants import FILAMENT_MAIN_PER_CELL, FILAMENT_SUPPORT_PER_CELL, PRINT_TIME_PER_CELL
 
 
 def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
@@ -17,14 +18,64 @@ def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
     print(f"总打印次数: {scheme.get('prints', 1)}")
 
 
-def output_json(width: int, depth: int, scheme: Any, copies: int = 1) -> str:
+def output_json(width: int, depth: int, scheme: Any, copies: int = 1, inventory: dict = None) -> str:
     """输出 JSON 格式"""
+    # 转换 tiles 格式
+    tiles = scheme.get('tiles', [])
+    tiles_list = []
+    for t in tiles:
+        if isinstance(t, tuple):
+            tiles_list.append({'width': t[0], 'height': t[1]})
+        elif isinstance(t, dict):
+            tiles_list.append(t)
+        else:
+            tiles_list.append({'width': t[0], 'height': t[1]})
+
+    # 计算统计信息
+    unique_sizes = len(set((t['width'], t['height']) for t in tiles_list))
+    total_tiles = len(tiles_list)
+    total_cells = sum(t['width'] * t['height'] for t in tiles_list)
+
+    # 计算打印时间和耗材
+    total_time_min = total_cells * PRINT_TIME_PER_CELL * copies
+    filament_main = total_cells * FILAMENT_MAIN_PER_CELL * copies
+    filament_support = total_cells * FILAMENT_SUPPORT_PER_CELL * copies
+
+    stats = {
+        'unique_sizes': unique_sizes,
+        'total_tiles': total_tiles,
+        'total_cells': total_cells,
+        'total_time_min': total_time_min,
+        'filament_main_g': filament_main,
+        'filament_support_g': filament_support,
+    }
+
+    # 基本数据
     data = {
         'dimensions': {'width': width, 'depth': depth, 'copies': copies},
         'grid': scheme.get('grid'),
-        'tiles': scheme.get('tiles', []),
-        'prints': scheme.get('prints', 1)
+        'tiles': tiles_list,
+        'prints': scheme.get('prints', 1),
+        'scheme': {'tiles': tiles_list},
+        'stats': stats,
     }
+
+    # 如果有库存信息，添加库存使用情况
+    if inventory:
+        from_inventory = scheme.get('from_inventory', {})
+        need_print = scheme.get('need_print', {})
+
+        # 计算使用的库存数量
+        total_from_inv = sum(from_inventory.values()) if from_inventory else 0
+        total_need_print = sum(need_print.values()) if need_print else len(tiles) * copies
+
+        data['inventory_usage'] = {
+            'from_inventory': from_inventory,
+            'need_print': need_print,
+            'total_from_inventory': total_from_inv,
+            'total_need_print': total_need_print
+        }
+
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 

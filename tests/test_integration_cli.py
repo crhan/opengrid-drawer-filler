@@ -1,7 +1,7 @@
 """
 库存感知评分系统端到端 CLI 测试
 
-通过 subprocess 调用 CLI 脚本（split_calc.py）进行端到端测试。
+通过 subprocess 调用 CLI 脚本（opengrid.py）进行端到端测试。
 
 用法:
     pytest tests/test_integration_cli.py -v
@@ -73,7 +73,7 @@ def load_inventory(inv_file):
 
 def get_print_plan(width, depth, inv_file, batch_mode=None):
     """通过 CLI 获取打印计划，返回统一的数据结构"""
-    cmd = [sys.executable, 'split_calc.py']
+    cmd = [sys.executable, 'opengrid.py', 'split']
     if batch_mode:
         # 新语法：直接传入位置参数，不需要 -b
         cmd.extend(batch_mode.split())

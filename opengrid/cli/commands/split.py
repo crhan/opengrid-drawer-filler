@@ -1,7 +1,7 @@
 """split 子命令实现"""
 from opengrid.cli.utils import parse_dimensions
 from opengrid.cli.formatters import print_plan, output_json
-from opengrid.core import find_best_scheme, get_grid_dimensions, MIN_TILE
+from opengrid.core import find_best_scheme, get_grid_dimensions, get_max_stacks, MIN_TILE
 from opengrid.core.stats import calculate_filament_and_time, format_time
 
 
@@ -11,12 +11,38 @@ def add_parser(subparsers):
     parser.add_argument('-c', '--copies', type=int, default=1, help='打印份数')
     parser.add_argument('-j', '--json', action='store_true', help='JSON 输出')
     parser.add_argument('-b', '--batch', help='批量输入')
+    parser.add_argument('-i', '--inventory', help='库存文件路径')
     parser.set_defaults(func=handle_split)
     return parser
 
 
 def handle_split(args):
     """处理 split 命令"""
+    # 加载库存文件（如果指定）
+    inventory = None
+    if args.inventory:
+        import json
+        try:
+            with open(args.inventory, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            inventory = data.get('inventory', {})
+        except FileNotFoundError:
+            print(f"错误: 库存文件不存在: {args.inventory}")
+            return
+        except json.JSONDecodeError:
+            print(f"错误: 库存文件格式无效: {args.inventory}")
+            return
+
+    # 批处理模式
+    if args.batch:
+        result = batch_mode(
+            args.batch,
+            verbose=False,
+            inventory=inventory,
+            json_output=args.json
+        )
+        return
+
     # 解析输入
     dims = parse_dimensions(args.dimensions)
 
@@ -30,11 +56,11 @@ def handle_split(args):
     grid_w, grid_h = get_grid_dimensions(width, depth)
 
     # 找最优方案
-    scheme = find_best_scheme(grid_w, grid_h)
+    scheme = find_best_scheme(grid_w, grid_h, inventory=inventory)
 
     # 输出
     if args.json:
-        print(output_json(width, depth, scheme, copies))
+        print(output_json(width, depth, scheme, copies, inventory=inventory))
     else:
         print_plan(width, depth, scheme, copies)
 
