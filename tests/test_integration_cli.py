@@ -21,7 +21,9 @@ SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scripts')
 sys.path.insert(0, SCRIPTS_DIR)
 
 # 从 split_calc 导入所需函数
-from split_calc import calculate_filament_and_time, SWAP_PENALTY, calculate_print_cost
+from opengrid.core.stats import calculate_filament_and_time
+from opengrid.core.constants import SWAP_PENALTY
+from opengrid.core import calculate_print_cost
 
 
 def run_cmd(cmd, capture=True, cwd=None):

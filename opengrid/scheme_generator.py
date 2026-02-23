@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.split_calc import calculate_single
+from opengrid.cli.commands.split import calculate_single
 from opengrid.matcher import get_inventory_match
 from opengrid.inventory import load_inventory
 

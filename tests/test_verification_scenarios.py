@@ -27,13 +27,13 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from split_calc import (
+from opengrid.core import (
     calculate_print_cost,
     get_grid_dimensions,
     find_best_scheme,
     replan_with_inventory,
-    optimize_batch_global,
 )
+from opengrid.cli.commands.split import optimize_batch_global
 
 
 def check_cell_count_consistency(tiles_before, tiles_after):

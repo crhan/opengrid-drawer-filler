@@ -7,7 +7,8 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from split_calc import calculate_single, find_best_scheme, get_grid_dimensions
+from opengrid.core import find_best_scheme, get_grid_dimensions
+from opengrid.cli.commands.split import calculate_single
 
 
 class TestPerformance:
