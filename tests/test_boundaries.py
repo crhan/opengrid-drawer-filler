@@ -6,16 +6,16 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from opengrid.core import (
+from split_calc import (
     get_grid_dimensions,
     validate_tile,
     find_best_scheme,
+    calculate_single,
     TILE_SIZE,
     MAX_X,
     MAX_Y,
     MIN_TILE,
 )
-from opengrid.cli.commands.split import calculate_single
 
 
 class TestBoundaryConditions:

@@ -3,9 +3,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from opengrid.core import calculate_print_cost, get_grid_dimensions, find_best_scheme, replan_with_inventory
-from opengrid.core.stats import calculate_filament_and_time
-from opengrid.cli.commands.split import optimize_batch_global
+from split_calc import calculate_print_cost, calculate_filament_and_time, get_grid_dimensions, find_best_scheme, replan_with_inventory, optimize_batch_global
 
 
 class TestCalculatePrintCost:
