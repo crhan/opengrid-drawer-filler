@@ -80,20 +80,22 @@ claude --plugin-dir /Users/ruohanc/Documents/projects/opengrid_plugin
 ## 常用命令
 
 ```bash
-# 批量计算
-.venv/bin/python scripts/split_calc.py -b "265x365:2 325x365:2"
-
-# 单尺寸计算
-.venv/bin/python scripts/split_calc.py 485 425
+# 分割计算
+.venv/bin/python scripts/opengrid.py split 325x460
+.venv/bin/python scripts/opengrid.py split 325x460 -i inventory.json
 
 # JSON 输出
-.venv/bin/python scripts/split_calc.py 485 425 -j
+.venv/bin/python scripts/opengrid.py split 325x460 -j
+
+# 方案对比（生成 HTML）
+.venv/bin/python scripts/opengrid.py split 325x460 -j > scheme_a.json
+.venv/bin/python scripts/opengrid.py split 325x460 -i inventory.json -j > scheme_b.json
+.venv/bin/python scripts/opengrid.py present scheme_a.json scheme_b.json -o comparison.html
 
 # 库存管理
-.venv/bin/python scripts/inventory.py list
-.venv/bin/python scripts/inventory.py add 8x8:5 "原因"
-.venv/bin/python scripts/inventory.py deduct 8x8:2 "原因"
-.venv/bin/python scripts/inventory.py undo
+.venv/bin/python scripts/opengrid.py inventory list
+.venv/bin/python scripts/opengrid.py inventory add 8x8:5 "原因"
+.venv/bin/python scripts/opengrid.py inventory deduct 8x8:2 "原因"
 ```
 
 ## 核心设计原则

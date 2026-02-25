@@ -18,71 +18,37 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ### Step 1: 检查配置、加载库存、展示状态
 
-**首先检测当前目录是否为已注册项目：**
+运行 `opengrid status` 命令展示当前项目状态：
 
-```python
-import os
-from opengrid.projects import is_project_registered, list_projects, get_last_active
-
-cwd = os.getcwd()
-
-if not is_project_registered(cwd):
-    # 当前目录不是已注册项目
-    projects = list_projects()
-    last_active = get_last_active()
-
-    print("⚠️ 当前目录不是已注册的项目")
-    print()
-
-    if projects:
-        print("已注册的项目：")
-        for i, p in enumerate(projects, 1):
-            marker = " ← 上次使用" if p["path"] == last_active else ""
-            print(f"  {i}. {p['name']} ({p['path']}){marker}")
-        print()
-        print("请选择操作：")
-        print("  [1] 初始化新项目（调用 setup skill）")
-        print("  [2] 切换到已有项目")
-    else:
-        print("没有已注册的项目，请先初始化新项目（调用 setup skill）")
+```bash
+# 在项目目录下运行
+cd ${项目目录}
+python scripts/opengrid.py status
 ```
 
-如果用户选择 `[2] 切换到已有项目`，提示用户输入项目编号，然后 `cd` 到对应目录继续执行。
-3. 从配置的 `inventory_path` 读取库存位置
-4. 检查 `opengrid_config.yaml` 的 `initialized` 状态
-5. 如未初始化，引导用户配置：
-   - 编辑 `opengrid_config.yaml` 设置 `initialized: true` 和打印机型号
-6. 加载配置（使用 Python 直接读取或调用 config 模块）
-7. 加载库存文件（从配置的 `inventory_path` 读取）
-8. 向用户输出当前状态（库存信息突出展示）：
+输出示例：
+```
+========== openGrid 状态 ==========
 
-   **openGrid 抽屉铺满**
+╔════════════════════════════════════════╗
+║  📦 库存状态                          ║
+╚════════════════════════════════════════╝
 
-   🖨️ 打印机: **[型号]** ([bed_x]×[bed_y]×[max_z]mm)
+┌──────────┬──────────┐
+│ 瓦片尺寸  │   数量   │
+├──────────┼──────────┤
+│   8×8   │    9    │
+│   6×7   │    5    │
+└──────────┴──────────┘
 
-   📁 输出目录: `[stl_dir]`
+共 **2 种尺寸**, **14 stack** (可用)
 
-   🔧 瓦片类型: [tile_type] | 堆叠: [stacking_method]
+🖨️ 打印机: P1P (256×256×256mm)
+📁 输出目录: ~/3D打印/opengrid/
+🔧 瓦片类型: Full | 堆叠: Ironing
+```
 
-   使用 `format_inventory_for_display()` 函数展示库存（带框线表格）：
-
-   ```
-   ╔════════════════════════════════════════╗
-   ║  📦 库存状态                          ║
-   ╚════════════════════════════════════════╝
-
-   ┌──────────┬──────────┐
-   │ 瓦片尺寸  │   数量   │
-   ├──────────┼──────────┤
-   │   8×8   │    9    │
-   │   6×7   │    5    │
-   │   5×5   │    3    │
-   └──────────┴──────────┘
-
-   共 **3 种尺寸**, **17 stack** (可用)
-   ```
-
-9. **确认库存数量是否正确**，如不正确引导用户更新库存：
+如果当前目录没有 `opengrid_config.yaml`，需要先配置项目。
 
 ### 库存管理
 
@@ -90,21 +56,20 @@ if not is_project_registered(cwd):
 
 **严格禁止直接编辑库存文件。**
 
-所有库存修改必须通过脚本进行，并记录修改原因：
+所有库存修改使用 `opengrid inventory` 命令：
 
 ```bash
-# 使用 ${CLAUDE_PLUGIN_ROOT} 变量引用插件根目录
-# 查看当前库存
-${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py list
+# 查看库存
+python scripts/opengrid.py inventory list
 
 # 添加库存 (格式: 宽x高:数量)
-${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py add 8x8:5 6x7:3 "入库原因：购买新材料"
+python scripts/opengrid.py inventory add 8x8:5 6x7:3 "入库原因"
 
 # 扣减库存
-${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py deduct 8x8:2 "扣减原因：打印使用"
+python scripts/opengrid.py inventory deduct 8x8:2 "扣减原因"
 
 # 撤销上次操作
-${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.py undo
+python scripts/opengrid.py inventory undo
 ```
 
 **重要**：执行 inventory 命令时必须：
@@ -137,21 +102,36 @@ ${CLAUDE_PLUGIN_ROOT}/.venv/bin/python ${CLAUDE_PLUGIN_ROOT}/scripts/inventory.p
 
 **无库存时**：只计算方案 A（标准最优方案）
 
-调用 `split_calc.py`：
+使用 `opengrid split` 命令：
 
 ```bash
 # 方案 A：不使用库存
-python3 scripts/split_calc.py 265x365:2 325x365:2 -i ""
+python scripts/opengrid.py split 265x365:2 325x365:2
 
 # 方案 B：使用库存（通过 -i 指定库存文件）
-python3 scripts/split_calc.py 265x365:2 325x365:2 -i inventory.json
+python scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
 ```
-
-**注意**：必须通过 `-i` 参数显式指定库存文件路径，否则不会使用库存。
 
 ### Step 4: 展示方案
 
-将脚本输出展示给用户，询问选择。
+将脚本输出展示给用户，询问选择。可选：使用 `present` 命令生成 HTML 对比页面。
+
+#### 使用 present 命令（可选）
+
+```bash
+# 先生成两个方案的 JSON
+python scripts/opengrid.py split 325x460 -j > scheme_no_inv.json
+python scripts/opengrid.py split 325x460 -i inventory.json -j > scheme_with_inv.json
+
+# 生成 HTML 对比页面
+python scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o comparison.html
+```
+
+生成的 HTML 页面包含：
+- 两种方案并排对比
+- SVG 瓦片布局示意图（显示每片规格）
+- 打印时间、耗材、瓦片数统计
+- 节省百分比高亮显示
 
 #### 展示内容规范
 
@@ -226,82 +206,32 @@ python3 scripts/split_calc.py 265x365:2 325x365:2 -i inventory.json
 
 ### Step 5: 生成 STL 文件
 
-用户选择方案后，调用 `slicer.py` 生成 STL 文件。
+用户选择方案后，生成 STL 文件。
 
 #### 5.1 获取方案 JSON
 
-首先获取方案的 JSON 输出（包含所有信息）：
+获取方案的 JSON 输出：
 
 ```bash
-# 单尺寸
-.venv/bin/python scripts/split_calc.py 265 365 -j > scheme.json
-
-# 批量
-.venv/bin/python scripts/split_calc.py 265x365:2 325x365:2 -j > batch_scheme.json
+python scripts/opengrid.py split 265x365 -j > scheme.json
 ```
 
 #### 5.2 提取需要打印的瓦片
 
-从 JSON 中提取需要打印的瓦片（**不含从库存取的瓦片**）：
-
-```python
-import json
-
-# 读取 JSON
-with open('scheme.json') as f:
-    data = json.load(f)
-
-# 提取需要打印的瓦片
-tiles_to_print = []
-
-if 'tiles' in data:
-    # 批量模式
-    for tile in data['tiles']:
-        w, h = tile['width'], tile['height']
-        to_print = tile.get('to_print', 0)
-        if to_print > 0:
-            tiles_to_print.extend([(w, h)] * to_print)
-elif 'inventory' in data and 'need_print' in data['inventory']:
-    # 单尺寸模式
-    need_print = data['inventory']['need_print']
-    tiles = data['scheme']['tiles']
-    for w, h, count in [(t['width'], t['height'], t['count']) for t in tiles]:
-        key = f"{w}x{h}"
-        if key in need_print and need_print[key] > 0:
-            tiles_to_print.extend([(w, h)] * min(count, need_print[key]))
-
-print("需要打印的瓦片:", tiles_to_print)
-```
+从 JSON 中提取需要打印的瓦片（不含从库存取的瓦片）。
 
 #### 5.3 调用 STL 生成
 
-调用 `scripts/slicer.py` 中的 `generate_all_stls` 函数：
+使用 `opengrid slicer generate` 命令：
 
 ```bash
-# 方法1：使用 Python 模块
-cd ${CLAUDE_PLUGIN_ROOT}
-.venv/bin/python -c "
-import sys
-import json
-sys.path.insert(0, 'scripts')
-from slicer import generate_all_stls
-
-# 构造 scheme 字典（只包含需要打印的瓦片）
-scheme = {
-    'tiles': [(7, 5), (3, 5)]  # 只包含需要打印的瓦片
-}
-
-result = generate_all_stls(scheme, copies=1, verbose=True)
-print('Generated:', result)
-"
-
-# 方法2：直接调用脚本
-.venv/bin/python scripts/slicer.py -g 7x5x2 3x5x2
+python scripts/opengrid.py slicer generate 7x5x2
+python scripts/opengrid.py slicer generate 3x5x2
 ```
 
 #### 5.4 展示生成结果
 
-STL 生成完成后，向用户展示结果：
+STL 生成完成后，向用户展示结果。
 
 ```
 --- STL 生成完成 ---
@@ -349,24 +279,23 @@ open_in_slicer(stl_files, slicer="orca")
 
 ## 快速命令
 
+使用 `${CLAUDE_PLUGIN_ROOT}` 变量引用插件根目录：
+
 ```bash
+# 查看项目状态
+python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py status
+
 # 批量计算
-python3 scripts/split_calc.py 265x365:2 325x365:2
+python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 325x365:2
 
 # 单尺寸计算
-python3 scripts/split_calc.py 485 425
+python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425
 
-# 使用预设
-python3 scripts/split_calc.py -p klean
-
-# 使用库存（必须通过 -i 指定库存文件）
-python3 scripts/split_calc.py 265x365:2 -i inventory.json
-
-# 不使用库存
-python3 scripts/split_calc.py 265x365:2 -i ""
+# 使用库存
+python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 -i inventory.json
 
 # 生成 STL
-python3 scripts/slicer.py -g 7x5x3 10x5x3
+python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py slicer generate 7x5x2
 ```
 
 详细命令、配置说明、算法规则等请参考 [references/](references/) 目录。

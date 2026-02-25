@@ -1,0 +1,458 @@
+"""方案对比 HTML 模板"""
+from string import Template
+
+COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>openGrid 方案对比 - ${drawer_width}×${drawer_depth}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-secondary: #141416;
+            --bg-tertiary: #1c1c1f;
+            --border-subtle: #2a2a2e;
+            --border-active: #3d3d42;
+            --text-primary: #f0f0f2;
+            --text-secondary: #8b8b94;
+            --text-muted: #5a5a63;
+            --accent-orange: #ff6b35;
+            --accent-orange-dim: #cc5529;
+            --accent-cyan: #00d4ff;
+            --accent-cyan-dim: #00a8cc;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', 'JetBrains Mono', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 40px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-orange), var(--accent-orange-dim));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 20px;
+            color: white;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .header-title h1 {
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .header-title p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .drawer-info {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .drawer-info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .drawer-info-label {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .drawer-info-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent-orange);
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .scheme-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 28px;
+        }
+
+        .scheme-card.winner {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.1);
+        }
+
+        .scheme-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .scheme-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .scheme-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .scheme-badge.print {
+            background: rgba(255, 107, 53, 0.15);
+            color: var(--accent-orange);
+            border: 1px solid var(--accent-orange-dim);
+        }
+
+        .scheme-badge.inventory {
+            background: rgba(0, 212, 255, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid var(--accent-cyan-dim);
+        }
+
+        .scheme-badge.winner {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .scheme-svg {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+        }
+
+        .scheme-svg svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .stat-item {
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-value.orange {
+            color: var(--accent-orange);
+        }
+
+        .stat-value.cyan {
+            color: var(--accent-cyan);
+        }
+
+        .stat-value.green {
+            color: var(--accent-green);
+        }
+
+        .tiles-list {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .tiles-title {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .tile-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+        }
+
+        .tile-item.print {
+            border-left: 3px solid var(--accent-orange);
+        }
+
+        .tile-item.inventory {
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
+            border: 1px solid var(--accent-green);
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+        }
+
+        .summary-title {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .summary-stats {
+            display: flex;
+            justify-content: center;
+            gap: 48px;
+        }
+
+        .summary-stat {
+            text-align: center;
+        }
+
+        .summary-stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-green);
+            line-height: 1;
+        }
+
+        .summary-stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        .legend-dot.print {
+            background: var(--accent-orange);
+        }
+
+        .legend-dot.inventory {
+            background: var(--accent-cyan);
+        }
+
+        @media (max-width: 768px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+            .summary-stats {
+                flex-direction: column;
+                gap: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">OG</div>
+                <div class="header-title">
+                    <h1>方案对比</h1>
+                    <p>openGrid - ${drawer_width}×${drawer_depth} 抽屉</p>
+                </div>
+            </div>
+            <div class="drawer-info">
+                <div class="drawer-info-item">
+                    <span class="drawer-info-label">宽度</span>
+                    <span class="drawer-info-value">${drawer_width}mm</span>
+                </div>
+                <div class="drawer-info-item">
+                    <span class="drawer-info-label">深度</span>
+                    <span class="drawer-info-value">${drawer_depth}mm</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="comparison-grid">
+            <div class="scheme-card">
+                <div class="scheme-header">
+                    <span class="scheme-title">纯打印方案</span>
+                    <span class="scheme-badge print">全部打印</span>
+                </div>
+                <div class="scheme-svg">
+                    ${svg_no_inventory}
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">打印时间</div>
+                        <div class="stat-value orange">${time_no_inventory} min</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">主耗材</div>
+                        <div class="stat-value orange">${filament_no_inventory}g</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">瓦片数</div>
+                        <div class="stat-value">${tiles_no_inventory}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">独特尺寸</div>
+                        <div class="stat-value">${unique_no_inventory} 种</div>
+                    </div>
+                </div>
+                <div class="tiles-list">
+                    <div class="tiles-title">瓦片清单</div>
+                    ${tiles_no_inventory_list}
+                </div>
+            </div>
+
+            <div class="scheme-card ${scheme_with_inventory_winner}">
+                <div class="scheme-header">
+                    <span class="scheme-title">库存优化方案</span>
+                    <span class="scheme-badge inventory ${scheme_with_inventory_winner}">${scheme_with_inventory_badge}</span>
+                </div>
+                <div class="scheme-svg">
+                    ${svg_with_inventory}
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">打印时间</div>
+                        <div class="stat-value ${value_class_with_inventory}">${time_with_inventory} min</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">主耗材</div>
+                        <div class="stat-value ${value_class_with_inventory}">${filament_with_inventory}g</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">瓦片数</div>
+                        <div class="stat-value">${tiles_with_inventory}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">独特尺寸</div>
+                        <div class="stat-value">${unique_with_inventory} 种</div>
+                    </div>
+                </div>
+                <div class="tiles-list">
+                    <div class="tiles-title">瓦片清单</div>
+                    ${tiles_with_inventory_list}
+                </div>
+            </div>
+        </div>
+
+        ${summary_html}
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-dot print"></div>
+                <span>需要打印</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot inventory"></div>
+                <span>使用库存</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>""")

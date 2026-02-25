@@ -20,6 +20,8 @@ def main():
     commands.inventory.add_parser(subparsers)
     commands.slicer.add_parser(subparsers)
     commands.project.add_parser(subparsers)
+    commands.status.add_parser(subparsers)
+    commands.present.add_parser(subparsers)
 
     args = parser.parse_args()
 

@@ -208,12 +208,16 @@ class Visualizer:
               </rect>'''
                 svg_parts.append(rect)
 
-                if x_dim >= 3 and y_dim >= 3:
-                    text_x = x_offset + x_dim * cell_size // 2
-                    text_y = y_offset + y_dim * cell_size // 2
-                    label = f'{x_dim}x{y_dim}'
-                    text = f'  <text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle">{label}</text>'
-                    svg_parts.append(text)
+                # 所有瓦片都显示尺寸文字
+                text_x = x_offset + x_dim * cell_size // 2
+                text_y = y_offset + y_dim * cell_size // 2
+                # 字体大小根据瓦片尺寸调整
+                font_size = min(x_dim, y_dim) * 4
+                if font_size < 8:
+                    font_size = 8
+                label = f'{x_dim}x{y_dim}'
+                text = f'  <text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle" font-size="{font_size}" fill="white" style="text-shadow: 1px 1px 2px black;">{label}</text>'
+                svg_parts.append(text)
 
                 y_offset += y_dim * cell_size
             x_offset += x_dim * cell_size
