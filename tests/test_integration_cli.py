@@ -13,7 +13,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import pytest
 
 # 添加 scripts 目录到路径
@@ -22,7 +21,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 # 从 opengrid 库导入所需函数
 from opengrid.core import calculate_filament_and_time, calculate_print_cost
-from opengrid.core.constants import SWAP_PENALTY
+from opengrid.core.constants import SWAP_PENALTY, TILE_SIZE
 
 
 def run_cmd(cmd, capture=True, cwd=None):
@@ -93,7 +92,7 @@ def get_print_plan(width, depth, inv_file, batch_mode=None):
         json_str = output[json_start:]
         try:
             decoder = json.JSONDecoder()
-            data, end_idx = decoder.raw_decode(json_str)
+            data, _ = decoder.raw_decode(json_str)
 
             if 'drawer' in data or 'drawers' in data:
                 result_data = {
@@ -165,6 +164,48 @@ def check_inventory_not_exceeded(used, available):
         if available.get(k, 0) < v:
             return False
     return True
+
+
+def check_cell_count_consistency(tiles_before, tiles_after):
+    """检查拆分前后格子数量是否一致
+
+    Args:
+        tiles_before: 拆分前的瓦片列表 [(w, h), ...]
+        tiles_after: 拆分后的瓦片列表 [{"width": w, "height": h}, ...]
+
+    Returns:
+        (is_consistent, cells_before, cells_after)
+    """
+    cells_before = sum(w * h for w, h in tiles_before)
+    cells_after = sum(t['width'] * t['height'] for t in tiles_after)
+    return cells_before == cells_after, cells_before, cells_after
+
+
+def get_original_cells(width, depth):
+    """根据物理尺寸计算原始格子数
+
+    Args:
+        width: 宽度 (mm)
+        depth: 深度 (mm)
+
+    Returns:
+        格子数 (x * y)
+    """
+    x = width // TILE_SIZE
+    y = depth // TILE_SIZE
+    return x * y
+
+
+def calculate_scheme_cells(tiles):
+    """计算方案的总格子数（考虑 count 字段）
+
+    Args:
+        tiles: [{"width": w, "height": h, "count": c}, ...]
+
+    Returns:
+        总格子数
+    """
+    return sum(t['width'] * t['height'] * t['count'] for t in tiles)
 
 
 class TestScenario1:
@@ -285,6 +326,11 @@ class TestScenario3a:
 
         assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
 
+        # 验证库存使用不超过提供数量
+        inv_usage = plan.get('inventory_usage', {})
+        from_inv = inv_usage.get('from_inventory', {})
+        assert check_inventory_not_exceeded(from_inv, inventory), "库存使用不应超过提供数量"
+
 
 class TestScenario3b:
     """场景 3b：库存方案选择（库存2个）"""
@@ -321,6 +367,11 @@ class TestScenario3b:
         assert time_with_inv < time_no_inv, f"成本应 < 无库存: {time_with_inv} < {time_no_inv}"
         assert time_with_inv < time_1, f"成本应 < 库存1个: {time_with_inv} < {time_1}"
 
+        # 验证库存使用不超过提供数量
+        inv_usage = plan.get('inventory_usage', {})
+        from_inv = inv_usage.get('from_inventory', {})
+        assert check_inventory_not_exceeded(from_inv, inventory), "库存使用不应超过提供数量"
+
 
 class TestScenario3c:
     """场景 3c：库存方案选择（库存3个）"""
@@ -350,6 +401,11 @@ class TestScenario3c:
         # 3个和2个成本应该一样（抽屉只能用2个）
         assert abs(time_with_inv - time_2) < 1, f"成本应等于库存2个: {time_with_inv} ≈ {time_2}"
 
+        # 验证库存使用不超过提供数量
+        inv_usage = plan.get('inventory_usage', {})
+        from_inv = inv_usage.get('from_inventory', {})
+        assert check_inventory_not_exceeded(from_inv, inventory), "库存使用不应超过提供数量"
+
 
 class TestScenario4a:
     """场景 4a：批量模式（库存1个）"""
@@ -370,11 +426,20 @@ class TestScenario4a:
         assert len(drawers) == 2, "应有2个抽屉"
 
         # 检查库存使用
-        inv_usage = plan.get('inventory_usage', {})
-        from_inv = inv_usage.get('from_inventory', {})
-        total_used = sum(from_inv.values())
+        # 注意：这里使用 drawer 级别的 from_inventory 求和，因为顶层的 from_inventory 计算方式不同
+        total_used = sum(
+            sum((d.get('inventory') or {}).get('from_inventory', {}).values())
+            for d in drawers
+        )
 
         assert total_used <= 1, f"库存使用不超过1个: {total_used}"
+
+        # 验证抽屉1使用了1个库存（抽屉1需要2个6x9，但只有1个库存）
+        drawer1 = drawers[0]
+        drawer1_inv = drawer1.get('inventory', {})
+        drawer1_from_inv = drawer1_inv.get('from_inventory', {})
+        drawer1_used = sum(drawer1_from_inv.values())
+        assert drawer1_used == 1, f"抽屉1应使用1个库存，实际: {drawer1_used}"
 
 
 class TestScenario4b:
@@ -400,6 +465,17 @@ class TestScenario4b:
 
         assert total_used <= 2, f"库存使用不超过2个: {total_used}"
 
+        # 验证抽屉1完全使用库存（库存2个刚好够抽屉1用）
+        drawer1 = drawers[0]
+        drawer1_inv = drawer1.get('inventory', {})
+        drawer1_from_inv = drawer1_inv.get('from_inventory', {})
+        drawer1_need_print = drawer1_inv.get('need_print', {})
+        drawer1_used = sum(drawer1_from_inv.values())
+        drawer1_need = sum(drawer1_need_print.values())
+        # 抽屉1需要2个6x9，库存2个刚好够，成本应为0
+        assert drawer1_used >= 1, f"抽屉1应使用库存，实际: {drawer1_used}"
+        assert drawer1_need == 0, f"抽屉1应不需要打印，实际: {drawer1_need}"
+
 
 class TestScenario4c:
     """场景 4c：批量模式（库存3个）- 全局优化"""
@@ -417,11 +493,23 @@ class TestScenario4c:
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
 
-        inv_usage = plan.get('inventory_usage', {})
-        from_inv = inv_usage.get('from_inventory', {})
-        total_used = sum(from_inv.values())
+        # 注意：这里使用 drawer 级别的 from_inventory 求和，因为顶层的 from_inventory 计算方式不同
+        total_used = sum(
+            sum((d.get('inventory') or {}).get('from_inventory', {}).values())
+            for d in drawers
+        )
 
         assert total_used <= 3, f"库存使用不超过3个: {total_used}"
+
+        # 验证抽屉2使用1个库存（全局优化：抽屉1用2个，抽屉2用1个，库存刚好用完）
+        drawer2 = drawers[1]
+        drawer2_inv = drawer2.get('inventory', {})
+        drawer2_from_inv = drawer2_inv.get('from_inventory', {})
+        drawer2_used = sum(drawer2_from_inv.values())
+        assert drawer2_used >= 1, f"抽屉2应使用至少1个库存，实际: {drawer2_used}"
+
+        # 验证库存刚好用完
+        assert total_used == 3, f"库存应刚好用完，实际使用: {total_used}"
 
 
 class TestScenario4d:
@@ -446,6 +534,13 @@ class TestScenario4d:
 
         assert total_used <= 4, f"库存使用不超过4个: {total_used}"
 
+        # 验证抽屉2至少使用1个库存（全局优化：抽屉1用2个，抽渠2用1个）
+        drawer2 = drawers[1]
+        drawer2_inv = drawer2.get('inventory', {})
+        drawer2_from_inv = drawer2_inv.get('from_inventory', {})
+        drawer2_used = sum(drawer2_from_inv.values())
+        assert drawer2_used >= 1, f"抽屉2应使用至少1个库存，实际: {drawer2_used}"
+
 
 class TestScenario5:
     """场景 5：重新规划"""
@@ -456,6 +551,7 @@ class TestScenario5:
         create_empty_inventory(str(inv_file))
         # 库存：6x6 有 2 个，但原始方案需要 6x9
         add_inventory(str(inv_file), {'6x6': 2})
+        inventory = load_inventory(str(inv_file))
 
         # 批量模式：需要2个尺寸才能触发批量模式
         # 265x360 (9x12格子)，原始方案需要 2 个 6x9
@@ -468,6 +564,34 @@ class TestScenario5:
         # 验证：方案包含 6x6（重新规划）
         has_6x6 = any(t.get('width') == 6 and t.get('height') == 6 for t in tiles)
         assert has_6x6, f"方案应包含 6x6（重新规划）, 实际: {tiles}"
+
+        # 1. 格子数量一致性验证
+        # 265x360 = 9x12 = 108格，325x365 = 11x12 = 132格
+        drawers = plan.get('drawers', [])
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
+
+        # 2. 验证需要打印（不是完全用库存）
+        inv_usage = plan.get('inventory_usage', {})
+        need_print = inv_usage.get('need_print', {})
+        assert need_print, f"应有打印需求（库存尺寸不匹配），实际: {need_print}"
+
+        # 3. 验证成本降低（对比无库存方案）
+        temp_inv = tmp_path / "temp.json"
+        create_empty_inventory(str(temp_inv))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+
+        # 4. 验证库存使用不超过提供数量
+        from_inv = inv_usage.get('from_inventory', {})
+        assert check_inventory_not_exceeded(from_inv, inventory), "库存使用不应超过提供数量"
 
 
 class TestScenario6a:
@@ -485,6 +609,14 @@ class TestScenario6a:
 
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
+
+        # 格子数量一致性验证（注意 tiles 里的 count 是每份的数量）
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
 
         inv_usage = plan.get('inventory_usage', {})
         from_inv = inv_usage.get('from_inventory', {})
@@ -508,6 +640,14 @@ class TestScenario6b:
 
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
+
+        # 格子数量一致性验证（注意 tiles 里的 count 是每份的数量）
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
 
         inv_usage = plan.get('inventory_usage', {})
         from_inv = inv_usage.get('from_inventory', {})
@@ -535,9 +675,19 @@ class TestScenario7a:
         drawers = plan.get('drawers', [])
         assert len(drawers) == 3, "应有3个抽屉"
 
-        inv_usage = plan.get('inventory_usage', {})
-        from_inv = inv_usage.get('from_inventory', {})
-        total_used = sum(from_inv.values())
+        # 格子数量一致性验证（注意 tiles 里的 count 是每份的数量）
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
+
+        # 注意：这里使用 drawer 级别的 from_inventory 求和
+        total_used = sum(
+            sum((d.get('inventory') or {}).get('from_inventory', {}).values())
+            for d in drawers
+        )
 
         assert total_used == 3, f"库存应恰好使用3个: {total_used}"
 
@@ -557,6 +707,14 @@ class TestScenario7b:
 
         drawers = plan.get('drawers', [])
         assert len(drawers) == 3, "应有3个抽屉"
+
+        # 格子数量一致性验证（注意 tiles 里的 count 是每份的数量）
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
 
         inv_usage = plan.get('inventory_usage', {})
         from_inv = inv_usage.get('from_inventory', {})
@@ -588,12 +746,24 @@ class TestScenario8:
         total_copies = sum(d.get('copies', 1) for d in drawers)
         assert total_copies == 6, f"总抽屉数应为6，实际: {total_copies}"
 
+        # 格子数量一致性验证（注意 tiles 里的 count 是每份的数量）
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
+
         # 验证库存使用不超限
         inv_usage = plan.get('inventory_usage', {})
         from_inv = inv_usage.get('from_inventory', {})
 
         assert from_inv.get('8x8', 0) <= 5, "8x8库存不超限"
         assert from_inv.get('6x7', 0) <= 5, "6x7库存不超限"
+
+        # 验证所有抽屉都有打印（不是全部用库存）
+        need_print = inv_usage.get('need_print', {})
+        assert need_print, f"应有打印需求（不是全部用库存），实际: {need_print}"
 
 
 if __name__ == "__main__":
