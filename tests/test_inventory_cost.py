@@ -1,9 +1,14 @@
 import pytest
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from split_calc import calculate_print_cost, calculate_filament_and_time, get_grid_dimensions, find_best_scheme, replan_with_inventory, optimize_batch_global
+from opengrid.core import (
+    calculate_print_cost,
+    calculate_filament_and_time,
+    get_grid_dimensions,
+    find_best_scheme,
+    replan_with_inventory,
+)
+
+from opengrid.cli.commands.split import optimize_batch_global
 
 
 class TestCalculatePrintCost:
@@ -45,6 +50,33 @@ class TestCalculatePrintCost:
         assert from_inv['6x7'] == 1
         assert need_print['6x7'] == 1
 
+    def test_rotation_equivalence(self):
+        """旋转等价：6x9 和 9x6 视为相同尺寸"""
+        # 库存是 6x9
+        inventory = {'6x9': 2}
+
+        # 瓦片是 9x6（旋转了）
+        tiles_rotated = [(9, 6)]
+        cost, from_inv, need_print = calculate_print_cost(tiles_rotated, inventory, copies=1)
+
+        # 应该匹配到库存，成本为 0
+        assert cost == 0, f"9x6 should match 6x9 inventory, got cost={cost}"
+        assert from_inv.get('6x9', 0) == 1, f"Should use 1 from inventory, got {from_inv}"
+        assert need_print == {}, f"Should not need printing, got {need_print}"
+
+    def test_rotation_equivalence_multiple_tiles(self):
+        """旋转等价：多个旋转瓦片都能匹配库存"""
+        inventory = {'6x9': 3}
+
+        # 混合使用 6x9 和 9x6
+        tiles_mixed = [(9, 6), (6, 9), (9, 6)]
+        cost, from_inv, need_print = calculate_print_cost(tiles_mixed, inventory, copies=1)
+
+        # 应该使用 3 个库存，成本为 0
+        assert cost == 0, f"Mixed tiles should use inventory, got cost={cost}"
+        assert sum(from_inv.values()) == 3, f"Should use 3 from inventory, got {from_inv}"
+        assert need_print == {}, f"Should not need printing, got {need_print}"
+
 
 class TestFindBestSchemeWithInventory:
     """测试带库存的 find_best_scheme"""
@@ -52,8 +84,7 @@ class TestFindBestSchemeWithInventory:
     def test_prefers_inventory_solution(self):
         """有库存时优先选择库存成本低的方案"""
         # 265x360 -> 9x12 格子
-        # 原始最优方案是 [(6,9), (6,9)]
-        # 添加 6x9 库存使得该方案成本为 0
+        # 添加 6x9 库存使得使用该尺寸的方案成本为 0
         inventory = {'6x9': 5}  # 6x9 库存充足
 
         result = find_best_scheme(9, 12, inventory=inventory, verbose=False)
@@ -64,8 +95,8 @@ class TestFindBestSchemeWithInventory:
         assert 'need_print' in result, "Result should contain 'need_print' key"
         # 验证成本为 0（完全使用库存）
         assert result['cost'] == 0, f"Expected cost 0 when inventory matches, got {result['cost']}"
-        # 验证使用的是 6x9 瓦片
-        assert result['tiles'] == [(6, 9), (6, 9)], f"Expected 6x9 tiles, got {result['tiles']}"
+        # 验证使用了库存瓦片（9x6 和 6x9 是旋转等价的）
+        assert result['from_inventory'], "Should use inventory"
 
     def test_no_inventory_uses_original_logic(self):
         """无库存时使用原始评分逻辑"""

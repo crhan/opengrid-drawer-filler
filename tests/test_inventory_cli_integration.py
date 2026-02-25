@@ -40,9 +40,9 @@ printer:
 
 
 def run_inventory_cli(args, cwd):
-    """运行 inventory.py CLI 并返回结果"""
+    """运行 opengrid.py inventory CLI 并返回结果"""
     result = subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py")] + args,
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"), "inventory"] + args,
         capture_output=True,
         text=True,
         cwd=cwd

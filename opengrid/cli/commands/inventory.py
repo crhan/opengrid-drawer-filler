@@ -19,12 +19,12 @@ def add_parser(subparsers):
 
     # add
     add_p = sub.add_parser('add', help='添加库存')
-    add_p.add_argument('items', help='物品列表')
+    add_p.add_argument('items', nargs='+', help='物品列表 (如 8x8:5 6x7:3)')
     add_p.add_argument('reason', nargs='?', default='', help='原因')
 
     # deduct
     deduct_p = sub.add_parser('deduct', help='扣减库存')
-    deduct_p.add_argument('items', help='物品列表')
+    deduct_p.add_argument('items', nargs='+', help='物品列表 (如 8x8:5 6x7:3)')
     deduct_p.add_argument('reason', nargs='?', default='', help='原因')
 
     # undo
@@ -52,23 +52,23 @@ def handle_inventory(args):
 
     elif cmd == 'add':
         from opengrid.inventory import parse_items
-        items, reason = parse_items([args.items])
+        items, parsed_reason = parse_items(args.items)
         if not items:
             print("错误: 未提供有效的物品格式 (如 8x8:5)")
             return
-        # 使用传入的 reason，如果为空则使用默认值
-        reason = reason or args.reason or "手动入库"
+        # 使用解析的 reason 或传入的 reason，如果都为空则使用默认值
+        reason = parsed_reason or args.reason or "手动入库"
         add_inventory(items, reason, inv_config)
         print("添加成功")
         print_inventory(inv_config)
 
     elif cmd == 'deduct':
         from opengrid.inventory import parse_items
-        items, reason = parse_items([args.items])
+        items, parsed_reason = parse_items(args.items)
         if not items:
             print("错误: 未提供有效的物品格式 (如 8x8:5)")
             return
-        reason = reason or args.reason or "手动扣库"
+        reason = parsed_reason or args.reason or "手动扣库"
         deduct_inventory(items, reason, inv_config)
         print("扣减成功")
         print_inventory(inv_config)

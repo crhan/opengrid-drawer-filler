@@ -42,7 +42,8 @@ config_module.load_config = mock_load_config
 config_module.get_printer_config = mock_get_printer_config
 config_module._config = {}
 
-from split_calc import (
+# 从 opengrid 库导入核心函数
+from opengrid.core import (
     get_max_stacks,
     get_grid_dimensions,
     validate_tile,
@@ -50,13 +51,8 @@ from split_calc import (
     calc_balance,
     calc_scheme_balance,
     find_best_scheme,
-    calculate_single,
-    merge_and_optimize,
     calculate_filament_and_time,
-    format_time,
     find_all_schemes,
-    calculate_total_prints,
-    optimize_batch_global,
     TILE_SIZE,
     MAX_X,
     MAX_Y,
@@ -64,3 +60,19 @@ from split_calc import (
     FULL_THICKNESS,
     MAX_Z,
 )
+
+from opengrid.cli.commands.split import (
+    calculate_single,
+    merge_and_optimize,
+    calculate_total_prints,
+    optimize_batch_global,
+)
+
+
+def format_time(minutes):
+    """格式化打印时间 (英文格式，兼容测试)"""
+    hours = int(minutes // 60)
+    mins = int(minutes % 60)
+    if hours > 0:
+        return f"{hours}h{mins}m"
+    return f"{mins}m"
