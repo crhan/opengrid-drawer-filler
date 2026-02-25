@@ -2,7 +2,8 @@
 import json
 from opengrid.cli.utils import parse_dimensions
 from opengrid.cli.formatters import print_plan, output_json
-from opengrid.core import find_best_scheme, get_grid_dimensions, get_max_stacks, MIN_TILE
+from opengrid.core import find_best_scheme, find_all_schemes, get_grid_dimensions, get_max_stacks, MIN_TILE
+from opengrid.core.cost import calculate_print_cost
 from opengrid.core.stats import calculate_filament_and_time, format_time
 from opengrid.core.constants import recalculate_derived_constants
 from opengrid.config import load_config_or_default, get_printer_config_or_default

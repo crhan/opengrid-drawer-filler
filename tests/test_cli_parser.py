@@ -1,9 +1,6 @@
 import pytest
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.split_calc import parse_dimensions, parse_preset
+from opengrid.cli.utils import parse_dimensions, parse_preset
 
 class TestParseDimensions:
     """测试尺寸参数解析"""

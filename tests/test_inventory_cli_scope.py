@@ -1,4 +1,4 @@
-"""测试 scripts/inventory.py CLI 项目级配置"""
+"""测试 opengrid.py inventory CLI 项目级配置"""
 
 import os
 import sys
@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 
 class TestInventoryCLIScope:
-    """测试 inventory.py CLI 项目级配置"""
+    """测试 opengrid.py inventory CLI 项目级配置"""
 
     def test_add_to_project(self, tmp_path):
         """测试添加库存到项目"""
@@ -25,8 +25,8 @@ class TestInventoryCLIScope:
 
         # 添加库存
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py"),
-             "add", "8x8:5", "test reason"],
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
+             "inventory", "add", "8x8:5", "test reason"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -46,8 +46,8 @@ class TestInventoryCLIScope:
 
         # 添加库存
         subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py"),
-             "add", "7x7:3", "test log"],
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
+             "inventory", "add", "7x7:3", "test log"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -72,8 +72,8 @@ class TestInventoryCLIScope:
 
         # 扣减库存
         result = subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py"),
-             "deduct", "10x5:3", "test deduct"],
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
+             "inventory", "deduct", "10x5:3", "test deduct"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -96,8 +96,8 @@ class TestInventoryCLIScope:
 
         # 添加库存
         subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py"),
-             "add", "5x5:2", "undo test"],
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
+             "inventory", "add", "5x5:2", "undo test"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -105,8 +105,8 @@ class TestInventoryCLIScope:
 
         # 撤销
         subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "inventory.py"),
-             "undo"],
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
+             "inventory", "undo"],
              capture_output=True,
             text=True,
             cwd=tmp_path

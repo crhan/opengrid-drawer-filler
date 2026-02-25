@@ -1,7 +1,7 @@
 """
 库存感知评分系统端到端 CLI 测试
 
-通过 subprocess 调用 CLI 脚本（split_calc.py）进行端到端测试。
+通过 subprocess 调用 opengrid.py CLI 进行端到端测试。
 
 用法:
     pytest tests/test_integration_cli.py -v
@@ -20,8 +20,9 @@ import pytest
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scripts')
 sys.path.insert(0, SCRIPTS_DIR)
 
-# 从 split_calc 导入所需函数
-from split_calc import calculate_filament_and_time, SWAP_PENALTY, calculate_print_cost
+# 从 opengrid 库导入所需函数
+from opengrid.core import calculate_filament_and_time, calculate_print_cost
+from opengrid.core.constants import SWAP_PENALTY
 
 
 def run_cmd(cmd, capture=True, cwd=None):
@@ -71,12 +72,12 @@ def load_inventory(inv_file):
 
 def get_print_plan(width, depth, inv_file, batch_mode=None):
     """通过 CLI 获取打印计划，返回统一的数据结构"""
-    cmd = [sys.executable, 'split_calc.py']
+    cmd = [sys.executable, 'opengrid.py', 'split']
     if batch_mode:
-        # 新语法：直接传入位置参数，不需要 -b
-        cmd.extend(batch_mode.split())
+        # 批量模式使用 -b 参数
+        cmd.extend(['-b', batch_mode])
     else:
-        # 新语法：宽x高 格式
+        # 单尺寸模式
         cmd.append(f'{width}x{depth}')
     cmd.extend(['-i', inv_file, '-j'])
 

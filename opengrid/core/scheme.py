@@ -105,46 +105,131 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
         return None
 
     all_schemes.sort(key=lambda s: (len(set(s['tiles'])), len(s['tiles']), calc_scheme_balance(s['x_splits'], s['y_splits'])))
-    return all_schemes[0]
+    best = all_schemes[0].copy()
+    best['unique_sizes'] = len(set(best['tiles']))
+    best['tile_count'] = len(best['tiles'])
+    best['balance'] = calc_scheme_balance(best['x_splits'], best['y_splits'])
+
+    # If x != y, also check rotated direction
+    if x != y:
+        rotated_schemes = find_all_schemes(y, x)
+        if rotated_schemes:
+            rotated_schemes.sort(key=lambda s: (len(set(s['tiles'])), len(s['tiles']), calc_scheme_balance(s['x_splits'], s['y_splits'])))
+            rotated = rotated_schemes[0]
+
+            # Normalize rotated tiles
+            normalized_tiles = normalize_tiles(rotated['tiles'])
+
+            # Check if normalized tiles are valid
+            if validate_tiles(normalized_tiles):
+                rotated_best = {
+                    'x_parts': rotated['y_parts'],
+                    'y_parts': rotated['x_parts'],
+                    'x_splits': rotated['y_splits'],
+                    'y_splits': rotated['x_splits'],
+                    'tiles': normalized_tiles,
+                    'unique_sizes': len(set(normalized_tiles)),
+                    'tile_count': len(normalized_tiles),
+                    'balance': calc_scheme_balance(rotated['y_splits'], rotated['x_splits'])
+                }
+
+                # Compare: use rotated if it's better
+                if (rotated_best['unique_sizes'] < best['unique_sizes'] or
+                    (rotated_best['unique_sizes'] == best['unique_sizes'] and rotated_best['tile_count'] < best['tile_count']) or
+                    (rotated_best['unique_sizes'] == best['unique_sizes'] and rotated_best['tile_count'] == best['tile_count'] and rotated_best['balance'] < best['balance'])):
+                    best = rotated_best
+
+    return best
 
 
-def find_all_schemes(x, y):
-    """Generate all valid split schemes for grid dimensions"""
+def find_all_schemes(x, y, max_schemes=2000):
+    """Generate all valid split schemes for grid dimensions
+
+    Uses intelligent search range:
+    - Small grids: x_search = 1..min(8, x+1), y_search = 1..min(5, y+1)
+    - Large grids: search around minimum required splits +/- 1
+    """
+    # Check if no split needed
+    if validate_tile(x, y):
+        return [{
+            'x_parts': 1,
+            'y_parts': 1,
+            'x_splits': [x],
+            'y_splits': [y],
+            'tiles': [(x, y)],
+        }]
+
     schemes = []
 
-    # Try different x splits
-    x_options = split_with_limit(x, 1, MAX_X)
-    if not x_options:
-        x_options = split_with_limit(x, 2, MAX_X)
-    if not x_options:
-        x_options = split_with_limit(x, 3, MAX_X)
+    # Calculate minimum required splits
+    min_x_parts = max(1, int((x + MAX_X - 1) // MAX_X))
+    min_y_parts = max(1, int((y + MAX_Y - 1) // MAX_Y))
 
-    # Try different y splits
-    y_options = split_with_limit(y, 1, MAX_Y)
-    if not y_options:
-        y_options = split_with_limit(y, 2, MAX_Y)
-    if not y_options:
-        y_options = split_with_limit(y, 3, MAX_Y)
+    # Intelligent search range
+    if min_x_parts >= 6 or min_y_parts >= 5:
+        # Large grid: search around minimum required splits +/- 1
+        x_search = range(max(1, min_x_parts - 1), min_x_parts + 2)
+        y_search = range(max(1, min_y_parts - 1), min_y_parts + 2)
+    else:
+        # Small grid: use wider search range
+        x_search = range(1, min(8, x + 1))
+        y_search = range(1, min(5, y + 1))
 
-    for x_split in x_options:
-        for y_split in y_options:
-            tiles = []
-            for xs in x_split:
-                for ys in y_split:
-                    tiles.append((xs, ys))
+    for x_parts in x_search:
+        for y_parts in y_search:
+            # Early termination if we have enough schemes
+            if len(schemes) >= max_schemes:
+                break
 
-            normalized = normalize_tiles(tiles)
-            if validate_tiles(normalized):
-                schemes.append({
-                    'x_parts': len(x_split),
-                    'y_parts': len(y_split),
-                    'x_splits': x_split,
-                    'y_splits': y_split,
-                    'tiles': normalized,
-                    'unique_sizes': len(set(normalized)),
-                    'tile_count': len(normalized)
-                })
+            total_tiles = x_parts * y_parts
+            # Limit total tiles to prevent combinatorial explosion
+            min_required = min_x_parts * min_y_parts
+            max_allowed = max(28, min_required)
+            if total_tiles > max_allowed:
+                continue
+
+            # Limit split results to prevent combination explosion
+            x_splits = split_with_limit(x, x_parts, MAX_X, max_results=500)
+            if not x_splits:
+                continue
+
+            y_splits = split_with_limit(y, y_parts, MAX_Y, max_results=500)
+            if not y_splits:
+                continue
+
+            for xs in x_splits:
+                # Early termination check
+                if len(schemes) >= max_schemes:
+                    break
+
+                for ys in y_splits:
+                    tiles = []
+                    valid = True
+                    for xd in xs:
+                        for yd in ys:
+                            if not validate_tile(xd, yd):
+                                valid = False
+                                break
+                            tiles.append((xd, yd))
+
+                    if not valid:
+                        continue
+
+                    # Normalize tiles
+                    normalized = normalize_tiles(tiles)
+
+                    schemes.append({
+                        'x_parts': x_parts,
+                        'y_parts': y_parts,
+                        'x_splits': xs,
+                        'y_splits': ys,
+                        'tiles': normalized,
+                    })
+
+                    # Early termination check
+                    if len(schemes) >= max_schemes:
+                        break
 
     # Sort by unique sizes, then tile count, then balance
-    schemes.sort(key=lambda s: (s['unique_sizes'], s['tile_count'], calc_scheme_balance(s['x_splits'], s['y_splits'])))
+    schemes.sort(key=lambda s: (len(set(s['tiles'])), len(s['tiles']), calc_scheme_balance(s['x_splits'], s['y_splits'])))
     return schemes

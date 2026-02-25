@@ -1,12 +1,8 @@
 """批量输入解析测试"""
 
 import pytest
-import sys
-import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-
-from split_calc import parse_batch_input
+from opengrid.cli.utils import parse_batch_input
 
 
 class TestParseBatchInput:

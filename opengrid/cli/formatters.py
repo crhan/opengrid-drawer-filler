@@ -20,6 +20,8 @@ def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
 
 def output_json(width: int, depth: int, scheme: Any, copies: int = 1, inventory: dict = None) -> str:
     """输出 JSON 格式"""
+    from opengrid.core.cost import calculate_print_cost
+
     # 转换 tiles 格式
     tiles = scheme.get('tiles', [])
     tiles_list = []
@@ -37,9 +39,21 @@ def output_json(width: int, depth: int, scheme: Any, copies: int = 1, inventory:
     total_cells = sum(t['width'] * t['height'] for t in tiles_list)
 
     # 计算打印时间和耗材
-    total_time_min = total_cells * PRINT_TIME_PER_CELL * copies
-    filament_main = total_cells * FILAMENT_MAIN_PER_CELL * copies
-    filament_support = total_cells * FILAMENT_SUPPORT_PER_CELL * copies
+    # 使用 calculate_print_cost 获取实际需要打印的瓦片时间（考虑库存）
+    cost, from_inventory, need_print = calculate_print_cost(tiles, inventory, copies)
+
+    # need_print 是字典 {"3x6": 2, "6x6": 1}，需要转换为瓦片列表来计算
+    need_print_cells = 0
+    if need_print:
+        for key, count in need_print.items():
+            w, h = map(int, key.split('x'))
+            need_print_cells += w * h * count
+    else:
+        need_print_cells = total_cells
+
+    total_time_min = need_print_cells * PRINT_TIME_PER_CELL * copies
+    filament_main = need_print_cells * FILAMENT_MAIN_PER_CELL * copies
+    filament_support = need_print_cells * FILAMENT_SUPPORT_PER_CELL * copies
 
     stats = {
         'unique_sizes': unique_sizes,
@@ -62,9 +76,7 @@ def output_json(width: int, depth: int, scheme: Any, copies: int = 1, inventory:
 
     # 如果有库存信息，添加库存使用情况
     if inventory:
-        from_inventory = scheme.get('from_inventory', {})
-        need_print = scheme.get('need_print', {})
-
+        # 使用 calculate_print_cost 返回的结果
         # 计算使用的库存数量
         total_from_inv = sum(from_inventory.values()) if from_inventory else 0
         total_need_print = sum(need_print.values()) if need_print else len(tiles) * copies
