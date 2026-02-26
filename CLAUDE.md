@@ -68,34 +68,34 @@ claude --plugin-dir /Users/ruohanc/Documents/projects/opengrid_plugin
 
 ```bash
 # 运行所有测试
-.venv/bin/python -m pytest
+uv run pytest
 
 # 运行特定测试
-.venv/bin/python -m pytest tests/test_scheme.py
+uv run pytest tests/test_scheme.py
 
 # 运行单个测试
-.venv/bin/python -m pytest tests/test_scheme.py::TestFindBestScheme::test_no_split_needed
+uv run pytest tests/test_scheme.py::TestFindBestScheme::test_no_split_needed
 ```
 
 ## 常用命令
 
 ```bash
 # 分割计算
-.venv/bin/python scripts/opengrid.py split 325x460
-.venv/bin/python scripts/opengrid.py split 325x460 -i inventory.json
+uv run scripts/opengrid.py split 325x460
+uv run scripts/opengrid.py split 325x460 -i inventory.json
 
 # JSON 输出
-.venv/bin/python scripts/opengrid.py split 325x460 -j
+uv run scripts/opengrid.py split 325x460 -j
 
 # 方案对比（生成 HTML）
-.venv/bin/python scripts/opengrid.py split 325x460 -j > scheme_a.json
-.venv/bin/python scripts/opengrid.py split 325x460 -i inventory.json -j > scheme_b.json
-.venv/bin/python scripts/opengrid.py present scheme_a.json scheme_b.json -o comparison.html
+uv run scripts/opengrid.py split 325x460 -j > scheme_a.json
+uv run scripts/opengrid.py split 325x460 -i inventory.json -j > scheme_b.json
+uv run scripts/opengrid.py present scheme_a.json scheme_b.json -o comparison.html
 
 # 库存管理
-.venv/bin/python scripts/opengrid.py inventory list
-.venv/bin/python scripts/opengrid.py inventory add 8x8:5 "原因"
-.venv/bin/python scripts/opengrid.py inventory deduct 8x8:2 "原因"
+uv run scripts/opengrid.py inventory list
+uv run scripts/opengrid.py inventory add 8x8:5 "原因"
+uv run scripts/opengrid.py inventory deduct 8x8:2 "原因"
 ```
 
 ## 核心设计原则
