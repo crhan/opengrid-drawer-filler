@@ -2,6 +2,11 @@
 """方案展示模块"""
 
 from pathlib import Path
+from jinja2 import Environment, FileSystemLoader
+
+# 初始化 Jinja2 环境
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
 
 def present_schemes(schemes, inventory):
@@ -127,26 +132,41 @@ def format_scheme_for_display(scheme, inventory=None):
 
 
 def prepare_project_data(project_name, scheme_data, drawer_specs, stl_files):
-    """Prepare data for HTML template
-
-    Args:
-        project_name: str
-        scheme_data: dict with scheme, stats, inventory_usage
-        drawer_specs: list of drawer specs
-        stl_files: list of STL file paths
-
-    Returns:
-        dict: Data for template rendering
-    """
+    """Prepare data for HTML template"""
     scheme = scheme_data.get("scheme", {})
     stats = scheme_data.get("stats", {})
     inventory_usage = scheme_data.get("inventory_usage", {})
 
-    # Prepare tiles with source info
+    # Prepare tiles with source info - use a counter to consume inventory quota
     tiles = scheme.get("tiles", [])
+    processed_tiles = []
+    
+    # 获取可变副本用于在处理中扣减
+    inv_remaining = {}
+    if isinstance(inventory_usage, dict):
+        inv_remaining = inventory_usage.get("from_inventory", {}).copy()
+    
     for tile in tiles:
-        key = f"{tile['width']}x{tile['height']}"
-        tile['from_inventory'] = key in inventory_usage
+        if isinstance(tile, dict):
+            w, h = tile['width'], tile['height']
+            count = tile.get('count', 1)
+        else:
+            w, h = tile[0], tile[1]
+            count = 1
+            
+        key = f"{w}x{h}"
+        # 确定这一块是否来自库存
+        is_from_inv = False
+        if inv_remaining.get(key, 0) > 0:
+            is_from_inv = True
+            inv_remaining[key] -= 1
+            
+        processed_tiles.append({
+            "width": w,
+            "height": h,
+            "count": count,
+            "from_inventory": is_from_inv
+        })
 
     # Prepare drawer info
     drawer_info = []
@@ -172,30 +192,23 @@ def prepare_project_data(project_name, scheme_data, drawer_specs, stl_files):
         "drawers": drawer_info,
         "scheme": scheme,
         "stats": stats,
-        "tiles": tiles,
+        "tiles": processed_tiles,
         "inventory_usage": inventory_usage,
         "stl_files": stl_info,
     }
 
 
 def generate_print_plan_html(project_path, project_name, scheme_data, drawer_specs, stl_files):
-    """Generate HTML print plan
-
-    Args:
-        project_path: Path to project directory
-        project_name: str
-        scheme_data: dict
-        drawer_specs: list
-        stl_files: list
-    """
+    """Generate HTML print plan"""
     from opengrid.ui.visualizer import Visualizer
 
     data = prepare_project_data(project_name, scheme_data, drawer_specs, stl_files)
 
-    # Generate SVG
+    # Generate SVG with inventory awareness
     v = Visualizer()
     scheme = scheme_data.get("scheme", {})
-    svg = v.generate_assembly_svg(scheme)
+    inv_usage = scheme_data.get("inventory_usage", {})
+    svg = v.generate_assembly_svg(scheme, inventory_usage=inv_usage)
 
     # Generate HTML
     html = _generate_simple_html(data, svg)
@@ -206,562 +219,8 @@ def generate_print_plan_html(project_path, project_name, scheme_data, drawer_spe
 
 def _generate_simple_html(data, svg):
     """Generate beautiful HTML with technical industrial design"""
-    from jinja2 import Template
-
-    template = '''<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>openGrid 打印计划 - {{ project_name }}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-primary: #0a0a0b;
-            --bg-secondary: #141416;
-            --bg-tertiary: #1c1c1f;
-            --border-subtle: #2a2a2e;
-            --border-active: #3d3d42;
-            --text-primary: #f0f0f2;
-            --text-secondary: #8b8b94;
-            --text-muted: #5a5a63;
-            --accent-orange: #ff6b35;
-            --accent-orange-dim: #cc5529;
-            --accent-cyan: #00d4ff;
-            --accent-cyan-dim: #00a8cc;
-            --accent-green: #22c55e;
-            --accent-red: #ef4444;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Noto Sans SC', 'JetBrains Mono', -apple-system, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-image:
-                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-            background-size: 40px 40px;
-            pointer-events: none;
-            z-index: -1;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 40px 24px;
-        }
-
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 40px;
-            padding-bottom: 24px;
-            border-bottom: 1px solid var(--border-subtle);
-            animation: fadeInDown 0.5s ease;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .logo {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, var(--accent-orange), var(--accent-orange-dim));
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 20px;
-            color: white;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .header-title h1 {
-            font-size: 24px;
-            font-weight: 600;
-            letter-spacing: -0.5px;
-        }
-
-        .header-title p {
-            font-size: 13px;
-            color: var(--text-secondary);
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .status-badge {
-            padding: 6px 14px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 20px;
-            font-size: 12px;
-            color: var(--text-secondary);
-            font-family: 'JetBrains Mono', monospace;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .status-badge::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            background: var(--accent-orange);
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 16px;
-            padding: 28px;
-            margin-bottom: 20px;
-            transition: border-color 0.3s ease;
-            animation: fadeInUp 0.5s ease backwards;
-        }
-
-        .card:nth-child(1) { animation-delay: 0.1s; }
-        .card:nth-child(2) { animation-delay: 0.2s; }
-        .card:nth-child(3) { animation-delay: 0.3s; }
-        .card:nth-child(4) { animation-delay: 0.4s; }
-
-        .card:hover {
-            border-color: var(--border-active);
-        }
-
-        .card-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--text-muted);
-            margin-bottom: 20px;
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 600;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-        }
-
-        .info-item {
-            background: var(--bg-tertiary);
-            border-radius: 12px;
-            padding: 20px;
-            border: 1px solid var(--border-subtle);
-        }
-
-        .info-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .info-value {
-            font-size: 22px;
-            font-weight: 600;
-            color: var(--text-primary);
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .info-value span {
-            font-size: 14px;
-            color: var(--text-secondary);
-            font-weight: 400;
-        }
-
-        .svg-container {
-            display: flex;
-            justify-content: center;
-            padding: 30px;
-            background: var(--bg-tertiary);
-            border-radius: 12px;
-            border: 1px solid var(--border-subtle);
-        }
-
-        .svg-container svg {
-            max-width: 100%;
-            height: auto;
-        }
-
-        .tile-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 12px;
-        }
-
-        .tile-card {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .tile-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-        }
-
-        .tile-card.from-inventory::before {
-            background: var(--accent-cyan);
-        }
-
-        .tile-card.need-print::before {
-            background: var(--accent-orange);
-        }
-
-        .tile-card:hover {
-            transform: translateY(-4px);
-            border-color: var(--border-active);
-        }
-
-        .tile-card.from-inventory:hover {
-            box-shadow: 0 8px 30px rgba(0, 212, 255, 0.15);
-        }
-
-        .tile-card.need-print:hover {
-            box-shadow: 0 8px 30px rgba(255, 107, 53, 0.15);
-        }
-
-        .tile-size {
-            font-size: 24px;
-            font-weight: 700;
-            font-family: 'JetBrains Mono', monospace;
-            margin-bottom: 8px;
-        }
-
-        .tile-card.from-inventory .tile-size {
-            color: var(--accent-cyan);
-        }
-
-        .tile-card.need-print .tile-size {
-            color: var(--accent-orange);
-        }
-
-        .tile-count {
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-
-        .tile-source {
-            font-size: 11px;
-            margin-top: 10px;
-            padding: 4px 10px;
-            border-radius: 12px;
-            display: inline-block;
-        }
-
-        .tile-card.from-inventory .tile-source {
-            background: rgba(0, 212, 255, 0.15);
-            color: var(--accent-cyan);
-        }
-
-        .tile-card.need-print .tile-source {
-            background: rgba(255, 107, 53, 0.15);
-            color: var(--accent-orange);
-        }
-
-        .file-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .file-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px 20px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 10px;
-            transition: all 0.2s ease;
-        }
-
-        .file-item:hover {
-            border-color: var(--border-active);
-            background: var(--bg-primary);
-        }
-
-        .file-info {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .file-icon {
-            width: 40px;
-            height: 40px;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .file-name {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            color: var(--text-primary);
-        }
-
-        .file-meta {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
-
-        .file-btn {
-            padding: 10px 18px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 8px;
-            color: var(--text-secondary);
-            font-size: 13px;
-            font-family: 'JetBrains Mono', monospace;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .file-btn:hover {
-            background: var(--accent-orange);
-            border-color: var(--accent-orange);
-            color: white;
-        }
-
-        .template-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 14px 28px;
-            background: linear-gradient(135deg, var(--accent-orange), var(--accent-orange-dim));
-            border: none;
-            border-radius: 10px;
-            color: white;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            font-family: 'Noto Sans SC', sans-serif;
-        }
-
-        .template-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(255, 107, 53, 0.3);
-        }
-
-        .stats-row {
-            display: flex;
-            gap: 12px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-
-        .stat-tag {
-            padding: 8px 14px;
-            background: var(--bg-tertiary);
-            border-radius: 8px;
-            font-size: 13px;
-            color: var(--text-secondary);
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .stat-tag strong {
-            color: var(--text-primary);
-        }
-
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
-        }
-
-        @media (max-width: 600px) {
-            .container {
-                padding: 24px 16px;
-            }
-
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 16px;
-            }
-
-            .info-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .tile-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header class="header">
-            <div class="header-left">
-                <div class="logo">OG</div>
-                <div class="header-title">
-                    <h1>{{ project_name }}</h1>
-                    <p>openGrid 打印计划</p>
-                </div>
-            </div>
-            <div class="status-badge">等待打印</div>
-        </header>
-
-        <div class="card">
-            <div class="card-title">抽屉信息</div>
-            <div class="info-grid">
-                {% for drawer in drawers %}
-                <div class="info-item">
-                    <div class="info-label">尺寸</div>
-                    <div class="info-value">{{ drawer.width }}×{{ drawer.depth }}<span>mm</span></div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">数量</div>
-                    <div class="info-value">{{ drawer.copies }}<span>份</span></div>
-                </div>
-                {% endfor %}
-                {% if stats %}
-                <div class="info-item">
-                    <div class="info-label">预估时间</div>
-                    <div class="info-value">{{ stats.get('total_time', '—') }}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">预估耗材</div>
-                    <div class="info-value">{{ stats.get('total_filament', '—') }}</div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-        {% if svg %}
-        <div class="card">
-            <div class="card-title">拼接示意图</div>
-            <div class="svg-container">
-                {{ svg|safe }}
-            </div>
-        </div>
-        {% endif %}
-
-        <div class="card">
-            <div class="card-title">瓦片清单</div>
-            <div class="tile-grid">
-                {% for tile in tiles %}
-                <div class="tile-card {% if tile.from_inventory %}from-inventory{% else %}need-print{% endif %}">
-                    <div class="tile-size">{{ tile.width }}×{{ tile.height }}</div>
-                    <div class="tile-count">×{{ tile.count }}</div>
-                    <div class="tile-source">{% if tile.from_inventory %}库存{% else %}需打印{% endif %}</div>
-                </div>
-                {% endfor %}
-            </div>
-            {% if inventory_usage %}
-            <div class="stats-row">
-                <div class="stat-tag">使用库存: <strong>{{ inventory_usage|length }}</strong> 种尺寸</div>
-            </div>
-            {% endif %}
-        </div>
-
-        {% if stl_files %}
-        <div class="card">
-            <div class="card-title">STL 文件</div>
-            <div class="file-list">
-                {% for stl in stl_files %}
-                <div class="file-item">
-                    <div class="file-info">
-                        <div class="file-icon">📦</div>
-                        <div>
-                            <div class="file-name">{{ stl.name }}</div>
-                            <div class="file-meta">{{ stl.path }}</div>
-                        </div>
-                    </div>
-                    <a href="{{ stl.path }}" class="file-btn" target="_blank">打开</a>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        <div class="card">
-            <div class="card-title">切片模板</div>
-            <a href="openGrid_h2d.3mf" class="template-btn" onclick="event.preventDefault(); window.open('openGrid_h2d.3mf', '_blank');">
-                <span>📐</span> 在 OrcaSlicer 中打开模板
-            </a>
-        </div>
-    </div>
-</body>
-</html>'''
-
-    t = Template(template)
-    return t.render(**data, svg=svg)
+    template = env.get_template("project_plan.html.j2")
+    return template.render(**data, svg=svg)
 
 
 def generate_comparison_html(scheme_no_inv, scheme_with_inv):
@@ -796,9 +255,12 @@ def generate_comparison_html(scheme_no_inv, scheme_with_inv):
     filament_no_inv = round(stats_no_inv.get("filament_main_g", 0), 2)
     filament_with_inv = round(stats_with_inv.get("filament_main_g", 0), 2)
 
-    # 计算节省百分比
+    # 计算节省百分比和绝对值
     time_saved_pct = 0
     filament_saved_pct = 0
+    time_saved_abs = round(time_no_inv - time_with_inv, 1)
+    filament_saved_abs = round(filament_no_inv - filament_with_inv, 2)
+
     if time_no_inv > 0:
         time_saved_pct = round((time_no_inv - time_with_inv) / time_no_inv * 100, 1)
     if filament_no_inv > 0:
@@ -811,84 +273,79 @@ def generate_comparison_html(scheme_no_inv, scheme_with_inv):
     v = Visualizer()
     scheme_no = scheme_no_inv.get("scheme", {})
     scheme_with = scheme_with_inv.get("scheme", {})
+    inv_usage = scheme_with_inv.get("inventory_usage", {})
 
-    # 处理 x_splits/y_splits 缺失情况
-    def get_svg(scheme_data, drawer_dims=None):
-        if not scheme_data:
-            return ""
-        if "x_splits" in scheme_data and "y_splits" in scheme_data:
-            return v.generate_assembly_svg(scheme_data)
-        # 从 tiles 简单生成 SVG
-        tiles = scheme_data.get("tiles", [])
-        if not tiles:
-            return ""
+    # 使用增强的 Visualizer 生成拼图蓝图
+    svg_no_inv = v.generate_assembly_svg(scheme_no)
+    svg_with_inv = v.generate_assembly_svg(scheme_with, inventory_usage=inv_usage)
 
-        # 计算布局：按宽度累积，自动换行
-        # 假设格子大小为 28mm (TILE_SIZE)
-        tile_size = 28
-        cell_size = 20  # SVG 中每个格子的像素大小
-        padding = 20
-        gap = 5
+    # 如果无法生成标准 SVG（缺少 splits 数据），则回退到散件模式
+    if not svg_no_inv:
+        # 内部兜底函数保持原有散件堆放逻辑，但由于上面已经修复了 output_json，这里理论上不会触发
+        def get_fallback_svg(scheme_data, is_inventory_scheme=False):
+            if not scheme_data: return ""
+            tiles = scheme_data.get("tiles", [])
+            if not tiles: return ""
+            
+            cell_size = 20
+            padding = 20
+            gap = 5
+            max_cells_x = 11
+            svg_parts = []
+            x_offset = padding
+            y_offset = padding
+            row_height = 0
+            max_width = 0
+            all_sizes = [t["width"] * t["height"] for t in tiles]
+            from_inv = {}
+            if is_inventory_scheme and inv_usage:
+                from_inv = inv_usage.get("from_inventory", {}).copy()
 
-        # 计算每行最大宽度（不超过 11 个格子，即 325mm）
-        max_cells_x = 11
+            for t in tiles:
+                w, h = t.get("width", 0), t.get("height", 0)
+                if x_offset + w * cell_size > max_cells_x * cell_size + padding + 10:
+                    x_offset = padding
+                    y_offset += row_height + gap
+                    row_height = 0
+                key = f"{w}x{h}"
+                if is_inventory_scheme and from_inv.get(key, 0) > 0:
+                    color = "var(--accent-cyan)"; from_inv[key] -= 1
+                elif is_inventory_scheme: color = "var(--accent-orange)"
+                else: color = v._get_color_for_size(w, h, all_sizes)
+                svg_parts.append(f'<rect x="{x_offset}" y="{y_offset}" width="{w*cell_size-2}" height="{h*cell_size-2}" rx="3" ry="3" fill="{color}" stroke="black" stroke-opacity="0.1" stroke-width="1"/>')
+                text_x = x_offset + w * cell_size // 2; text_y = y_offset + h * cell_size // 2
+                font_size = min(w, h) * 4
+                if font_size < 10: font_size = 10
+                svg_parts.append(f'<text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle" font-size="{font_size}" font-weight="600" fill="white">{w}x{h}</text>')
+                x_offset += w * cell_size + gap
+                row_height = max(row_height, h * cell_size)
+                max_width = max(max_width, x_offset)
 
-        # 按位置累积计算布局
-        svg_parts = []
-        x_offset = padding
-        y_offset = padding
-        row_height = 0
-        max_width = 0
+            svg_width = max(max_width + padding, 240)
+            svg_height = y_offset + row_height + padding
+            return f'<svg width="100%" viewBox="0 0 {svg_width} {svg_height}" xmlns="http://www.w3.org/2000/svg">{"".join(svg_parts)}</svg>'
 
-        for t in tiles:
-            w, h = t.get("width", 0), t.get("height", 0)
-
-            # 检查是否需要换行
-            if x_offset + w * cell_size > max_cells_x * cell_size + padding:
-                x_offset = padding
-                y_offset += row_height + gap
-                row_height = 0
-
-            color = v._get_color_for_size(w, h, [t["width"]*t["height"] for t in tiles])
-
-            # 绘制矩形
-            svg_parts.append(f'<rect x="{x_offset}" y="{y_offset}" width="{w*cell_size-2}" height="{h*cell_size-2}" fill="{color}" stroke="black" stroke-width="1"/>')
-
-            # 绘制文字（根据瓦片大小调整字体）
-            text_x = x_offset + w * cell_size // 2
-            text_y = y_offset + h * cell_size // 2
-            font_size = min(w, h) * 3
-            if font_size < 10:
-                font_size = 10
-            svg_parts.append(f'<text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle" font-size="{font_size}" fill="white" style="text-shadow: 1px 1px 2px black;">{w}x{h}</text>')
-
-            # 更新位置
-            x_offset += w * cell_size + gap
-            row_height = max(row_height, h * cell_size)
-            max_width = max(max_width, x_offset)
-
-        svg_width = max_width + padding
-        svg_height = y_offset + row_height + padding
-
-        svg_parts.insert(0, f'<svg width="{svg_width}" height="{svg_height}" xmlns="http://www.w3.org/2000/svg">')
-        svg_parts.append('</svg>')
-        return '\n'.join(svg_parts)
-
-    svg_no_inv = get_svg(scheme_no)
-    svg_with_inv = get_svg(scheme_with)
+        svg_no_inv = get_fallback_svg(scheme_no, False)
+        svg_with_inv = get_fallback_svg(scheme_with, True)
 
     # 瓦片列表
     tiles_no_inv = scheme_no_inv.get("tiles", [])
     tiles_with_inv = scheme_with_inv.get("tiles", [])
-    inv_usage = scheme_with_inv.get("inventory_usage", {})
 
     # 构建瓦片 HTML
     def build_tiles_html(tiles, inv_usage=None):
         from collections import Counter
         counts = Counter((t["width"], t["height"]) for t in tiles)
         result = []
-        for (w, h), cnt in counts.items():
-            is_inv = inv_usage and inv_usage.get("from_inventory", {}).get(f"{w}x{h}", 0) > 0
+        # 创建一个可变副本
+        inv_counts = {}
+        if inv_usage:
+            inv_counts = inv_usage.get("from_inventory", {}).copy()
+
+        for (w, h), cnt in sorted(counts.items(), key=lambda x: x[0][0]*x[0][1], reverse=True):
+            key = f"{w}x{h}"
+            # 在列表展示中，如果这一类中有库存，标记为库存
+            is_inv = inv_counts.get(key, 0) > 0
             cls = "inventory" if is_inv else "print"
             result.append(f'<div class="tile-item {cls}">{w}×{h} ×{cnt}</div>')
         return "".join(result)
@@ -904,11 +361,11 @@ def generate_comparison_html(scheme_no_inv, scheme_with_inv):
             <div class="summary-stats">
                 <div class="summary-stat">
                     <div class="summary-stat-value">{time_saved_pct}%</div>
-                    <div class="summary-stat-label">打印时间</div>
+                    <div class="summary-stat-label">打印时间 (-{time_saved_abs} min)</div>
                 </div>
                 <div class="summary-stat">
                     <div class="summary-stat-value">{filament_saved_pct}%</div>
-                    <div class="summary-stat-label">耗材</div>
+                    <div class="summary-stat-label">耗材 (-{filament_saved_abs}g)</div>
                 </div>
             </div>
         </div>'''
@@ -937,4 +394,5 @@ def generate_comparison_html(scheme_no_inv, scheme_with_inv):
         "summary_html": summary_html,
     }
 
-    return COMPARISON_TEMPLATE.substitute(data)
+    template = env.get_template("comparison.html.j2")
+    return template.render(**data)

@@ -108,219 +108,61 @@ cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inven
 
 **自动双方案**：当检测到有库存时，自动计算两种方案：
 
-1. 方案 A：不考虑库存（最优打印次数）
-2. 方案 B：使用库存
+1. 方案 A：不考虑库存（追求最优切割，平衡度高）
+2. 方案 B：使用库存（追求最少打印，节省耗材）
 
-**无库存时**：只计算方案 A（标准最优方案）
+**无库存时**：只计算方案 A。
 
-调用 `split_calc.py`：
-
-```bash
-# 方案 A：不使用库存（用于对比）
-python3 scripts/split_calc.py 265x365:2 325x365:2 -i ""
-
-# 方案 B：使用库存（默认）
-python3 scripts/split_calc.py 265x365:2 325x365:2
-```
-
-**注意**：当库存充足时，方案 B 可能打印次数更少；当库存不匹配时，方案 A 可能反而更优。
-
-### Step 4: 展示方案
-
-将脚本输出展示给用户，询问选择。
-
-#### 展示内容规范
-
-> **重要**: 展示方案时必须包含以下全部内容，使用 emoji + 框线表格突出库存价值：
-
-**1. 库存覆盖率表格**（必须展示）
-
-脚本已输出增强版库存展示，包含框线表格：
-
-```
-╔════════════════════════════════════════╗
-║  📦 库存利用                            ║
-╚════════════════════════════════════════╝
-
-┌──────────┬──────────┬──────────┬──────────┐
-│ 瓦片尺寸  │ 库存数量  │ 需要数量  │   状态   │
-├──────────┼──────────┼──────────┼──────────┤
-│  8×8    │   9      │   4      │ ✅ 充足  │
-│  6×7    │   5      │   2      │ ✅ 充足  │
-│  8×4    │   0      │   4      │ ❌ 需打印 │
-└──────────┴──────────┴──────────┴──────────┘
-
-📊 库存覆盖率: 3/5 种尺寸 (60%)
-💰 节省: 18 分钟 (45%打印时间)
-```
-
-**2. 可视化布局**（风格2：带尺寸标注）
-
-```
-┌───────────┬─────────┐
-│   7×5     │   3×5   │
-│ ┌───────┐ │ ┌─────┐ │
-│ │       │ │ │     │ │
-│ └───────┘ │ └─────┘ │
-├───────────┼─────────┤
-│   7×5     │   3×5   │
-│ ┌───────┐ │ ┌─────┐ │
-│ │       │ │ │     │ │
-│ └───────┘ │ └─────┘ │
-└───────────┴─────────┘
-```
-
-**3. 详细统计**
-
-| 项目     | 值                 |
-| -------- | ------------------ |
-| 抽屉尺寸 | 265×365mm × 2份    |
-| 分割方案 | 7×5 × 2 + 3×5 × 2  |
-| 瓦片数量 | 4 stack            |
-| 打印时间 | 12.4 分钟          |
-| 预估耗材 | 45.2g              |
-| 库存使用 | 7×5 × 2 (从库存取) |
-| 节省     | 50% (如有库存)     |
-
-**4. 对比表格**（当展示两种方案时）
-
-| 项目     | 方案 A        | 方案 B        |
-| -------- | ------------- | ------------- |
-| 分割     | 7×5×2 + 3×5×2 | 7×5×2 + 3×5×2 |
-| 需打印   | 4 stack       | 2 stack       |
-| 打印时间 | 12.4 min      | 6.2 min       |
-| 耗材     | 45.2g         | 22.6g         |
-
-**5. 用户引导**
-
-```
-[ A ] 方案 A - 不考虑库存 (X次打印, Xh, Xg)
-[ B ] 方案 B - 使用库存 (X次打印, Xh, Xg, 节省库存)
-[ G ] 生成 STL 文件（默认方案 B）
-[ Q ] 退出
-```
-
-### Step 5: 生成 STL 文件
-
-用户选择方案后，调用 `slicer.py` 生成 STL 文件。
-
-#### 5.1 获取方案 JSON
-
-首先获取方案的 JSON 输出（包含所有信息）：
+调用 `scripts/opengrid.py`：
 
 ```bash
-# 单尺寸
-.venv/bin/python scripts/split_calc.py 265 365 -j > scheme.json
+# 方案 A：不使用库存 (获取 JSON)
+python3 scripts/opengrid.py split 325x460 -j > no_inv.json
 
-# 批量
-.venv/bin/python scripts/split_calc.py 265x365:2 325x365:2 -j > batch_scheme.json
+# 方案 B：使用库存 (获取 JSON)
+python3 scripts/opengrid.py split 325x460 -i inventory.json -j > with_inv.json
 ```
 
-#### 5.2 提取需要打印的瓦片
+### Step 4: 方案对比与决策
 
-从 JSON 中提取需要打印的瓦片（**不含从库存取的瓦片**）：
-
-```python
-import json
-
-# 读取 JSON
-with open('scheme.json') as f:
-    data = json.load(f)
-
-# 提取需要打印的瓦片
-tiles_to_print = []
-
-if 'tiles' in data:
-    # 批量模式
-    for tile in data['tiles']:
-        w, h = tile['width'], tile['height']
-        to_print = tile.get('to_print', 0)
-        if to_print > 0:
-            tiles_to_print.extend([(w, h)] * to_print)
-elif 'inventory' in data and 'need_print' in data['inventory']:
-    # 单尺寸模式
-    need_print = data['inventory']['need_print']
-    tiles = data['scheme']['tiles']
-    for w, h, count in [(t['width'], t['height'], t['count']) for t in tiles]:
-        key = f"{w}x{h}"
-        if key in need_print and need_print[key] > 0:
-            tiles_to_print.extend([(w, h)] * min(count, need_print[key]))
-
-print("需要打印的瓦片:", tiles_to_print)
-```
-
-#### 5.3 调用 STL 生成
-
-调用 `scripts/slicer.py` 中的 `generate_all_stls` 函数：
+使用 `present` 命令生成可视化的**网格填充蓝图**进行对比决策：
 
 ```bash
-# 方法1：使用 Python 模块
-cd /Users/ruohanc/.claude/skills/opengrid-drawer-filler
-.venv/bin/python -c "
-import sys
-import json
-sys.path.insert(0, 'scripts')
-from slicer import generate_all_stls
-
-# 构造 scheme 字典（只包含需要打印的瓦片）
-scheme = {
-    'tiles': [(7, 5), (3, 5)]  # 只包含需要打印的瓦片
-}
-
-result = generate_all_stls(scheme, copies=1, verbose=True)
-print('Generated:', result)
-"
-
-# 方法2：直接调用脚本
-.venv/bin/python scripts/slicer.py -g 7x5x2 3x5x2
+python3 scripts/opengrid.py present no_inv.json with_inv.json -o comparison.html
 ```
 
-#### 5.4 展示生成结果
+**对比报告 (`comparison.html`) 特点**：
+- **网格铺满蓝图**：基于抽屉真实坐标（如 11×16）的拼图视图。
+- **色彩语义**：青色代表库存，橙色代表需打印。
+- **节省统计**：直观显示节省的打印时间和克数。
 
-STL 生成完成后，向用户展示结果：
+### Step 5: 生成施工项目
 
-```
---- STL 生成完成 ---
-输出目录: ~/3D打印/opengrid/
-
-生成的文件:
-  7×5: 2 stack (~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl)
-  3×5: 2 stack (~/3D打印/opengrid/3x5_Full/opengrid_3x5_Full_s2.stl)
-```
-
-#### 5.5 后续操作
-
-询问用户是否需要后续操作：
-
-```
-生成完成！
-
-[ O ] 在 slicer 中打开 STL
-[ S ] 切片 STL (生成 3MF)
-[ D ] 在文件夹中显示
-[ Q ] 退出
-```
-
-**打开 slicer**:
-
-```python
-# 在 OrcaSlicer 中打开
-from scripts.slicer import open_in_slicer
-stl_files = [
-    "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl",
-    "~/3D打印/opengrid/3x5_Full/opengrid_3x5_Full_s2.stl"
-]
-open_in_slicer(stl_files, slicer="orca")
-```
-
-**切片 STL** (可选):
+用户选定方案后，生成正式的施工文件夹。
 
 ```bash
-# 切片单个文件
-.venv/bin/python scripts/slicer.py -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
+# 快速预览 (不生成 STL)
+python3 scripts/opengrid.py split 325x460 -i inventory.json -H preview.html
 
-# 切片多个文件
-.venv/bin/python scripts/slicer.py -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
+# 正式施工 (创建项目，生成 STL 并建立施工单)
+python3 scripts/opengrid.py split 325x460 -i inventory.json -P ./projects/my_drawer
+```
+
+#### 施工单 (`print_plan.html`) 逻辑规范：
+
+> **重要**: 施工单必须严格区分任务类型，防止误打印：
+
+1.  **🖨️ 打印任务**：仅列出需要 3D 打印的瓦片尺寸和数量（背景为橙色）。
+2.  **📦 现有库存提取**：仅列出直接从库存取用的瓦片（背景为青色）。
+3.  **安装蓝图**：显示完整的网格位置索引，指导用户将库存件与打印件拼接。
+4.  **STL 获取**：提供直接指向项目内 STL 文件的链接。
+
+### Step 6: 打印与同步
+
+1. 根据施工单的“打印任务”进行切片和打印。
+2. 施工完成后，手动通过 CLI 更新库存：
+```bash
+python3 scripts/opengrid.py inventory deduct 8x8:2 "完成 325x460 项目施工"
 ```
 
 ## 快速命令

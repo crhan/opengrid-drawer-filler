@@ -46,6 +46,8 @@ def add_parser(subparsers):
     parser.add_argument('dimensions', nargs='*', help='尺寸列表')
     parser.add_argument('-c', '--copies', type=int, default=1, help='打印份数')
     parser.add_argument('-j', '--json', action='store_true', help='JSON 输出')
+    parser.add_argument('-H', '--html', help='生成 HTML 报告并保存到指定路径')
+    parser.add_argument('-P', '--project-dir', help='生成完整项目到指定目录')
     parser.add_argument('-b', '--batch', help='批量输入')
     parser.add_argument('-i', '--inventory', help='库存文件路径')
     parser.set_defaults(func=handle_split)
@@ -100,6 +102,50 @@ def handle_split(args):
     # 输出
     if args.json:
         print(output_json(width, depth, scheme, copies, inventory=inventory))
+    elif args.html:
+        from opengrid.ui.visualizer import Visualizer
+        v = Visualizer()
+        # 转换格式以匹配 generate_html
+        plan_data = {
+            'scheme': scheme,
+            'drawer': {'width': width, 'depth': depth},
+            'stats': {
+                'total_tiles': len(scheme.get('tiles', [])),
+                'unique_sizes': len(set(scheme.get('tiles', []))),
+                'total_prints': 1
+            }
+        }
+        v.generate_html(plan_data, args.html)
+        print(f"已生成 HTML 报告: {args.html}")
+    elif args.project_dir:
+        from pathlib import Path
+        from opengrid.ui.presenter import generate_print_plan_html
+        project_path = Path(args.project_dir)
+        project_path.mkdir(parents=True, exist_ok=True)
+        (project_path / "stl").mkdir(exist_ok=True)
+        
+        # 转换格式以匹配 generate_print_plan_html
+        scheme_data = {
+            'scheme': scheme,
+            'stats': {
+                'total_time': f"{int(width*depth*0.001)} min", # 粗略估算用于演示
+                'total_filament': f"{int(width*depth*0.0004)}g"
+            },
+            'inventory_usage': {
+                'from_inventory': scheme.get('from_inventory', {}),
+                'need_print': scheme.get('need_print', {})
+            }
+        }
+        drawer_specs = [{'width': width, 'depth': depth, 'copies': copies}]
+        
+        generate_print_plan_html(
+            project_path=project_path,
+            project_name=project_path.name,
+            scheme_data=scheme_data,
+            drawer_specs=drawer_specs,
+            stl_files=[] # 演示时为空
+        )
+        print(f"已生成项目计划: {project_path}/print_plan.html")
     else:
         print_plan(width, depth, scheme, copies)
 

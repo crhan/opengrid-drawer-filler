@@ -1,9 +1,15 @@
 """openGrid 打印计划可视化模块"""
 
 import re
+from pathlib import Path
 from PIL import Image, ImageDraw
+from jinja2 import Environment, FileSystemLoader
 
 TILE_SIZE = 28  # mm
+
+# 初始化 Jinja2 环境
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
 
 def get_tile_color(size_key, all_sizes):
@@ -176,14 +182,33 @@ class Visualizer:
 
         return image
 
-    def generate_assembly_svg(self, scheme_data):
-        """生成拼接图 SVG 代码"""
-        x_splits = scheme_data["x_splits"]
-        y_splits = scheme_data["y_splits"]
+    def generate_assembly_svg(self, scheme_data, inventory_usage=None):
+        """生成拼接图 SVG 代码
+        
+        Args:
+            scheme_data: 方案数据，包含 x_splits, y_splits
+            inventory_usage: 库存使用情况，用于区分颜色
+        """
+        x_splits = scheme_data.get("x_splits", [])
+        y_splits = scheme_data.get("y_splits", [])
 
-        all_sizes = [t["width"] * t["height"] for t in scheme_data["tiles"]]
+        if not x_splits or not y_splits:
+            return ""
 
-        cell_size = 40
+        tiles = scheme_data.get("tiles", [])
+        all_sizes = []
+        for t in tiles:
+            if isinstance(t, dict):
+                all_sizes.append(t["width"] * t["height"])
+            else:
+                all_sizes.append(t[0] * t[1])
+        
+        # 复制一份库存使用计数，用于在遍历过程中扣减
+        from_inv = {}
+        if inventory_usage:
+            from_inv = inventory_usage.get("from_inventory", {}).copy()
+
+        cell_size = self._calculate_cell_size(x_splits, y_splits)
         padding = 20
 
         total_x = sum(x_splits)
@@ -193,30 +218,46 @@ class Visualizer:
         height = total_y * cell_size + 2 * padding
 
         svg_parts = []
-        svg_parts.append(f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">')
+        svg_header = f'<svg width="100%" height="auto" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">'
+        svg_parts.append(svg_header)
+        
+        # 绘制背景/抽屉轮廓
+        svg_parts.append(f'  <rect x="{padding/2}" y="{padding/2}" width="{width-padding}" height="{height-padding}" fill="var(--bg-primary)" stroke="var(--border-subtle)" stroke-dasharray="4" rx="8" ry="8"/>')
 
         x_offset = padding
+        # 这里的遍历顺序必须与 splitter 生成 tiles 的顺序一致 (xd in xs for yd in ys)
         for x_dim in x_splits:
             y_offset = padding
             for y_dim in y_splits:
-                color = self._get_color_for_size(x_dim, y_dim, all_sizes)
+                # 确定颜色
+                key = f"{x_dim}x{y_dim}"
+                if from_inv.get(key, 0) > 0:
+                    color = "var(--accent-cyan)"
+                    from_inv[key] -= 1
+                elif inventory_usage:
+                    # 如果提供了 inventory_usage 但当前块不在库存中，则是需要打印的
+                    color = "var(--accent-orange)"
+                else:
+                    # 无库存对比模式，使用基于尺寸的渐变色
+                    color = self._get_color_for_size(x_dim, y_dim, all_sizes)
 
                 rect = f'''  <rect x="{x_offset}" y="{y_offset}"
                       width="{x_dim * cell_size - 2}" height="{y_dim * cell_size - 2}"
-                      fill="{color}" stroke="black" stroke-width="1">
+                      rx="4" ry="4"
+                      fill="{color}" stroke="black" stroke-opacity="0.2" stroke-width="1">
                   <title>{x_dim}x{y_dim}</title>
               </rect>'''
                 svg_parts.append(rect)
 
-                # 所有瓦片都显示尺寸文字
+                # 绘制标签
                 text_x = x_offset + x_dim * cell_size // 2
                 text_y = y_offset + y_dim * cell_size // 2
-                # 字体大小根据瓦片尺寸调整
-                font_size = min(x_dim, y_dim) * 4
-                if font_size < 8:
-                    font_size = 8
+                font_size = min(x_dim, y_dim) * 5
+                if font_size < 10: font_size = 10
+                if font_size > 24: font_size = 24
+                
                 label = f'{x_dim}x{y_dim}'
-                text = f'  <text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle" font-size="{font_size}" fill="white" style="text-shadow: 1px 1px 2px black;">{label}</text>'
+                text = f'  <text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle" font-size="{font_size}" font-weight="600" fill="white" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.8); pointer-events: none;">{label}</text>'
                 svg_parts.append(text)
 
                 y_offset += y_dim * cell_size
@@ -227,84 +268,57 @@ class Visualizer:
 
     def generate_html(self, plan_data, output_path):
         """生成 HTML 报告"""
-        from jinja2 import Template
-
         scheme = plan_data.get("scheme", {})
         drawer = plan_data.get("drawer", {})
         stats = plan_data.get("stats", {})
+        
+        # 提取库存信息
+        from_inv_count = scheme.get("from_inventory", {}).copy()
+        inv_usage = {"from_inventory": from_inv_count}
 
-        svg = self.generate_assembly_svg(scheme)
+        svg = self.generate_assembly_svg(scheme, inventory_usage=inv_usage)
 
         tiles = scheme.get("tiles", [])
-        all_sizes = [t["width"] * t["height"] for t in tiles]
-        for tile in tiles:
-            tile["color"] = self._get_color_for_size(tile["width"], tile["height"], all_sizes)
+        all_sizes = []
+        for t in tiles:
+            if isinstance(t, dict):
+                all_sizes.append(t["width"] * t["height"])
+            else:
+                all_sizes.append(t[0] * t[1])
+        
+        tiles_display = []
+        # 重新消耗一遍库存用于列表显示
+        inv_remaining = from_inv_count.copy()
+        for i, t in enumerate(tiles):
+            if isinstance(t, dict):
+                w, h = t["width"], t["height"]
+                count = t.get("count", 1)
+            else:
+                w, h = t[0], t[1]
+                count = 1
+            
+            key = f"{w}x{h}"
+            is_from_inv = False
+            if inv_remaining.get(key, 0) > 0:
+                is_from_inv = True
+                inv_remaining[key] -= 1
 
-        template = '''<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>openGrid 打印计划</title>
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
-        h1 { color: #333; }
-        .info { background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; }
-        .assembly { text-align: center; margin: 20px 0; }
-        .tiles { display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0; }
-        .tile { border: 1px solid #ccc; border-radius: 8px; padding: 10px; text-align: center; }
-        .tile-color { width: 60px; height: 60px; border-radius: 4px; margin: 0 auto 10px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background: #f5f5f5; }
-    </style>
-</head>
-<body>
-    <h1>openGrid 打印计划</h1>
+            tiles_display.append({
+                "width": w,
+                "height": h,
+                "count": count,
+                "from_inventory": is_from_inv,
+                "color": self._get_color_for_size(w, h, all_sizes)
+            })
 
-    <div class="info">
-        <p><strong>抽屉尺寸:</strong> {{ drawer.width }}mm x {{ drawer.depth }}mm</p>
-        <p><strong>分割方案:</strong> {{ scheme.x_parts }}x{{ scheme.y_parts }}</p>
-        <p><strong>瓦片数量:</strong> {{ stats.total_tiles }} 块 ({{ stats.unique_sizes }} 种尺寸)</p>
-        <p><strong>打印次数:</strong> {{ stats.total_prints }} 次</p>
-    </div>
-
-    <h2>拼接示意图</h2>
-    <div class="assembly">
-        {{ svg | safe }}
-    </div>
-
-    <h2>瓦片清单</h2>
-    <div class="tiles">
-        {% for tile in tiles %}
-        <div class="tile">
-            <div class="tile-color" style="background: {{ tile.color }};"></div>
-            <div>{{ tile.width }}x{{ tile.height }}</div>
-            <div>x{{ tile.count }}</div>
-        </div>
-        {% endfor %}
-    </div>
-
-    <h2>详细统计</h2>
-    <table>
-        <tr><th>尺寸</th><th>数量</th><th>单片耗材</th><th>打印次数</th></tr>
-        {% for tile in tiles %}
-        <tr>
-            <td>{{ tile.width }}x{{ tile.height }}</td>
-            <td>{{ tile.count }}</td>
-            <td>约 {{ (tile.width * tile.height * 1.19) | round(1) }}g</td>
-            <td>1</td>
-        </tr>
-        {% endfor %}
-    </table>
-</body>
-</html>'''
-
-        t = Template(template)
-        html = t.render(
-            drawer=drawer,
+        template = env.get_template("project_plan.html.j2")
+        html = template.render(
+            project_name="方案预览",
+            drawers=[drawer],
             scheme=scheme,
             stats=stats,
-            tiles=tiles,
+            tiles=tiles_display,
+            inventory_usage=inv_usage,
             svg=svg
         )
 
@@ -329,150 +343,8 @@ class Visualizer:
             }
             output_path: 输出 HTML 路径
         """
-        from jinja2 import Template
-
-        template = self._get_plan_template()
+        template = env.get_template("project_plan.html.j2")
         html = template.render(**project_data)
 
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html)
-
-    def _get_plan_template(self):
-        """获取打印计划 HTML 模板"""
-        return Template('''<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>openGrid 打印计划 - {{ project_name }}</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-               max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-        .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        h1 { color: #333; margin-top: 0; }
-        h2 { color: #666; font-size: 18px; margin-top: 20px; }
-        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        .info-item { background: #f9f9f9; padding: 12px; border-radius: 8px; }
-        .info-label { color: #999; font-size: 12px; }
-        .info-value { font-size: 18px; font-weight: 600; color: #333; }
-        .tile-grid { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
-        .tile { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white; padding: 16px; border-radius: 8px; text-align: center; min-width: 80px; }
-        .tile .size { font-size: 20px; font-weight: bold; }
-        .tile .count { font-size: 14px; opacity: 0.9; }
-        .tile.from-inventory { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
-        .tile.need-print { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); }
-        .assembly { text-align: center; margin: 20px 0; }
-        .steps { counter-reset: step; }
-        .step { position: relative; padding-left: 40px; margin-bottom: 16px; }
-        .step:before { counter-increment: step; content: counter(step);
-                       position: absolute; left: 0; top: 0;
-                       width: 28px; height: 28px; background: #667eea; color: white;
-                       border-radius: 50%; text-align: center; line-height: 28px; }
-        #inventory-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-                          background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
-        #inventory-modal.show { display: flex; }
-        .modal-content { background: white; padding: 24px; border-radius: 12px; max-width: 400px; }
-    </style>
-</head>
-<body>
-    <h1>📦 openGrid 打印计划</h1>
-    <p style="color: #666;">项目: {{ project_name }}</p>
-
-    <div class="card">
-        <h2>基本信息</h2>
-        <div class="info-grid">
-            <div class="info-item">
-                <div class="info-label">抽屉尺寸</div>
-                <div class="info-value">{{ drawer.width }}×{{ drawer.depth }}mm</div>
-            </div>
-            <div class="info-item">
-                <div class="info-label">打印机</div>
-                <div class="info-value">{{ printer.model }} ({{ printer.bed_x }}×{{ printer.bed_y }}mm)</div>
-            </div>
-            <div class="info-item">
-                <div class="info-label">分割方案</div>
-                <div class="info-value">{{ scheme.x_parts }}×{{ scheme.y_parts }}</div>
-            </div>
-            <div class="info-item">
-                <div class="info-label">预估打印时间</div>
-                <div class="info-value">{{ stats.total_time }}</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>拼接示意图</h2>
-        <div class="assembly">
-            {{ svg|safe }}
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>瓦片清单</h2>
-        <div class="tile-grid">
-            {% for tile in tiles %}
-            <div class="tile {% if tile.from_inventory %}from-inventory{% else %}need-print{% endif %}">
-                <div class="size">{{ tile.width }}×{{ tile.height }}</div>
-                <div class="count">×{{ tile.count }}</div>
-                <div class="source">{% if tile.from_inventory %}库存{% else %}需打印{% endif %}</div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>操作步骤</h2>
-        <div class="steps">
-            <div class="step">在切片软件中打开 STL 文件进行排版</div>
-            <div class="step">选择打印参数（层高 0.2mm，填充 15%）</div>
-            <div class="step">开始打印</div>
-            <div class="step">打印完成后从库存中扣减瓦片</div>
-        </div>
-    </div>
-
-    <div id="inventory-modal">
-        <div class="modal-content">
-            <h3>📦 库存扣减</h3>
-            <p>该方案使用了库存瓦片，是否现在从库存中扣减？</p>
-            <p id="inventory-usage"></p>
-            <button onclick="confirmDeduct()" style="background: #667eea; color: white; padding: 12px 24px;
-                        border: none; border-radius: 8px; cursor: pointer; margin-right: 12px;">
-                确认扣减
-            </button>
-            <button onclick="closeModal()" style="background: #ddd; color: #333; padding: 12px 24px;
-                        border: none; border-radius: 8px; cursor: pointer;">
-                稍后处理
-            </button>
-        </div>
-    </div>
-
-    <script>
-    const inventoryUsage = {{ inventory_usage | tojson }};
-
-    window.onload = function() {
-        if (Object.keys(inventoryUsage).length > 0) {
-            const modal = document.getElementById('inventory-modal');
-            const usageText = document.getElementById('inventory-usage');
-            const parts = [];
-            for (const [size, count] of Object.entries(inventoryUsage)) {
-                parts.push(`${size}: ${count} 块`);
-            }
-            usageText.textContent = parts.join(', ');
-            modal.classList.add('show');
-        }
-    };
-
-    function confirmDeduct() {
-        // 打开扣库命令
-        window.open('python3 {{ script_path }}/inventory.py deduct ' +
-            Object.entries(inventoryUsage).map(([k,v]) => k + ':' + v).join(' '));
-        closeModal();
-    }
-
-    function closeModal() {
-        document.getElementById('inventory-modal').classList.remove('show');
-    }
-    </script>
-</body>
-</html>''')

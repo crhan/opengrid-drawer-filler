@@ -1,12 +1,9 @@
-"""方案对比 HTML 模板"""
-from string import Template
-
-COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>openGrid 方案对比 - ${drawer_width}×${drawer_depth}</title>
+    <title>openGrid 方案对比 - {{ drawer_width }}×{{ drawer_depth }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -144,11 +141,29 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
             border: 1px solid var(--border-subtle);
             border-radius: 16px;
             padding: 28px;
+            transition: all 0.3s ease;
         }
 
         .scheme-card.winner {
             border-color: var(--accent-green);
-            box-shadow: 0 0 30px rgba(34, 197, 94, 0.1);
+            box-shadow: 0 0 40px rgba(34, 197, 94, 0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .scheme-card.winner::after {
+            content: 'RECOMMENDED';
+            position: absolute;
+            top: 14px;
+            right: -35px;
+            background: var(--accent-green);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 40px;
+            transform: rotate(45deg);
+            letter-spacing: 1px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
 
         .scheme-header {
@@ -168,6 +183,7 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
             border-radius: 20px;
             font-size: 12px;
             font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
         }
 
         .scheme-badge.print {
@@ -183,25 +199,35 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
         }
 
         .scheme-badge.winner {
-            background: rgba(34, 197, 94, 0.15);
+            background: rgba(34, 197, 94, 0.2);
             color: var(--accent-green);
             border: 1px solid var(--accent-green);
         }
 
         .scheme-svg {
             background: var(--bg-tertiary);
+            background-image: 
+                radial-gradient(var(--border-subtle) 1px, transparent 1px);
+            background-size: 20px 20px;
             border-radius: 12px;
-            padding: 20px;
+            padding: 30px;
             margin-bottom: 20px;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 200px;
+            min-height: 240px;
+            border: 1px solid var(--border-subtle);
+            transition: border-color 0.3s ease;
+        }
+
+        .scheme-card.winner .scheme-svg {
+            border-color: rgba(34, 197, 94, 0.3);
         }
 
         .scheme-svg svg {
             max-width: 100%;
             height: auto;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
         }
 
         .stats-grid {
@@ -214,12 +240,16 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
             background: var(--bg-tertiary);
             border-radius: 10px;
             padding: 16px;
+            border: 1px solid var(--border-subtle);
         }
 
         .stat-label {
             font-size: 12px;
             color: var(--text-muted);
             margin-bottom: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .stat-value {
@@ -238,10 +268,11 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
 
         .stat-value.green {
             color: var(--accent-green);
+            text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
         }
 
         .tiles-list {
-            margin-top: 20px;
+            margin-top: 24px;
             padding-top: 20px;
             border-top: 1px solid var(--border-subtle);
         }
@@ -250,6 +281,7 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
             font-size: 14px;
             color: var(--text-secondary);
             margin-bottom: 12px;
+            font-weight: 500;
         }
 
         .tile-item {
@@ -258,11 +290,18 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
             gap: 8px;
             padding: 8px 14px;
             background: var(--bg-tertiary);
+            border: 1px solid var(--border-subtle);
             border-radius: 8px;
             margin-right: 8px;
             margin-bottom: 8px;
             font-family: 'JetBrains Mono', monospace;
             font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .tile-item:hover {
+            border-color: var(--text-muted);
+            transform: translateY(-2px);
         }
 
         .tile-item.print {
@@ -277,8 +316,14 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
             background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
             border: 1px solid var(--accent-green);
             border-radius: 16px;
-            padding: 32px;
+            padding: 40px;
             text-align: center;
+            animation: pulse-green 4s infinite ease-in-out;
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.1); }
+            50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.2); }
         }
 
         .summary-title {
@@ -351,6 +396,15 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
                 gap: 24px;
             }
         }
+
+        @media print {
+            body { background: white; color: black; }
+            .container { max-width: 100%; padding: 0; }
+            .scheme-card { border: 1px solid #ddd; break-inside: avoid; }
+            .scheme-svg { background: #f9f9f9; border: 1px solid #ddd; }
+            .summary-card { border: 2px solid #22c55e; color: black; }
+            .summary-stat-value { color: #166534; }
+        }
     </style>
 </head>
 <body>
@@ -360,17 +414,17 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
                 <div class="logo">OG</div>
                 <div class="header-title">
                     <h1>方案对比</h1>
-                    <p>openGrid - ${drawer_width}×${drawer_depth} 抽屉</p>
+                    <p>openGrid - {{ drawer_width }}×{{ drawer_depth }} 抽屉</p>
                 </div>
             </div>
             <div class="drawer-info">
                 <div class="drawer-info-item">
                     <span class="drawer-info-label">宽度</span>
-                    <span class="drawer-info-value">${drawer_width}mm</span>
+                    <span class="drawer-info-value">{{ drawer_width }}mm</span>
                 </div>
                 <div class="drawer-info-item">
                     <span class="drawer-info-label">深度</span>
-                    <span class="drawer-info-value">${drawer_depth}mm</span>
+                    <span class="drawer-info-value">{{ drawer_depth }}mm</span>
                 </div>
             </div>
         </div>
@@ -382,66 +436,66 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
                     <span class="scheme-badge print">全部打印</span>
                 </div>
                 <div class="scheme-svg">
-                    ${svg_no_inventory}
+                    {{ svg_no_inventory | safe }}
                 </div>
                 <div class="stats-grid">
                     <div class="stat-item">
                         <div class="stat-label">打印时间</div>
-                        <div class="stat-value orange">${time_no_inventory} min</div>
+                        <div class="stat-value orange">{{ time_no_inventory }} min</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-label">主耗材</div>
-                        <div class="stat-value orange">${filament_no_inventory}g</div>
+                        <div class="stat-value orange">{{ filament_no_inventory }}g</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-label">瓦片数</div>
-                        <div class="stat-value">${tiles_no_inventory}</div>
+                        <div class="stat-value">{{ tiles_no_inventory }}</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-label">独特尺寸</div>
-                        <div class="stat-value">${unique_no_inventory} 种</div>
+                        <div class="stat-value">{{ unique_no_inventory }} 种</div>
                     </div>
                 </div>
                 <div class="tiles-list">
                     <div class="tiles-title">瓦片清单</div>
-                    ${tiles_no_inventory_list}
+                    {{ tiles_no_inventory_list | safe }}
                 </div>
             </div>
 
-            <div class="scheme-card ${scheme_with_inventory_winner}">
+            <div class="scheme-card {{ scheme_with_inventory_winner }}">
                 <div class="scheme-header">
                     <span class="scheme-title">库存优化方案</span>
-                    <span class="scheme-badge inventory ${scheme_with_inventory_winner}">${scheme_with_inventory_badge}</span>
+                    <span class="scheme-badge inventory {{ scheme_with_inventory_winner }}">{{ scheme_with_inventory_badge }}</span>
                 </div>
                 <div class="scheme-svg">
-                    ${svg_with_inventory}
+                    {{ svg_with_inventory | safe }}
                 </div>
                 <div class="stats-grid">
                     <div class="stat-item">
                         <div class="stat-label">打印时间</div>
-                        <div class="stat-value ${value_class_with_inventory}">${time_with_inventory} min</div>
+                        <div class="stat-value {{ value_class_with_inventory }}">{{ time_with_inventory }} min</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-label">主耗材</div>
-                        <div class="stat-value ${value_class_with_inventory}">${filament_with_inventory}g</div>
+                        <div class="stat-value {{ value_class_with_inventory }}">{{ filament_with_inventory }}g</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-label">瓦片数</div>
-                        <div class="stat-value">${tiles_with_inventory}</div>
+                        <div class="stat-value">{{ tiles_with_inventory }}</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-label">独特尺寸</div>
-                        <div class="stat-value">${unique_with_inventory} 种</div>
+                        <div class="stat-value">{{ unique_with_inventory }} 种</div>
                     </div>
                 </div>
                 <div class="tiles-list">
                     <div class="tiles-title">瓦片清单</div>
-                    ${tiles_with_inventory_list}
+                    {{ tiles_with_inventory_list | safe }}
                 </div>
             </div>
         </div>
 
-        ${summary_html}
+        {{ summary_html | safe }}
 
         <div class="legend">
             <div class="legend-item">
@@ -455,4 +509,4 @@ COMPARISON_TEMPLATE = Template("""<!DOCTYPE html>
         </div>
     </div>
 </body>
-</html>""")
+</html>

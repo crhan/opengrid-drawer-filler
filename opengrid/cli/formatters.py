@@ -70,7 +70,13 @@ def output_json(width: int, depth: int, scheme: Any, copies: int = 1, inventory:
         'grid': scheme.get('grid'),
         'tiles': tiles_list,
         'prints': scheme.get('prints', 1),
-        'scheme': {'tiles': tiles_list},
+        'scheme': {
+            'tiles': tiles_list,
+            'x_parts': scheme.get('x_parts'),
+            'y_parts': scheme.get('y_parts'),
+            'x_splits': scheme.get('x_splits'),
+            'y_splits': scheme.get('y_splits'),
+        },
         'stats': stats,
     }
 
