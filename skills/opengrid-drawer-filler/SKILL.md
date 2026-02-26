@@ -271,10 +271,10 @@ open_in_slicer(stl_files, slicer="orca")
 
 ```bash
 # 切片单个文件
-.venv/bin/python scripts/slicer.py -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
+uv run scripts/slicer.py -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
 
 # 切片多个文件
-.venv/bin/python scripts/slicer.py -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
+uv run scripts/slicer.py -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
 ```
 
 ## 快速命令
@@ -283,19 +283,19 @@ open_in_slicer(stl_files, slicer="orca")
 
 ```bash
 # 查看项目状态
-python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py status
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py status
 
 # 批量计算
-python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 325x365:2
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 325x365:2
 
 # 单尺寸计算
-python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425
 
 # 使用库存
-python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 -i inventory.json
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 -i inventory.json
 
 # 生成 STL
-python ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py slicer generate 7x5x2
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py slicer generate 7x5x2
 ```
 
 详细命令、配置说明、算法规则等请参考 [references/](references/) 目录。
@@ -341,5 +341,5 @@ cd ${CLAUDE_PLUGIN_ROOT}
 之后运行脚本：
 
 ```bash
-.venv/bin/python scripts/split_calc.py 485 425
+uv run scripts/split_calc.py 485 425
 ```
