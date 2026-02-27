@@ -1,5 +1,6 @@
 """CLI 模块 - 统一入口"""
 
+from opengrid.cli.commands.compare import add_parser as add_compare_parser
 from . import commands
 
 
@@ -22,6 +23,7 @@ def main():
     commands.project.add_parser(subparsers)
     commands.status.add_parser(subparsers)
     commands.present.add_parser(subparsers)
+    add_compare_parser(subparsers)
 
     args = parser.parse_args()
 

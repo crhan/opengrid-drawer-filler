@@ -234,7 +234,6 @@ def generate_comparison_html(scheme_no_inv, scheme_with_inv):
     返回:
         HTML 字符串
     """
-    from opengrid.ui.comparison_template import COMPARISON_TEMPLATE
     from opengrid.ui.visualizer import Visualizer
 
     # 错误处理
