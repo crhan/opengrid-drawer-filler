@@ -16,7 +16,33 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ## Agent 工作流
 
+```mermaid
+flowchart TD
+    A[Step 1: 检查配置<br/>运行 status 命令] --> B{配置存在?}
+    B -- 否 --> C[提示运行 /setup]
+    B -- 是 --> D[Step 2: 询问需求<br/>用户输入尺寸]
+    D --> E{重复尺寸?}
+    E -- 是 --> F[命名抽屉: 抽屉A, 抽屉B...]
+    E -- 否 --> G[Step 3: 计算方案<br/>生成方案A和方案B JSON]
+    F --> G
+    G --> H[Step 4: 展示方案<br/>终端对比展示]
+    H --> I{用户选择}
+    I --> J[方案A]
+    I --> K[方案B]
+    I --> L[HTML对比]
+    L --> M[opengrid compare<br/>生成并打开HTML]
+    M --> H
+    J --> N[Step 5: 确认库存扣减]
+    K --> N
+    N --> O{是否扣减库存?}
+    O -- 是 --> P[调用 inventory deduct]
+    O -- 否 --> Q[Step 6: 生成STL]
+    P --> Q
+```
+
 ### Step 1: 检查配置、加载库存、展示状态
+
+**强制要求**: 必须先运行 status 命令检查配置和库存状态。
 
 运行 `opengrid status` 命令展示当前项目状态：
 
@@ -93,6 +119,11 @@ python scripts/opengrid.py inventory undo
    - `"265x360"` = 265×360mm，1份
    - `"265 360 2"` = 空格分隔格式
 
+**抽屉命名**: 用户输入尺寸后，按首次出现顺序命名。例如：
+- 抽屉A = 第一个尺寸
+- 抽屉B = 第二个尺寸（以此类推）
+后续统一使用抽屉名称（如"抽屉A"）进行展示和交互。
+
 ### Step 3: 计算方案
 
 **自动双方案**：当检测到有库存时，自动计算两种方案：
@@ -101,6 +132,8 @@ python scripts/opengrid.py inventory undo
 2. 方案 B：使用库存
 
 **无库存时**：只计算方案 A（标准最优方案）
+
+同时计算方案A（无库存）和方案B（有库存），同时生成两个 JSON 文件保存到当前目录，供后续使用。
 
 使用 `opengrid split` 命令：
 
@@ -113,6 +146,21 @@ python scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
 ```
 
 ### Step 4: 展示方案
+
+终端简洁格式：
+```
+=== 抽屉A: 265x365mm x2 ===
+
+[A] 方案A: 2次打印, ~25分钟, ~95g
+[B] 方案B: 1次打印, ~12分钟, ~45g (节省52%)
+
+瓦片对比:
+    7x5: A=x4(打印), B=x2(库)+x2(打印)
+    3x5: A=x4(打印), B=x4(打印)
+
+[H] 生成HTML对比页面
+[Q] 退出
+```
 
 将脚本输出展示给用户，询问选择。可选：使用 `present` 命令生成 HTML 对比页面。
 
@@ -206,7 +254,11 @@ python scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o co
 
 ### Step 5: 生成 STL 文件
 
-用户选择方案后，生成 STL 文件。
+用户选择方案后询问：
+- `[Y] 确认扣减库存并生成 STL`
+- `[N] 只生成 STL，不扣减库存`
+
+确认后，生成 STL 文件。
 
 #### 5.1 获取方案 JSON
 
@@ -296,9 +348,17 @@ uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 -i inventory.js
 
 # 生成 STL
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py slicer generate 7x5x2
+
+# 生成 HTML 对比并打开
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py compare scheme_a.json scheme_b.json -o comparison.html
 ```
 
-详细命令、配置说明、算法规则等请参考 [references/](references/) 目录。
+详细命令、配置说明、算法规则等请参考以下文档：
+
+- [references/CONFIG.md](references/CONFIG.md) - 配置文件详解（打印机预设、瓦片类型）
+- [references/ALGORITHM.md](references/ALGORITHM.md) - 算法规则（优先级、分割约束）
+- [references/TROUBLESHOOTING.md](references/TROUBLESHOOTING.md) - 故障排除指南
+- [references/SLICER.md](references/SLICER.md) - Slicer 集成说明
 
 ## 配置文件
 
