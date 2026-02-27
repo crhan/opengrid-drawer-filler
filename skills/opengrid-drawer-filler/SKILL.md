@@ -18,19 +18,19 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ```mermaid
 flowchart TD
-    A[Step 1: 检查配置<br/>运行 status 命令] --> B{配置存在?}
+    A[Step 1: 检查配置\n运行 status 命令] --> B{配置存在?}
     B -- 否 --> C[提示运行 /setup]
-    B -- 是 --> D[Step 2: 询问需求<br/>用户输入尺寸]
+    B -- 是 --> D[Step 2: 询问需求\n用户输入尺寸]
     D --> E{重复尺寸?}
     E -- 是 --> F[命名抽屉: 抽屉A, 抽屉B...]
-    E -- 否 --> G[Step 3: 计算方案<br/>生成方案A和方案B JSON]
+    E -- 否 --> G[Step 3: 计算方案\n生成方案A和方案B JSON]
     F --> G
-    G --> H[Step 4: 展示方案<br/>终端对比展示]
+    G --> H[Step 4: 展示方案\n终端对比展示]
     H --> I{用户选择}
     I --> J[方案A]
     I --> K[方案B]
     I --> L[HTML对比]
-    L --> M[opengrid compare<br/>生成并打开HTML]
+    L --> M[opengrid compare\n生成并打开HTML]
     M --> H
     J --> N[Step 5: 确认库存扣减]
     K --> N
@@ -49,7 +49,7 @@ flowchart TD
 ```bash
 # 在项目目录下运行
 cd ${项目目录}
-python scripts/opengrid.py status
+uv run scripts/opengrid.py status
 ```
 
 输出示例：
@@ -86,16 +86,16 @@ python scripts/opengrid.py status
 
 ```bash
 # 查看库存
-python scripts/opengrid.py inventory list
+uv run scripts/opengrid.py inventory list
 
 # 添加库存 (格式: 宽x高:数量)
-python scripts/opengrid.py inventory add 8x8:5 6x7:3 "入库原因"
+uv run scripts/opengrid.py inventory add 8x8:5 6x7:3 "入库原因"
 
 # 扣减库存
-python scripts/opengrid.py inventory deduct 8x8:2 "扣减原因"
+uv run scripts/opengrid.py inventory deduct 8x8:2 "扣减原因"
 
 # 撤销上次操作
-python scripts/opengrid.py inventory undo
+uv run scripts/opengrid.py inventory undo
 ```
 
 **重要**：执行 inventory 命令时必须：
@@ -139,10 +139,10 @@ python scripts/opengrid.py inventory undo
 
 ```bash
 # 方案 A：不使用库存
-python scripts/opengrid.py split 265x365:2 325x365:2
+uv run scripts/opengrid.py split 265x365:2 325x365:2
 
 # 方案 B：使用库存（通过 -i 指定库存文件）
-python scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
+uv run scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
 ```
 
 ### Step 4: 展示方案
@@ -168,11 +168,11 @@ python scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
 
 ```bash
 # 先生成两个方案的 JSON
-python scripts/opengrid.py split 325x460 -j > scheme_no_inv.json
-python scripts/opengrid.py split 325x460 -i inventory.json -j > scheme_with_inv.json
+uv run scripts/opengrid.py split 325x460 -j > scheme_no_inv.json
+uv run scripts/opengrid.py split 325x460 -i inventory.json -j > scheme_with_inv.json
 
 # 生成 HTML 对比页面
-python scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o comparison.html
+uv run scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o comparison.html
 ```
 
 生成的 HTML 页面包含：
@@ -265,7 +265,7 @@ python scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o co
 获取方案的 JSON 输出：
 
 ```bash
-python scripts/opengrid.py split 265x365 -j > scheme.json
+uv run scripts/opengrid.py split 265x365 -j > scheme.json
 ```
 
 #### 5.2 提取需要打印的瓦片
@@ -277,8 +277,8 @@ python scripts/opengrid.py split 265x365 -j > scheme.json
 使用 `opengrid slicer generate` 命令：
 
 ```bash
-python scripts/opengrid.py slicer generate 7x5x2
-python scripts/opengrid.py slicer generate 3x5x2
+uv run scripts/opengrid.py slicer generate 7x5x2
+uv run scripts/opengrid.py slicer generate 3x5x2
 ```
 
 #### 5.4 展示生成结果
