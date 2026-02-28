@@ -74,7 +74,7 @@ done
 
 ```bash
 # 传入配置文件和库存文件路径
-uv run scripts/opengrid.py -c ./opengrid_config.yaml status -i ./inventory.json
+uv run scripts/opengrid.py -c ./opengrid_config.yaml -i ./inventory.json status
 ```
 
 **如果配置文件不在当前目录**，使用 `--config` 参数指定：
@@ -182,7 +182,7 @@ uv run scripts/opengrid.py -c ./opengrid_config.yaml inventory list
 uv run scripts/opengrid.py split 265x365:2 325x365:2
 
 # 方案 B：使用库存（通过 -i 指定库存文件）
-uv run scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
+uv run scripts/opengrid.py -i inventory.json split 265x365:2 325x365:2
 ```
 
 ### Step 4: 展示方案
@@ -210,7 +210,7 @@ uv run scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
 ```bash
 # 先生成两个方案的 JSON
 uv run scripts/opengrid.py split 325x460 -j > scheme_no_inv.json
-uv run scripts/opengrid.py split 325x460 -i inventory.json -j > scheme_with_inv.json
+uv run scripts/opengrid.py -i inventory.json split 325x460 -j > scheme_with_inv.json
 
 # 生成 HTML 对比页面
 uv run scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o comparison.html
@@ -381,7 +381,7 @@ uv run scripts/opengrid.py slicer slice -s "file1.stl" "file2.stl" --slicer orca
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py status
 
 # 指定配置文件和库存
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py -c ./opengrid_config.yaml status -i ./inventory.json
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py -c ./opengrid_config.yaml -i ./inventory.json status
 
 # 批量计算
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 325x365:2
@@ -390,7 +390,7 @@ uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 325x365:2
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425
 
 # 使用库存
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 -i inventory.json
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py -i inventory.json split 265x365:2
 
 # 生成 STL
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py slicer generate 7x5x2
