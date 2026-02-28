@@ -366,10 +366,10 @@ open_in_slicer(stl_files, slicer="orca")
 
 ```bash
 # 切片单个文件
-uv run scripts/slicer.py -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
+uv run scripts/opengrid.py slicer slice -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
 
 # 切片多个文件
-uv run scripts/slicer.py -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
+uv run scripts/opengrid.py slicer slice -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
 ```
 
 ## 快速命令
@@ -447,5 +447,5 @@ cd ${CLAUDE_PLUGIN_ROOT}
 之后运行脚本：
 
 ```bash
-uv run scripts/split_calc.py 485 425
+uv run scripts/opengrid.py split 485 425
 ```
