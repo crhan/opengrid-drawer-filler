@@ -6,8 +6,6 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 # openGrid 抽屉铺满
 
-根据抽屉尺寸计算最优瓦片分割方案，并可自动生成 STL 文件用于 3D 打印。
-
 ## 核心原则
 
 **Agent 负责用户交互，脚本负责计算和生成。**
@@ -18,7 +16,7 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ```mermaid
 flowchart TD
-    A[Step 1: 检查配置\n运行 status 命令] --> B{配置存在?}
+    A[Step 1: 查找配置文件和库存文件\n通过 -c 和 -i 参数传给脚本] --> B{配置存在?}
     B -- 否 --> C[提示运行 /setup]
     B -- 是 --> D[Step 2: 询问需求\n用户输入尺寸]
     D --> E{重复尺寸?}
@@ -40,19 +38,57 @@ flowchart TD
     P --> Q
 ```
 
-### Step 1: 检查配置、加载库存、展示状态
+### Step 1: 查找配置文件和库存文件
 
-**强制要求**: 必须先运行 status 命令检查配置和库存状态。
+**强制要求**: 必须先查找配置文件和库存文件位置，然后通过参数传给脚本确认现状。
 
-运行 `opengrid status` 命令展示当前项目状态：
+#### 1.1 查找配置文件
+
+Agent 在当前目录及父目录向上搜索 `opengrid_config.yaml`：
 
 ```bash
-# 在项目目录下运行
-cd ${项目目录}
-uv run scripts/opengrid.py status
+# 向上搜索配置文件
+current_dir=$(pwd)
+while [ "$current_dir" != "/" ]; do
+    if [ -f "$current_dir/opengrid_config.yaml" ]; then
+        echo "找到配置文件: $current_dir/opengrid_config.yaml"
+        break
+    fi
+    current_dir=$(dirname "$current_dir")
+done
+```
+
+#### 1.2 定位配置文件和库存文件
+
+**关键原则**：库存文件在**当前项目目录**，不是 skill 目录！
+
+查找顺序：
+1. **首先检查当前目录**是否有 `opengrid_config.yaml`
+2. 根据配置中的 `inventory_path` 定位库存文件（通常是 `./inventory.json`）
+
+如果当前目录没有配置文件，说明不是 opengrid 项目，需要先初始化。
+
+#### 1.3 运行 status 命令确认现状
+
+传入配置文件和库存文件路径：
+
+```bash
+# 传入配置文件和库存文件路径
+uv run scripts/opengrid.py -c ./opengrid_config.yaml status -i ./inventory.json
+```
+
+**如果配置文件不在当前目录**，使用 `--config` 参数指定：
+
+```bash
+# 配置文件在父目录
+uv run scripts/opengrid.py -c ../opengrid_config.yaml status
+
+# 使用绝对路径
+uv run scripts/opengrid.py -c /path/to/opengrid_config.yaml status
 ```
 
 输出示例：
+
 ```
 ========== openGrid 状态 ==========
 
@@ -100,10 +136,13 @@ uv run scripts/opengrid.py inventory undo
 
 **重要**：执行 inventory 命令时必须：
 
-1. **切换到项目目录**（有 `opengrid_config.yaml` 的目录）
-2. 使用绝对路径调用 `.venv` 和 `scripts/inventory.py`
+1. **指定配置文件路径**（使用 `-c` 参数）
+2. 使用绝对路径或相对于当前目录的路径
 
-如果不在项目目录下，会报错找不到配置文件。
+```bash
+# 指定配置文件
+uv run scripts/opengrid.py -c ./opengrid_config.yaml inventory list
+```
 
 **关键约束**：
 
@@ -120,9 +159,10 @@ uv run scripts/opengrid.py inventory undo
    - `"265 360 2"` = 空格分隔格式
 
 **抽屉命名**: 用户输入尺寸后，按首次出现顺序命名。例如：
+
 - 抽屉A = 第一个尺寸
 - 抽屉B = 第二个尺寸（以此类推）
-后续统一使用抽屉名称（如"抽屉A"）进行展示和交互。
+  后续统一使用抽屉名称（如"抽屉A"）进行展示和交互。
 
 ### Step 3: 计算方案
 
@@ -148,6 +188,7 @@ uv run scripts/opengrid.py split 265x365:2 325x365:2 -i inventory.json
 ### Step 4: 展示方案
 
 终端简洁格式：
+
 ```
 === 抽屉A: 265x365mm x2 ===
 
@@ -176,6 +217,7 @@ uv run scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o co
 ```
 
 生成的 HTML 页面包含：
+
 - 两种方案并排对比
 - SVG 瓦片布局示意图（显示每片规格）
 - 打印时间、耗材、瓦片数统计
@@ -255,6 +297,7 @@ uv run scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o co
 ### Step 5: 生成 STL 文件
 
 用户选择方案后询问：
+
 - `[Y] 确认扣减库存并生成 STL`
 - `[N] 只生成 STL，不扣减库存`
 
@@ -334,8 +377,11 @@ uv run scripts/slicer.py -s "file1.stl" "file2.stl" --slicer orca --output my_dr
 使用 `${CLAUDE_PLUGIN_ROOT}` 变量引用插件根目录：
 
 ```bash
-# 查看项目状态
+# 查看项目状态（自动查找配置）
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py status
+
+# 指定配置文件和库存
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py -c ./opengrid_config.yaml status -i ./inventory.json
 
 # 批量计算
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 325x365:2
@@ -374,9 +420,9 @@ openGrid 使用项目级配置文件，必须在项目目录下存在 `opengrid_
 initialized: true
 printer:
   model: h2d
-inventory_path: ./inventory.json  # 项目库存文件路径
+inventory_path: ./inventory.json # 项目库存文件路径
 output:
-  stl_dir: ./stl_output/  # 项目输出目录
+  stl_dir: ./stl_output/ # 项目输出目录
 ```
 
 **注意**：脚本必须在有 `opengrid_config.yaml` 的目录下运行，否则会报错。
