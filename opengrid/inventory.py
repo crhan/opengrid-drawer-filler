@@ -7,6 +7,21 @@ from datetime import datetime
 from pathlib import Path
 
 
+def _resolve_path(path_str):
+    """解析路径：绝对路径直接返回，相对路径相对于 cwd
+
+    Args:
+        path_str: 路径字符串
+
+    Returns:
+        Path: 解析后的绝对路径
+    """
+    path_obj = Path(path_str)
+    if path_obj.is_absolute():
+        return path_obj
+    return Path.cwd() / path_obj
+
+
 def parse_items(args):
     """Parse '7x5:6' format,最后一个非格式参数作为 reason"""
     items = {}
@@ -38,10 +53,7 @@ def get_inventory_path(config):
     from opengrid import config as config_module
     cli_path = config_module.get_cli_inventory_path()
     if cli_path:
-        p = Path(cli_path)
-        if p.is_absolute():
-            return p
-        return Path.cwd() / p
+        return _resolve_path(cli_path)
 
     if config is None:
         raise ValueError(
@@ -56,11 +68,7 @@ def get_inventory_path(config):
             "请在 opengrid_config.yaml 中设置 inventory_path"
         )
 
-    p = Path(inventory_path)
-    if p.is_absolute():
-        return p
-    # 相对路径相对于当前工作目录
-    return Path.cwd() / p
+    return _resolve_path(inventory_path)
 
 
 def _get_inventory_file(config):
