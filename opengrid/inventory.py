@@ -34,6 +34,15 @@ def get_inventory_path(config):
     Raises:
         ValueError: 如果未配置 inventory_path
     """
+    # 优先使用命令行指定的路径
+    from opengrid import config as config_module
+    cli_path = config_module.get_cli_inventory_path()
+    if cli_path:
+        p = Path(cli_path)
+        if p.is_absolute():
+            return p
+        return Path.cwd() / p
+
     if config is None:
         raise ValueError(
             "未配置 inventory_path\n"
