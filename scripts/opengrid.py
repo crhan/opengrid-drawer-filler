@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = ["PyYAML>=6.0.3", "Jinja2>=3.1.6", "pillow>=12.1.1"]
+# ///
 """统一 CLI 入口"""
 
 import sys
