@@ -518,8 +518,8 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
         cells = w * h
         total_stacks = info['total']
 
-        # 检查库存
-        key = f"{w}x{h}"
+        # 检查库存（规格化：小边在前，与 _match_inventory 保持一致）
+        key = f"{min(w, h)}x{max(w, h)}"
         available = inventory.get(key, 0) if inventory else 0
         to_print = max(0, total_stacks - available)
 
@@ -659,7 +659,8 @@ def _build_single_inventory(scheme, inventory):
         # 先统计所有瓦片
         tile_counts = {}
         for w, h in tiles:
-            key = f"{w}x{h}"
+            # 规格化：小边在前，与 _match_inventory 保持一致
+            key = f"{min(w, h)}x{max(w, h)}"
             tile_counts[key] = tile_counts.get(key, 0) + 1
 
         # 如果有 from_inventory，计算需要打印的数量（总需求 - 库存）
