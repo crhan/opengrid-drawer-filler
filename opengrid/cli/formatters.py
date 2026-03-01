@@ -2,6 +2,7 @@
 import json
 from typing import Any
 from opengrid.core.constants import FILAMENT_MAIN_PER_CELL, FILAMENT_SUPPORT_PER_CELL, PRINT_TIME_PER_CELL
+from opengrid.core.cost import calculate_print_cost
 
 
 def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
@@ -18,9 +19,73 @@ def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
     print(f"总打印次数: {scheme.get('prints', 1)}")
 
 
-def output_json(width: int, depth: int, scheme: Any, copies: int = 1, inventory: dict = None) -> str:
-    """输出 JSON 格式"""
-    from opengrid.core.cost import calculate_print_cost
+def output_json(width: int, depth: int, result: Any, copies: int = 1, inventory: dict = None) -> str:
+    """输出 JSON 格式
+
+    Args:
+        result: SplitResult 实例或向下兼容的 scheme dict
+    """
+    from opengrid.core.split_result import SplitResult
+
+    # 如果是 SplitResult 实例，直接读取属性
+    if isinstance(result, SplitResult):
+        tiles_list = [{'width': w, 'height': h} for w, h in result.tiles]
+        unique_sizes = result.unique_sizes
+        total_tiles = len(result.tiles)
+        total_cells = sum(w * h for w, h in result.tiles)
+
+        # 直接从 SplitResult 读取成本信息
+        total_time_min = result.cost.total_cost
+        filament_main = result.cost.total_filament_g
+        from_inventory = result.from_inventory
+        need_print = result.need_print
+
+        stats = {
+            'unique_sizes': unique_sizes,
+            'total_tiles': total_tiles,
+            'total_cells': total_cells,
+            'total_time_min': total_time_min,
+            'filament_main_g': filament_main,
+            'filament_support_g': result.cost.total_filament_g * 0.3,  # 估算
+        }
+
+        data = {
+            'dimensions': {'width': width, 'depth': depth, 'copies': copies},
+            'grid': result.grid,
+            'tiles': tiles_list,
+            'prints': result.cost.plate_count if result.cost.plate_count > 0 else 1,
+            'scheme': {
+                'tiles': tiles_list,
+                'x_parts': len(result.x_splits),
+                'y_parts': len(result.y_splits),
+                'x_splits': result.x_splits,
+                'y_splits': result.y_splits,
+            },
+            'stats': stats,
+            'cost': {
+                'total_cost': result.cost.total_cost,
+                'total_filament_g': result.cost.total_filament_g,
+                'plate_count': result.cost.plate_count,
+                'swap_penalty_total': result.cost.swap_penalty_total,
+            }
+        }
+
+        # 如果有库存信息
+        if inventory or from_inventory:
+            total_from_inv = sum(from_inventory.values()) if from_inventory else 0
+            total_need_print = sum(need_print.values()) if need_print else len(result.tiles) * copies
+
+            data['inventory_usage'] = {
+                'from_inventory': from_inventory,
+                'need_print': need_print,
+                'total_from_inventory': total_from_inv,
+                'total_need_print': total_need_print
+            }
+
+        return json.dumps(data, indent=2, ensure_ascii=False)
+
+    # 向下兼容旧 dict 格式
+    scheme = result
 
     # 转换 tiles 格式
     tiles = scheme.get('tiles', [])

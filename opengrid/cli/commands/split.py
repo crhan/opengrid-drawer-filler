@@ -2,10 +2,11 @@
 import json
 from opengrid.cli.utils import parse_dimensions
 from opengrid.cli.formatters import print_plan, output_json
-from opengrid.core import find_best_scheme, find_all_schemes, get_grid_dimensions, get_max_stacks, MIN_TILE, FULL_THICKNESS
+from opengrid.core import find_best_scheme, find_all_schemes, get_grid_dimensions, get_max_stacks, MIN_TILE, FULL_THICKNESS, MAX_Z
 from opengrid.core.cost import calculate_print_cost
 from opengrid.core.stats import calculate_filament_and_time, format_time
 from opengrid.core.constants import recalculate_derived_constants
+from opengrid.core.split_result import PrinterConfig, SplitResult
 from opengrid.config import load_config_or_default, get_printer_config_or_default
 
 # 初始化常量（支持无配置文件模式）- 延迟初始化避免测试干扰
@@ -39,6 +40,20 @@ def _init_constants():
         stacking_method=stacking_method
     )
     _initialized = True
+
+
+def _build_printer_config() -> PrinterConfig:
+    """从当前全局常量构造 PrinterConfig"""
+    config = load_config_or_default()
+    printer = get_printer_config_or_default()
+    tile_type = config.get("opengrid", {}).get("tile_type", "Full")
+    from opengrid.core.constants import TILE_THICKNESS
+    return PrinterConfig(
+        max_z=MAX_Z,
+        bed_x=printer.get("bed_x", 256),
+        bed_y=printer.get("bed_y", 256),
+        tile_thickness=TILE_THICKNESS.get(tile_type, FULL_THICKNESS),
+    )
 
 
 def add_parser(subparsers):
@@ -98,18 +113,19 @@ def handle_split(args):
 
     width, depth, copies = dims[0]
 
-    # 计算网格
-    grid_w, grid_h = get_grid_dimensions(width, depth)
+    # 构造打印机配置
+    printer = _build_printer_config()
 
-    # 找最优方案
-    scheme = find_best_scheme(grid_w, grid_h, inventory=inventory)
+    # 找最优方案（使用 SplitResult）
+    split_result = SplitResult.compute(width, depth, copies, inventory, printer)
+    scheme = split_result  # 向下兼容：formatters 读 scheme dict
 
     # 输出
     if args.print_json:
         # 输出到 stdout（原有行为，用于管道重定向）
-        print(output_json(width, depth, scheme, copies, inventory=inventory))
+        print(output_json(width, depth, split_result, copies, inventory=inventory))
     elif args.json or args.output:
-        json_data = output_json(width, depth, scheme, copies, inventory=inventory)
+        json_data = output_json(width, depth, split_result, copies, inventory=inventory)
 
         # 确定输出路径
         if args.output:
