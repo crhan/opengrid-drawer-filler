@@ -1,18 +1,23 @@
 """Scheme generation and evaluation - core functions from split_calc.py"""
 from .splitter import split_with_limit, calc_balance, calc_scheme_balance
 from .grid import validate_tile
-from .constants import MAX_X, MAX_Y
+from opengrid.config import get_printer_config_or_default
+from .constants import TILE_SIZE
 
 
 # 方案排序键：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
 SCHEME_SORT_KEY = lambda s: (s['cost'], s['unique_sizes'], s['total_tiles'], s['balance'])
 
 
-def normalize_tiles(tiles):
-    """Normalize tiles: rotate if width exceeds MAX_X but height fits"""
+def normalize_tiles(tiles, max_x=None, max_y=None):
+    """Normalize tiles: rotate if width exceeds max_x but height fits"""
+    if max_x is None or max_y is None:
+        printer = get_printer_config_or_default()
+        max_x = max_x or (printer.get("bed_x", 256) // TILE_SIZE)
+        max_y = max_y or (printer.get("bed_y", 256) // TILE_SIZE)
     normalized = []
     for w, h in tiles:
-        if w > MAX_X and h <= MAX_Y:
+        if w > max_x and h <= max_y:
             normalized.append((h, w))
         else:
             normalized.append((w, h))
@@ -28,6 +33,11 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """Find best scheme for given grid dimensions"""
     from .grid import validate_tile as vt
     from .cost import calculate_print_cost
+
+    # Get printer limits from config
+    printer = get_printer_config_or_default()
+    max_x = printer.get("bed_x", 256) // TILE_SIZE
+    max_y = printer.get("bed_y", 256) // TILE_SIZE
 
     # Check if no split needed
     if vt(x, y):
@@ -97,7 +107,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             rotated = rotated_schemes[0]
 
             # Normalize rotated tiles
-            normalized_tiles = normalize_tiles(rotated['tiles'])
+            normalized_tiles = normalize_tiles(rotated['tiles'], max_x, max_y)
 
             # Check if normalized tiles are valid
             if validate_tiles(normalized_tiles):
@@ -128,6 +138,11 @@ def find_all_schemes(x, y, max_schemes=2000):
     - Small grids: x_search = 1..min(8, x+1), y_search = 1..min(5, y+1)
     - Large grids: search around minimum required splits +/- 1
     """
+    # Get printer limits from config
+    printer = get_printer_config_or_default()
+    max_x = printer.get("bed_x", 256) // TILE_SIZE
+    max_y = printer.get("bed_y", 256) // TILE_SIZE
+
     # Check if no split needed
     if validate_tile(x, y):
         return [{
@@ -141,8 +156,8 @@ def find_all_schemes(x, y, max_schemes=2000):
     schemes = []
 
     # Calculate minimum required splits
-    min_x_parts = max(1, int((x + MAX_X - 1) // MAX_X))
-    min_y_parts = max(1, int((y + MAX_Y - 1) // MAX_Y))
+    min_x_parts = max(1, int((x + max_x - 1) // max_x))
+    min_y_parts = max(1, int((y + max_y - 1) // max_y))
 
     # Intelligent search range
     if min_x_parts >= 6 or min_y_parts >= 5:
@@ -168,11 +183,11 @@ def find_all_schemes(x, y, max_schemes=2000):
                 continue
 
             # Limit split results to prevent combination explosion
-            x_splits = split_with_limit(x, x_parts, MAX_X, max_results=500)
+            x_splits = split_with_limit(x, x_parts, max_x, max_results=500)
             if not x_splits:
                 continue
 
-            y_splits = split_with_limit(y, y_parts, MAX_Y, max_results=500)
+            y_splits = split_with_limit(y, y_parts, max_y, max_results=500)
             if not y_splits:
                 continue
 
@@ -195,7 +210,7 @@ def find_all_schemes(x, y, max_schemes=2000):
                         continue
 
                     # Normalize tiles
-                    normalized = normalize_tiles(tiles)
+                    normalized = normalize_tiles(tiles, max_x, max_y)
 
                     schemes.append({
                         'x_parts': x_parts,

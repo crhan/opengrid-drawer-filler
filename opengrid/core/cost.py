@@ -6,8 +6,7 @@ from .constants import (
     FILAMENT_SUPPORT_PER_CELL,
     PRINT_TIME_PER_CELL,
     SWAP_PENALTY,
-    MAX_Z,
-    FULL_THICKNESS,
+    TILE_THICKNESS,
 )
 from .cost_v2 import (
     Tile as TileV2,
@@ -78,8 +77,10 @@ def calculate_print_cost(tiles, inventory, copies, printer_config: Optional[dict
         return 0, from_inventory, need_print
 
     # 使用传入的打印机配置或默认值
-    max_z = printer_config.get("max_z", MAX_Z) if printer_config else MAX_Z
-    tile_thickness = printer_config.get("tile_thickness", FULL_THICKNESS) if printer_config else FULL_THICKNESS
+    max_z = printer_config.get("max_z", 256) if printer_config else 256
+    base_thickness = TILE_THICKNESS.get("Full", 6.8)
+    default_thickness = base_thickness + 0.4  # with interface
+    tile_thickness = printer_config.get("tile_thickness", default_thickness) if printer_config else default_thickness
     bed_x = printer_config.get("bed_x", 256) if printer_config else 256
     bed_y = printer_config.get("bed_y", 256) if printer_config else 256
 
