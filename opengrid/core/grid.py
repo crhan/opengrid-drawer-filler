@@ -1,5 +1,16 @@
 """Grid dimension calculations"""
+from dataclasses import dataclass
+
 from .constants import TILE_SIZE, TILE_THICKNESS
+
+
+@dataclass
+class GridConfig:
+    """网格分割配置"""
+    max_cells_x: int      # bed_x // TILE_SIZE
+    max_cells_y: int      # bed_y // TILE_SIZE
+    tile_size: int = 28
+    min_tile: int = 2
 
 
 def get_max_stacks():
