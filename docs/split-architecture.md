@@ -6,13 +6,18 @@ flowchart TB
 
     subgraph Input["输入处理"]
         B["parse_dimensions<br/>parse_batch_input"]
+        B1["PrinterConfig<br/>构造打印机配置"]
+    end
+
+    subgraph SplitResult["SplitResult 实例<br/>一次计算，到处读取"]
+        SR["SplitResult.compute<br/>核心计算入口"]
     end
 
     subgraph Single["单个尺寸计算<br/>calculate_single"]
         C["get_grid_dimensions<br/>宽深→网格数"]
         D["validate_tile<br/>检查是否需要分割"]
         E{"是否需要分割?"}
-        F["find_best_scheme<br/>寻找最优方案"]
+        F["find_best_scheme<br/>寻找最优方案 (旧)"]
     end
 
     subgraph SchemeGen["方案生成<br/>scheme.py"]
@@ -23,11 +28,15 @@ flowchart TB
     end
 
     subgraph Cost["成本计算"]
-        K["calculate_print_cost<br/>成本计算 v1"]
+        K["calculate_print_cost<br/>成本计算 (v2)"]
         L["calculate_cost<br/>成本计算 v2<br/>cost_v2.py"]
         M["calculate_stacks<br/>Stack 划分"]
         N["calculate_plates<br/>Plate 分配"]
         O["_calculate_stack_cost<br/>单 Stack 成本"]
+    end
+
+    subgraph Inventory["库存匹配 (v1 保留)"]
+        IM["_match_inventory<br/>库存匹配"]
     end
 
     subgraph Scoring["评分排序"]
@@ -45,23 +54,26 @@ flowchart TB
     end
 
     subgraph Output["输出"]
-        U["output_json / print_plan"]
+        U["output_json / print_plan<br/>读取 SplitResult 属性"]
     end
 
     A --> B
-    B --> Single
+    B --> B1
+    B1 --> SR
+    SR --> C
     C --> D
     D --> E
-    E -->|"不需要分割"| F
+    E -->|"不需要分割"| G
     E -->|"需要分割"| G
     G --> H
     G --> I
     H --> J
-    J --> K
+    J --> IM
+    IM --> K
     K --> L
     K --> P
-    P --> F
-    F --> Single
+    P --> SR
+    SR --> Output
 
     Single --> Merge
     Merge --> Q
@@ -77,9 +89,11 @@ flowchart TB
     S --> T
     T --> Output
 
-    style K fill:#f9f,stroke:#333
-    style L fill:#f9f,stroke:#333
+    style SR fill:#9f9,stroke:#333,stroke-width:3px
+    style K fill:#9f9,stroke:#333
+    style L fill:#bbf,stroke:#333
     style M fill:#bbf,stroke:#333
     style N fill:#bbf,stroke:#333
     style O fill:#bbf,stroke:#333
+    style IM fill:#ff9,stroke:#333
 ```
