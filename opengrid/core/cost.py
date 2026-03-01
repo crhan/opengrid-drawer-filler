@@ -2,24 +2,33 @@
 from .constants import FILAMENT_MAIN_PER_CELL, FILAMENT_SUPPORT_PER_CELL, PRINT_TIME_PER_CELL, SWAP_PENALTY
 
 
-def calculate_print_cost(tiles, inventory, copies):
-    """Calculate print cost (in time minutes) and inventory usage
-
-    Returns: (cost, from_inventory, need_print)
-        - cost: total time cost in minutes, 0 means fully using inventory
-        - from_inventory: tiles taken from inventory {"6x7": 2, ...}
-        - need_print: tiles that need printing {"6x7": 1, ...}
+def _match_inventory(
+    tiles: list[tuple[int, int]],
+    inventory: dict,
+    copies: int
+) -> tuple[dict, dict]:
     """
-    # Count tiles (normalize key: smaller number first, e.g., 6x9 not 9x6)
-    tile_counts = {}
+    计算库存匹配结果。
+
+    Args:
+        tiles: 瓦片列表 [(w, h), ...]
+        inventory: 可用库存 {"6x8": 3, ...}，None 等同于 {}
+        copies: 打印份数
+
+    Returns:
+        (from_inventory, need_print)
+        - from_inventory: 从库存取的瓦片 {"6x8": 1, ...}
+        - need_print: 仍需打印的瓦片 {"6x8": 2, ...}
+    """
+    # 规格化：小边在前（6x8 而非 8x6）
+    tile_counts: dict[str, int] = {}
     for w, h in tiles:
         key = f"{min(w, h)}x{max(w, h)}"
         tile_counts[key] = tile_counts.get(key, 0) + 1
 
-    from_inventory = {}
-    need_print = {}
+    from_inventory: dict[str, int] = {}
+    need_print: dict[str, int] = {}
 
-    # Calculate inventory match
     for key, count_per_copy in tile_counts.items():
         needed = count_per_copy * copies
         available = inventory.get(key, 0) if inventory else 0
@@ -30,6 +39,19 @@ def calculate_print_cost(tiles, inventory, copies):
         remaining = needed - used
         if remaining > 0:
             need_print[key] = remaining
+
+    return from_inventory, need_print
+
+
+def calculate_print_cost(tiles, inventory, copies):
+    """Calculate print cost (in time minutes) and inventory usage
+
+    Returns: (cost, from_inventory, need_print)
+        - cost: total time cost in minutes, 0 means fully using inventory
+        - from_inventory: tiles taken from inventory {"6x7": 2, ...}
+        - need_print: tiles that need printing {"6x7": 1, ...}
+    """
+    from_inventory, need_print = _match_inventory(tiles, inventory, copies)
 
     # Calculate time cost for printing
     total_time = 0
