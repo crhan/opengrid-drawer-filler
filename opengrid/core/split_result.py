@@ -24,6 +24,8 @@ class PrinterConfig:
     bed_x: int            # 打印盘宽度 (mm)
     bed_y: int            # 打印盘深度 (mm)
     tile_thickness: float # 瓦片厚度 (mm)，由 tile_type 决定
+    max_cells_x: int = 0  # bed_x // tile_size, computed from bed_x
+    max_cells_y: int = 0  # bed_y // tile_size, computed from bed_y
 
 
 class SplitResult:
