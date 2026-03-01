@@ -6,8 +6,25 @@ from opengrid.core.cost import calculate_print_cost
 
 
 def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
-    """打印人类可读的方案"""
-    # 计算网格尺寸
+    """打印人类可读的方案
+
+    Args:
+        scheme: SplitResult 实例或向下兼容的 scheme dict
+    """
+    from opengrid.core.split_result import SplitResult
+
+    # 如果是 SplitResult 实例，直接读取属性
+    if isinstance(scheme, SplitResult):
+        grid_w, grid_h = scheme.grid
+        print(f"抽屉尺寸: {width} x {depth} mm (x{copies})")
+        print(f"网格: {grid_w} x {grid_h}")
+        print("瓦片分割:")
+        for tile in scheme.tiles:
+            print(f"  {tile[0]}x{tile[1]}")
+        print(f"总打印次数: {scheme.cost.plate_count if scheme.cost.plate_count > 0 else 1}")
+        return
+
+    # 向下兼容旧 dict 格式
     grid_w = max(scheme.get('x_splits', [])) if scheme.get('x_splits') else 0
     grid_h = max(scheme.get('y_splits', [])) if scheme.get('y_splits') else 0
 
