@@ -2,7 +2,7 @@
 import json
 from opengrid.cli.utils import parse_dimensions
 from opengrid.cli.formatters import print_plan, output_json
-from opengrid.core import find_best_scheme, find_all_schemes, get_grid_dimensions, get_max_stacks, MIN_TILE
+from opengrid.core import find_best_scheme, find_all_schemes, get_grid_dimensions, get_max_stacks, MIN_TILE, FULL_THICKNESS
 from opengrid.core.cost import calculate_print_cost
 from opengrid.core.stats import calculate_filament_and_time, format_time
 from opengrid.core.constants import recalculate_derived_constants
@@ -85,7 +85,7 @@ def handle_split(args):
             args.batch,
             verbose=False,
             inventory=inventory,
-            json_output=args.json
+            json_output=args.print_json or args.json
         )
         return
 

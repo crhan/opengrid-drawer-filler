@@ -78,7 +78,7 @@ def get_print_plan(width, depth, inv_file, batch_mode=None):
     else:
         # 单尺寸模式
         cmd.append(f'{width}x{depth}')
-    cmd.extend(['-i', inv_file, '-j'])
+    cmd.extend(['-i', inv_file, '--print-json'])
 
     result = run_cmd(cmd, cwd=SCRIPTS_DIR)
     if result.returncode != 0:
