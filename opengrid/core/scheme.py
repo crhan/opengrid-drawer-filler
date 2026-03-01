@@ -1,6 +1,6 @@
 """Scheme generation and evaluation - core functions from split_calc.py"""
 from .splitter import split_with_limit, calc_balance, calc_scheme_balance
-from .grid import validate_tile
+from .grid import validate_tile, GridConfig
 from opengrid.config import get_printer_config_or_default
 from .constants import TILE_SIZE
 
@@ -9,17 +9,38 @@ from .constants import TILE_SIZE
 SCHEME_SORT_KEY = lambda s: (s['cost'], s['unique_sizes'], s['total_tiles'], s['balance'])
 
 
-def normalize_tiles(tiles, max_x=None, max_y=None):
-    """Normalize tiles: rotate if width exceeds max_x but height fits"""
-    if max_x is None or max_y is None:
+def normalize_tiles(tiles, grid_config: GridConfig = None):
+    """Normalize tiles: rotate if it makes the tile valid
+
+    Args:
+        tiles: list of (width, height) tuples
+        grid_config: optional GridConfig. If None, reads from config.
+    """
+    from opengrid.config import get_printer_config_or_default
+    from .constants import TILE_SIZE
+
+    if grid_config is not None:
+        max_x = grid_config.max_cells_x
+        max_y = grid_config.max_cells_y
+        min_tile = grid_config.min_tile
+    else:
         printer = get_printer_config_or_default()
-        max_x = max_x or (printer.get("bed_x", 256) // TILE_SIZE)
-        max_y = max_y or (printer.get("bed_y", 256) // TILE_SIZE)
+        bed_x = printer.get("bed_x", 256)
+        bed_y = printer.get("bed_y", 256)
+        max_x = bed_x // TILE_SIZE
+        max_y = bed_y // TILE_SIZE
+        min_tile = 2
+
     normalized = []
     for w, h in tiles:
-        if w > max_x and h <= max_y:
+        # Original valid
+        if min_tile <= w <= max_x and min_tile <= h <= max_y:
+            normalized.append((w, h))
+        # Rotated valid (symmetric check)
+        elif min_tile <= h <= max_x and min_tile <= w <= max_y:
             normalized.append((h, w))
         else:
+            # Invalid, keep original (will fail validation later)
             normalized.append((w, h))
     return normalized
 
