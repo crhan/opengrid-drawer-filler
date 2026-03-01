@@ -474,24 +474,27 @@ def test_calculate_plates_empty():
 def test_calculate_cost_single_stack():
     """测试单个 Stack 的成本计算：6x4s1"""
     # 6x4s1: 24 cells, 1 layer
+    # 新公式: 24*1*2.98 + 1*7.4 - 4.5 = 74.4 min
     stacks = [Stack(tile=Tile(w=6, h=4), count=1)]
     plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
     result = calculate_cost(plates)
-    # 预期: 79 min (24 * 1 * 2.89 + 1 * 2.14 + 8.1 = 79.2)
-    assert abs(result.total_cost - 79) < 5
-    assert abs(result.total_filament_g - 28.6) < 2
+    # 预期: 74 min (容差 5)
+    assert abs(result.total_cost - 74) < 5
+    # 耗材: 24*1*1.15 = 27.6g (容差 2)
+    assert abs(result.total_filament_g - 27.6) < 2
 
 
 def test_calculate_cost_6x8s6():
     """测试 6x8s6 的成本计算"""
     # 6x8s6: 48 cells, 6 layers
-    # 当前实现: 48*6*2.89 + 6*2.14 + 5*9.5 + 8.1 = 900.76
+    # 新公式: 48*6*2.98 + 6*7.4 - 4.5 = 898.1 min
     stacks = [Stack(tile=Tile(w=6, h=8), count=6)]
     plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
     result = calculate_cost(plates)
-    # 预期: 901 min, 343g
-    assert abs(result.total_cost - 901) < 10
-    assert abs(result.total_filament_g - 343) < 10
+    # 预期: 898 min (容差 10)
+    assert abs(result.total_cost - 898) < 10
+    # 耗材: 48*6*1.15 + 5*2.6 = 344.2g (容差 5)
+    assert abs(result.total_filament_g - 344.2) < 5
 
 
 def test_calculate_cost_multiple_stacks_same_plate():
@@ -504,11 +507,11 @@ def test_calculate_cost_multiple_stacks_same_plate():
     plates = [Plate(index=0, stacks=stacks)]
     result = calculate_cost(plates)
 
-    # 2 Stack 同盘:
-    # - Stack 1 (i=0): 24*1*2.89 + 1*2.14 + 8.1 = 79.2 (有 prep)
-    # - Stack 2 (i=1): 24*1*2.89 + 1*2.14 + 42 = 113.2 (有 SAME_PLATE_PENALTY)
-    # 合计: 79.2 + 113.2 = 192.4 min
-    assert abs(result.total_cost - 192.4) < 5
+    # 2 Stack 同盘 (SAME_PLATE_PENALTY = 0):
+    # - Stack 1: 24*1*2.98 + 1*7.4 - 4.5 = 74.4 min
+    # - Stack 2: 24*1*2.98 + 1*7.4 - 4.5 = 74.4 min
+    # 合计: 148.8 min
+    assert abs(result.total_cost - 149) < 5
     assert result.plate_count == 1
     assert result.swap_penalty_total == 0  # 同一盘无换盘惩罚
 
@@ -535,17 +538,21 @@ def test_calculate_cost_multiple_plates():
 # ========== 参考数据验证测试 ==========
 
 def test_reference_data():
-    """验证所有参考数据（基于当前实现的计算值）"""
-    # 使用当前实现的计算值作为预期（算法待优化）
+    """验证所有参考数据（基于 12 个实测数据）"""
+    # 设计文档中的参考数据
     test_cases = [
         # (w, h, layers, expected_time, expected_filament)
-        (6, 4, 1, 80, 28.56),
-        (6, 8, 6, 901, 342.72),
-        (6, 7, 6, 797, 299.88),
-        (8, 8, 5, 982, 380.80),
-        (10, 8, 1, 241, 95.20),
-        (10, 8, 2, 484, 190.40),
-        (5, 6, 8, 786, 285.60),
+        (6, 4, 1, 77, 27.56),
+        (10, 8, 1, 232, 88.83),
+        (10, 8, 2, 483, 185.35),
+        (6, 8, 6, 908, 346.26),
+        (6, 7, 6, 802, 304.54),
+        (8, 8, 5, 993, 376.34),
+        (5, 6, 8, 772, 289.56),
+        (8, 9, 2, 438, 165.95),
+        (9, 5, 12, 1684, 647.03),
+        (9, 5, 6, 843, 321.79),
+        (9, 5, 3, 419, 159.20),
     ]
 
     for w, h, layers, exp_time, exp_fil in test_cases:
@@ -553,6 +560,6 @@ def test_reference_data():
         plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
         result = calculate_cost(plates)
 
-        assert abs(result.total_cost - exp_time) <= 10, f"{w}x{h}s{layers}: {result.total_cost} vs {exp_time}"
-        assert abs(result.total_filament_g - exp_fil) <= 10, f"{w}x{h}s{layers}: {result.total_filament_g}g vs {exp_fil}g"
+        assert abs(result.total_cost - exp_time) <= 12, f"{w}x{h}s{layers}: {result.total_cost} vs {exp_time}"
+        assert abs(result.total_filament_g - exp_fil) <= 5, f"{w}x{h}s{layers}: {result.total_filament_g}g vs {exp_fil}g"
 

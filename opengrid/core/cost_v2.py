@@ -2,16 +2,16 @@ from pydantic import BaseModel, Field
 from typing import List
 
 
-# 时间计算参数 (min/cell/layer, min/layer, min)
-TIME_PER_CELL_LAYER = 2.89   # d: 每格每层时间
-TIME_PER_LAYER = 2.14        # c: 每层固定开销
-TIME_PREP = 8.1              # prep: 打印开始准备时间
-TIME_PER_LAYER_SWAP = 9.5   # swap: 每层换材料时间（从参考数据反推）
-SAME_PLATE_PENALTY = 42      # 同盘切换开销
+# 时间计算参数 (基于 12 个实测数据拟合)
+TIME_PER_CELL_LAYER = 2.98   # d: 每格每层时间 (min/cell/layer)
+TIME_PER_LAYER_TOTAL = 7.4   # k: 每层总开销 c + swap (min/layer)
+TIME_PREP = -4.5             # prep: 打印开始准备时间（数学修正项）
+SAME_PLATE_PENALTY = 0       # 同盘切换开销（已废弃，每个 Stack 独立计算）
 SWAP_PENALTY = 60            # 换盘惩罚
 
 # 耗材计算参数 (g/cell/layer)
-FILAMENT_PER_CELL_LAYER = 1.19  # d_filament: 每格每层耗材量
+FILAMENT_PER_CELL_LAYER = 1.15  # d_filament: 每格每层耗材量
+FILAMENT_GAP = 2.6             # gap: 层间 gap 耗材量（每层固定开销）
 
 
 def calculate_plates(
@@ -39,26 +39,27 @@ def _calculate_stack_cost(stack: Stack, is_first: bool, is_single_stack: bool) -
     参数:
         stack: 打印堆叠
         is_first: 是否为该盘上的第一个 Stack
-        is_single_stack: 该盘是否只有这一个 Stack（用于判断是否加 swap）
+        is_single_stack: 该盘是否只有这一个 Stack
 
     返回:
         (time_minutes, filament_grams): 打印时间和耗材量
+
+    公式:
+        time = cells * layers * d + layers * k + prep
+        filament = cells * layers * d_filament + (layers-1) * gap
     """
     cells = stack.tile.w * stack.tile.h
     layers = stack.count
 
-    # 打印时间 = cells * layers * d + layers * c + (swap if single_stack else 0) + prep/same_plate_penalty
+    # 打印时间 = cells * layers * d + layers * k + prep
     stack_time = cells * layers * TIME_PER_CELL_LAYER
-    stack_time += layers * TIME_PER_LAYER
+    stack_time += layers * TIME_PER_LAYER_TOTAL
+    stack_time += TIME_PREP
 
-    # swap 只在单 Stack 且多层（layers > 1）情况下应用
-    if is_single_stack and layers > 1:
-        stack_time += (layers - 1) * TIME_PER_LAYER_SWAP
-
-    stack_time += TIME_PREP if is_first else SAME_PLATE_PENALTY
-
-    # 耗材 = cells * layers * d_filament
+    # 耗材 = cells * layers * d_filament + (layers-1) * gap
     stack_filament = cells * layers * FILAMENT_PER_CELL_LAYER
+    if layers > 1:
+        stack_filament += (layers - 1) * FILAMENT_GAP
 
     return stack_time, stack_filament
 
