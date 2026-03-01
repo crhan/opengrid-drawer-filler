@@ -52,10 +52,14 @@ current_dir=$(pwd)
 while [ "$current_dir" != "/" ]; do
     if [ -f "$current_dir/opengrid_config.yaml" ]; then
         echo "找到配置文件: $current_dir/opengrid_config.yaml"
+        export PROJECT_ROOT="$current_dir"
         break
     fi
     current_dir=$(dirname "$current_dir")
 done
+
+# 插件根目录（固定）
+export PLUGIN_ROOT="/Users/ruohanc/Documents/projects/opengrid_plugin"
 ```
 
 #### 1.2 定位配置文件和库存文件
@@ -75,17 +79,17 @@ done
 
 ```bash
 # 传入配置文件和库存文件路径
-uv run scripts/opengrid.py -c ./opengrid_config.yaml -i ./inventory.json status
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i $PROJECT_ROOT/inventory.json status
 ```
 
 **如果配置文件不在当前目录**，使用 `--config` 参数指定：
 
 ```bash
 # 配置文件在父目录
-uv run scripts/opengrid.py -c ../opengrid_config.yaml status
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/../opengrid_config.yaml status
 
 # 使用绝对路径
-uv run scripts/opengrid.py -c /path/to/opengrid_config.yaml status
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c /path/to/opengrid_config.yaml status
 ```
 
 输出示例：
@@ -123,16 +127,16 @@ uv run scripts/opengrid.py -c /path/to/opengrid_config.yaml status
 
 ```bash
 # 查看库存
-uv run scripts/opengrid.py inventory list
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory list
 
 # 添加库存 (格式: 宽x高:数量)
-uv run scripts/opengrid.py inventory add 8x8:5 6x7:3 "入库原因"
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory add 8x8:5 6x7:3 "入库原因"
 
 # 扣减库存
-uv run scripts/opengrid.py inventory deduct 8x8:2 "扣减原因"
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory deduct 8x8:2 "扣减原因"
 
 # 撤销上次操作
-uv run scripts/opengrid.py inventory undo
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory undo
 ```
 
 **重要**：执行 inventory 命令时必须：
@@ -142,7 +146,7 @@ uv run scripts/opengrid.py inventory undo
 
 ```bash
 # 指定配置文件
-uv run scripts/opengrid.py -c ./opengrid_config.yaml inventory list
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory list
 ```
 
 **关键约束**：
@@ -180,10 +184,10 @@ uv run scripts/opengrid.py -c ./opengrid_config.yaml inventory list
 
 ```bash
 # 方案 A：不使用库存
-uv run scripts/opengrid.py split 265x365:2 325x365:2
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365:2 325x365:2
 
 # 方案 B：使用库存（通过 -i 指定库存文件）
-uv run scripts/opengrid.py -i inventory.json split 265x365:2 325x365:2
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i $PROJECT_ROOT/inventory.json split 265x365:2 325x365:2
 ```
 
 ### Step 4: 展示方案
@@ -210,11 +214,11 @@ uv run scripts/opengrid.py -i inventory.json split 265x365:2 325x365:2
 
 ```bash
 # 先生成两个方案的 JSON
-uv run scripts/opengrid.py split 325x460 -j > scheme_no_inv.json
-uv run scripts/opengrid.py -i inventory.json split 325x460 -j > scheme_with_inv.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 325x460 -j > scheme_no_inv.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i $PROJECT_ROOT/inventory.json split 325x460 -j > scheme_with_inv.json
 
 # 生成 HTML 对比页面
-uv run scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o comparison.html
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml present scheme_no_inv.json scheme_with_inv.json -o comparison.html
 ```
 
 生成的 HTML 页面包含：
@@ -311,13 +315,13 @@ uv run scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o co
 **方式一：输出到标准输出（用于管道重定向）**
 
 ```bash
-uv run scripts/opengrid.py split 265x365 --print-json > scheme.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365 --print-json > scheme.json
 ```
 
 **方式二：自动保存到临时目录**
 
 ```bash
-uv run scripts/opengrid.py split 265x365 -j
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365 -j
 # 输出: 方案已保存: /tmp/opengrid/scheme_1234567890.json
 ```
 
@@ -332,8 +336,8 @@ uv run scripts/opengrid.py split 265x365 -j
 使用 `opengrid slicer generate` 命令：
 
 ```bash
-uv run scripts/opengrid.py slicer generate 7x5x2
-uv run scripts/opengrid.py slicer generate 3x5x2
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml slicer generate 7x5x2
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml slicer generate 3x5x2
 ```
 
 #### 5.4 展示生成结果
@@ -378,43 +382,44 @@ open_in_slicer(stl_files, slicer="orca")
 
 ```bash
 # 切片单个文件
-uv run scripts/opengrid.py slicer slice -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml slicer slice -s "~/3D打印/opengrid/7x5_Full/opengrid_7x5_Full_s2.stl" --slicer orca
 
 # 切片多个文件
-uv run scripts/opengrid.py slicer slice -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml slicer slice -s "file1.stl" "file2.stl" --slicer orca --output my_drawer
 ```
 
 ## 快速命令
 
-使用 `${CLAUDE_PLUGIN_ROOT}` 变量引用插件根目录：
+使用绝对路径调用脚本：
 
 ```bash
-# 查看项目状态（自动查找配置）
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py status
+# 设置环境变量（在每个会话开始时执行）
+export PLUGIN_ROOT="/Users/ruohanc/Documents/projects/opengrid_plugin"
+export PROJECT_ROOT="$(pwd)"
 
-# 指定配置文件和库存
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py -c ./opengrid_config.yaml -i ./inventory.json status
+# 查看项目状态（自动查找配置）
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml status
 
 # 批量计算
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 265x365:2 325x365:2
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365:2 325x365:2
 
 # 单尺寸计算
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 485 425
 
 # 使用库存
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py -i inventory.json split 265x365:2
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i $PROJECT_ROOT/inventory.json split 265x365:2
 
 # 生成 STL
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py slicer generate 7x5x2
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml slicer generate 7x5x2
 
 # 生成方案 JSON（输出到 stdout，用于管道重定向）
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425 --print-json > scheme.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 485 425 --print-json > scheme.json
 
 # 或者使用自动保存到临时目录
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425 -j
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 485 425 -j
 
 # 生成 HTML 对比并打开（使用临时目录中的 JSON 文件）
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py compare /tmp/opengrid/scheme_xxx.json /tmp/opengrid/scheme_yyy.json -o comparison.html
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml compare /tmp/opengrid/scheme_xxx.json /tmp/opengrid/scheme_yyy.json -o comparison.html
 ```
 
 详细命令、配置说明、算法规则等请参考以下文档：
@@ -447,23 +452,4 @@ output:
 
 ## 初始化
 
-首次使用前完成配置，运行一次安装脚本即可完成所有设置：
-
-```bash
-cd ${CLAUDE_PLUGIN_ROOT}
-./scripts/setup.sh
-```
-
-脚本自动完成：
-
-1. 创建 Python venv (`.venv`)
-2. 安装 Python 依赖 (pyyaml, pytest, Pillow)
-3. 安装 OpenSCAD
-4. 克隆 QuackWorks
-5. 安装 BOSL2
-
-之后运行脚本：
-
-```bash
-uv run scripts/opengrid.py split 485 425
-```
+首次使用前需要先运行 `/opengrid-drawer-filler-setup` skill 完成配置。

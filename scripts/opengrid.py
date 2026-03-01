@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# dependencies = ["PyYAML>=6.0.3", "Jinja2>=3.1.6", "pillow>=12.1.1"]
+# dependencies = ["PyYAML>=6.0.3", "Jinja2>=3.1.6", "pillow>=12.1.1", "pydantic>=2.0.0"]
 # ///
 """统一 CLI 入口"""
 
