@@ -43,16 +43,25 @@ def _init_constants():
 
 
 def _build_printer_config() -> PrinterConfig:
-    """从当前全局常量构造 PrinterConfig"""
+    """从当前配置构造 PrinterConfig"""
     config = load_config_or_default()
     printer = get_printer_config_or_default()
     tile_type = config.get("opengrid", {}).get("tile_type", "Full")
+    tile_size = config.get("opengrid", {}).get("tile_size", 28)
+
     from opengrid.core.constants import TILE_THICKNESS
+    thickness = TILE_THICKNESS.get(tile_type, 7.2)
+
+    bed_x = printer.get("bed_x", 256)
+    bed_y = printer.get("bed_y", 256)
+
     return PrinterConfig(
-        max_z=MAX_Z,
-        bed_x=printer.get("bed_x", 256),
-        bed_y=printer.get("bed_y", 256),
-        tile_thickness=TILE_THICKNESS.get(tile_type, FULL_THICKNESS),
+        max_z=printer.get("max_z", 256),
+        bed_x=bed_x,
+        bed_y=bed_y,
+        tile_thickness=thickness,
+        max_cells_x=bed_x // tile_size,
+        max_cells_y=bed_y // tile_size,
     )
 
 
