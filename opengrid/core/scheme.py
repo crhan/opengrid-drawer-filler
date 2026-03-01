@@ -152,20 +152,30 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     return best
 
 
-def find_all_schemes(x, y, max_schemes=2000):
+def find_all_schemes(x, y, grid_config: GridConfig = None, max_schemes=2000):
     """Generate all valid split schemes for grid dimensions
 
     Uses intelligent search range:
     - Small grids: x_search = 1..min(8, x+1), y_search = 1..min(5, y+1)
     - Large grids: search around minimum required splits +/- 1
+
+    Args:
+        x: grid width in cells
+        y: grid height in cells
+        grid_config: optional GridConfig. If None, reads from config.
+        max_schemes: maximum number of schemes to generate
     """
-    # Get printer limits from config
-    printer = get_printer_config_or_default()
-    max_x = printer.get("bed_x", 256) // TILE_SIZE
-    max_y = printer.get("bed_y", 256) // TILE_SIZE
+    # Get limits from grid_config or config
+    if grid_config is not None:
+        max_x = grid_config.max_cells_x
+        max_y = grid_config.max_cells_y
+    else:
+        printer = get_printer_config_or_default()
+        max_x = printer.get("bed_x", 256) // TILE_SIZE
+        max_y = printer.get("bed_y", 256) // TILE_SIZE
 
     # Check if no split needed
-    if validate_tile(x, y):
+    if validate_tile(x, y, grid_config):
         return [{
             'x_parts': 1,
             'y_parts': 1,
@@ -222,7 +232,7 @@ def find_all_schemes(x, y, max_schemes=2000):
                     valid = True
                     for xd in xs:
                         for yd in ys:
-                            if not validate_tile(xd, yd):
+                            if not validate_tile(xd, yd, grid_config):
                                 valid = False
                                 break
                             tiles.append((xd, yd))
@@ -231,7 +241,7 @@ def find_all_schemes(x, y, max_schemes=2000):
                         continue
 
                     # Normalize tiles
-                    normalized = normalize_tiles(tiles, max_x, max_y)
+                    normalized = normalize_tiles(tiles, grid_config)
 
                     schemes.append({
                         'x_parts': x_parts,
