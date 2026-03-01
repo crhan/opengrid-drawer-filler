@@ -54,6 +54,7 @@ claude --plugin-dir /Users/ruohanc/Documents/projects/opengrid_plugin
 ```
 
 测试技能调用：
+
 ```
 /opengrid-drawer-filler 265x365
 ```
@@ -122,3 +123,75 @@ uv run scripts/opengrid.py inventory deduct 8x8:2 "原因"
 ### 算法优先级
 
 最小化独特尺寸 → 最小化瓦片总数 → 最大化均衡度
+
+# OpenGrid 体系与 3D 打印生产术语规范 (v1.0)
+
+## 1. 核心词汇定义 (Core Definitions)
+
+### **Grid (网格标准)**
+
+- **本质**：逻辑协议 / 度量衡。
+- **定义**：指整个生态系统遵循的几何对齐规则。在 OpenGrid 体系中，标准 Grid 间距为 **28mm**。
+- **作用**：确保不同来源的配件（Hooks, Bins, Snaps）在空间上具有互操作性。
+
+### **Cell (单元格)**
+
+- **本质**：最小空间单位。
+- **定义**：Grid 系统中最小的 $1 \times 1$ 区域（即 $28\text{mm} \times 28\text{mm}$ 的方格）。
+- **作用**：用于描述附件的尺寸（如“这个盒子占 $2 \times 3$ Cells”）或定位安装点。
+
+### **Tile (基础面板)**
+
+- **本质**：物理实体对象。
+- **定义**：由 $M \times N$ 个 Cells 组成的单块打印成品底板。
+- **分类**：包括 Standard Tile, Lite Tile, 或是兼容 Gridfinity 的适配 Tile。
+
+### **Stack (生产堆叠)**
+
+- **本质**：垂直排列形态。
+- **定义**：为了优化 3D 打印效率，将多个 Tile 在 Z 轴方向通过微小空气间隙（Air Gap）垂直叠放而成的集合体。
+- **关键参数**：`Layer_Height`, `Air_Gap` (通常为 $0.2\text{mm} \sim 0.25\text{mm}$)。
+
+### **Plate (打印盘/任务)**
+
+- **本质**：物理空间极限 / 任务容器。
+- **定义**：3D 打印机（如 Bambu Lab X1C/P1S）单次运行所涵盖的所有模型总和。
+- **构成**：一个 Plate 可以包含多个 Stacks、散装的 Tiles 以及其他 Accessories。
+
+---
+
+## 2. 层级与嵌套关系 (Hierarchical Relationships)
+
+为了使 Agent 理解空间逻辑，请遵循以下公式化表达：
+
+### **2.1 空间包含逻辑**
+
+$$Cell \subset Tile \subset Stack \subset Plate$$
+
+- **Cell $\to$ Tile**: **Tile** 是 **Cell** 的阵列容器。
+- _描述语_：“一个 $5 \times 5$ 的 Tile 包含了 25 个 Cells。”
+
+- **Tile $\to$ Stack**: **Stack** 是 **Tile** 的垂直克隆序列。
+- _描述语_：“这个 Stack 由 4 层相同规格的 Tiles 组成。”
+
+- **Stack/Tile $\to$ Plate**: **Plate** 是所有待打印实体的物理边界。
+- _描述语_：“在当前 Plate 上，我布置了 2 个 Stacks 和 1 组配套的 Snaps。”
+
+### **2.2 跨体系兼容逻辑 (Grid-to-Grid)**
+
+- **OpenGrid ($28\text{mm}$)** 与 **Gridfinity ($42\text{mm}$)** 的公倍数关系：
+
+$$3 \times \text{OpenGrid Cell} = 2 \times \text{Gridfinity Cell} = 84\text{mm}$$
+
+_这是 Agent 在进行跨系统适配器建模时的核心计算依据。_
+
+---
+
+## 3. 生产工作流示例 (Workflow for Agent)
+
+当用户发出指令时，Agent 应按以下逻辑解析词汇：
+
+1. **确定标准 (Grid)**：确认是否使用标准 $28\text{mm}$ 协议。
+2. **设计规格 (Cell & Tile)**：用户需要 $X \times Y$ 尺寸的 **Tile**。
+3. **计算策略 (Stack)**：基于用户总需求量，计算需要多少层 **Stack** 才能最有效利用打印时间。
+4. **排版布局 (Plate)**：在切片软件（如 Bambu Studio）的物理 **Plate** 范围内分配空间。

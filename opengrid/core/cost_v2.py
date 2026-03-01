@@ -6,6 +6,7 @@ from typing import List
 TIME_PER_CELL_LAYER = 2.89   # d: 每格每层时间
 TIME_PER_LAYER = 2.14        # c: 每层固定开销
 TIME_PREP = 8.1              # prep: 打印开始准备时间
+TIME_PER_LAYER_SWAP = 9.5   # swap: 每层换材料时间（从参考数据反推）
 SAME_PLATE_PENALTY = 42      # 同盘切换开销
 SWAP_PENALTY = 60            # 换盘惩罚
 
@@ -22,12 +23,44 @@ def calculate_plates(
     根据盘面尺寸将 Stacks 分配到各 Plate
 
     当前实现：每个 Stack 独占一盘
+    未来扩展：根据盘面尺寸优化摆放多个 Stacks
     """
     # 当前简化实现：每个 Stack 独占一盘
     return [
         Plate(index=i, stacks=[stack])
         for i, stack in enumerate(stacks)
     ]
+
+
+def _calculate_stack_cost(stack: Stack, is_first: bool, is_single_stack: bool) -> tuple[float, float]:
+    """
+    计算单个 Stack 的成本
+
+    参数:
+        stack: 打印堆叠
+        is_first: 是否为该盘上的第一个 Stack
+        is_single_stack: 该盘是否只有这一个 Stack（用于判断是否加 swap）
+
+    返回:
+        (time_minutes, filament_grams): 打印时间和耗材量
+    """
+    cells = stack.tile.w * stack.tile.h
+    layers = stack.count
+
+    # 打印时间 = cells * layers * d + layers * c + (swap if single_stack else 0) + prep/same_plate_penalty
+    stack_time = cells * layers * TIME_PER_CELL_LAYER
+    stack_time += layers * TIME_PER_LAYER
+
+    # swap 只在单 Stack 且多层（layers > 1）情况下应用
+    if is_single_stack and layers > 1:
+        stack_time += (layers - 1) * TIME_PER_LAYER_SWAP
+
+    stack_time += TIME_PREP if is_first else SAME_PLATE_PENALTY
+
+    # 耗材 = cells * layers * d_filament
+    stack_filament = cells * layers * FILAMENT_PER_CELL_LAYER
+
+    return stack_time, stack_filament
 
 
 def calculate_cost(plates: List[Plate]) -> CostResult:
@@ -54,24 +87,10 @@ def calculate_cost(plates: List[Plate]) -> CostResult:
     for plate in plates:
         plate_time = 0.0
         plate_filament = 0.0
+        is_single_stack = len(plate.stacks) == 1
 
         for i, stack in enumerate(plate.stacks):
-            cells = stack.tile.w * stack.tile.h
-            layers = stack.count
-
-            # 打印时间 = cells * layers * d + layers * c + prep
-            # 第一个 Stack 有 prep，后续 Stack 有同盘切换开销
-            stack_time = cells * layers * TIME_PER_CELL_LAYER
-            stack_time += layers * TIME_PER_LAYER
-
-            if i == 0:
-                stack_time += TIME_PREP
-            else:
-                stack_time += SAME_PLATE_PENALTY
-
-            # 耗材 = cells * layers * d_filament
-            stack_filament = cells * layers * FILAMENT_PER_CELL_LAYER
-
+            stack_time, stack_filament = _calculate_stack_cost(stack, i == 0, is_single_stack)
             plate_time += stack_time
             plate_filament += stack_filament
 
