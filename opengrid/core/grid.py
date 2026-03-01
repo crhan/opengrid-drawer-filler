@@ -13,56 +13,49 @@ class GridConfig:
     min_tile: int = 2
 
 
-def get_max_stacks(printer_config=None):
+def get_max_stacks(printer_config):
     """Calculate maximum number of stacks based on Z height
 
     Args:
-        printer_config: optional PrinterConfig. If None, reads from config.
+        printer_config: PrinterConfig instance with max_z and tile_thickness
 
     Returns:
         Maximum number of stacks that fit in Z height
     """
-    if printer_config is not None:
-        max_z = printer_config.max_z
-        thickness = printer_config.tile_thickness
-    else:
-        from opengrid.config import get_printer_config_or_default
-        from .constants import TILE_THICKNESS
-        printer = get_printer_config_or_default()
-        max_z = printer.get("max_z", 256)
-        tile_type = "Full"  # TODO: make configurable
-        base_thickness = TILE_THICKNESS.get(tile_type, 6.8)
-        thickness = base_thickness + 0.4  # default with interface
+    max_z = printer_config.max_z
+    thickness = printer_config.tile_thickness
 
     return int(max_z // thickness)
 
 
-def get_grid_dimensions(width_mm, depth_mm):
-    """Calculate available grid cells for drawer dimensions"""
-    x = width_mm // TILE_SIZE
-    y = depth_mm // TILE_SIZE
+def get_grid_dimensions(width_mm, depth_mm, tile_size: int = TILE_SIZE):
+    """Calculate available grid cells for drawer dimensions
+
+    Args:
+        width_mm: drawer width in mm
+        depth_mm: drawer depth in mm
+        tile_size: grid pitch in mm (default: TILE_SIZE constant)
+
+    Returns:
+        (x, y) number of cells in each dimension
+    """
+    x = width_mm // tile_size
+    y = depth_mm // tile_size
     return x, y
 
 
-def validate_tile(w, h, grid_config: GridConfig = None):
+def validate_tile(w, h, grid_config: GridConfig):
     """Validate if a tile size is within printer limits
 
     Args:
         w: tile width in cells
         h: tile height in cells
-        grid_config: optional GridConfig. If None, reads from config.
+        grid_config: GridConfig instance with max_cells_x, max_cells_y
+
+    Returns:
+        True if tile is within limits
     """
-    from .constants import MIN_TILE
+    max_x = grid_config.max_cells_x
+    max_y = grid_config.max_cells_y
 
-    if grid_config is not None:
-        max_x = grid_config.max_cells_x
-        max_y = grid_config.max_cells_y
-    else:
-        from opengrid.config import get_printer_config_or_default
-        printer = get_printer_config_or_default()
-        bed_x = printer.get("bed_x", 256)
-        bed_y = printer.get("bed_y", 256)
-        max_x = bed_x // TILE_SIZE
-        max_y = bed_y // TILE_SIZE
-
-    return MIN_TILE <= w <= max_x and MIN_TILE <= h <= max_y
+    return grid_config.min_tile <= w <= max_x and grid_config.min_tile <= h <= max_y

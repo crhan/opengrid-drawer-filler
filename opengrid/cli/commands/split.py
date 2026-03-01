@@ -2,44 +2,17 @@
 import json
 from opengrid.cli.utils import parse_dimensions
 from opengrid.cli.formatters import print_plan, output_json
-from opengrid.core import find_best_scheme, find_all_schemes, get_grid_dimensions, get_max_stacks, MIN_TILE, FULL_THICKNESS, MAX_Z
+from opengrid.core import find_best_scheme, find_all_schemes, get_grid_dimensions, get_max_stacks, MIN_TILE
+from opengrid.core.constants import (
+    FILAMENT_MAIN_PER_CELL,
+    FILAMENT_SUPPORT_PER_CELL,
+    PRINT_TIME_PER_CELL,
+)
 from opengrid.core.cost import calculate_print_cost
 from opengrid.core.stats import calculate_filament_and_time, format_time
-from opengrid.core.constants import recalculate_derived_constants
 from opengrid.core.split_result import PrinterConfig, SplitResult
+from opengrid.core.grid import GridConfig
 from opengrid.config import load_config_or_default, get_printer_config_or_default
-
-# 初始化常量（支持无配置文件模式）- 延迟初始化避免测试干扰
-_initialized = False
-
-
-def _init_constants():
-    """初始化核心常量，支持无配置文件模式"""
-    global _initialized
-    if _initialized:
-        return
-
-    config = load_config_or_default()
-    printer = get_printer_config_or_default()
-
-    tile_size = config.get("opengrid", {}).get("tile_size", 28)
-    max_z = printer.get("max_z", 256)
-    bed_x = printer.get("bed_x", 256)
-    bed_y = printer.get("bed_y", 256)
-    tile_type = config.get("opengrid", {}).get("tile_type", "Full")
-    interface_separation = config.get("opengrid", {}).get("interface_separation", 0.2)
-    stacking_method = config.get("opengrid", {}).get("stacking_method", "Ironing")
-
-    recalculate_derived_constants(
-        tile_size=tile_size,
-        max_z=max_z,
-        bed_x=bed_x,
-        bed_y=bed_y,
-        tile_type=tile_type,
-        interface_separation=interface_separation,
-        stacking_method=stacking_method
-    )
-    _initialized = True
 
 
 def _build_printer_config() -> PrinterConfig:
@@ -65,6 +38,15 @@ def _build_printer_config() -> PrinterConfig:
     )
 
 
+def _build_grid_config() -> GridConfig:
+    """从当前配置构造 GridConfig"""
+    printer = _build_printer_config()
+    return GridConfig(
+        max_cells_x=printer.max_cells_x,
+        max_cells_y=printer.max_cells_y,
+    )
+
+
 def add_parser(subparsers):
     parser = subparsers.add_parser('split', help='抽屉分割计算')
     parser.add_argument('dimensions', nargs='*', help='尺寸列表')
@@ -85,9 +67,6 @@ def handle_split(args):
     import tempfile
     from pathlib import Path
     import time
-
-    # 初始化常量
-    _init_constants()
 
     # 加载库存文件（如果指定）
     inventory = None
@@ -201,8 +180,20 @@ def handle_split(args):
 
 
 __all__ = ['add_parser']
-def calculate_single(width, depth, copies=1, verbose=False, index=None):
-    """计算单个尺寸的分割方案"""
+def calculate_single(width, depth, copies=1, verbose=False, index=None, grid_config: GridConfig = None):
+    """计算单个尺寸的分割方案
+
+    Args:
+        width: 抽屉宽度 (mm)
+        depth: 抽屉深度 (mm)
+        copies: 打印份数
+        verbose: 是否详细输出
+        index: 索引
+        grid_config: GridConfig 实例，如果为 None 则使用默认配置
+    """
+    if grid_config is None:
+        grid_config = _build_grid_config()
+
     x, y = get_grid_dimensions(width, depth)
 
     if x < MIN_TILE or y < MIN_TILE:
@@ -210,7 +201,7 @@ def calculate_single(width, depth, copies=1, verbose=False, index=None):
 
     # 不再检查 MAX_X/MAX_Y，因为 split 会把大网格拆分成小瓦片
 
-    scheme = find_best_scheme(x, y, verbose)
+    scheme = find_best_scheme(x, y, grid_config, verbose)
 
     if not scheme:
         return None
@@ -225,7 +216,7 @@ def calculate_single(width, depth, copies=1, verbose=False, index=None):
     }
 
 
-def merge_and_optimize(batch_results, drawer_names=None):
+def merge_and_optimize(batch_results, drawer_names=None, printer_config: PrinterConfig = None):
     """合并多个尺寸的方案，优化共用尺寸
 
     策略:
@@ -236,7 +227,11 @@ def merge_and_optimize(batch_results, drawer_names=None):
     Args:
         batch_results: 批量计算结果列表
         drawer_names: 可选的抽屉名称映射 {index: "name"}
+        printer_config: PrinterConfig 实例，如果为 None 则使用默认配置
     """
+    if printer_config is None:
+        printer_config = _build_printer_config()
+
     if drawer_names is None:
         drawer_names = {}
 
@@ -282,16 +277,20 @@ def merge_and_optimize(batch_results, drawer_names=None):
     return all_tiles
 
 
-def calculate_total_prints(batch_results, schemes):
+def calculate_total_prints(batch_results, schemes, printer_config: PrinterConfig = None):
     """计算给定方案组合的总打印次数
 
     Args:
         batch_results: 批量计算结果列表，每个元素包含 width, depth, copies, scheme
         schemes: 对应的分割方案列表
+        printer_config: PrinterConfig 实例，如果为 None 则使用默认配置
 
     Returns:
         (total_prints, details): 总打印次数和每个尺寸的详细信息
     """
+    if printer_config is None:
+        printer_config = _build_printer_config()
+
     # 合并所有瓦片
     all_tiles = {}
     for result, scheme in zip(batch_results, schemes):
@@ -305,7 +304,7 @@ def calculate_total_prints(batch_results, schemes):
             all_tiles[key] += copies
 
     # 计算每个尺寸的打印次数
-    max_stacks = get_max_stacks()
+    max_stacks = get_max_stacks(printer_config)
     total_prints = 0
     details = {}
 
@@ -399,13 +398,20 @@ def calculate_batch_cost_with_inventory(schemes, batch_results, inventory):
     return total_cost, inventory_usage
 
 
-def optimize_batch_global(batch_results, inventory=None):
+def optimize_batch_global(batch_results, inventory=None, grid_config: GridConfig = None, printer_config: PrinterConfig = None):
     """贪心 + 局部搜索优化
 
     Args:
         batch_results: 批量计算结果列表
         inventory: 可选库存字典 {"6x7": 3, ...}
+        grid_config: GridConfig 实例，如果为 None 则使用默认配置
+        printer_config: PrinterConfig 实例，如果为 None 则使用默认配置
     """
+    if grid_config is None:
+        grid_config = _build_grid_config()
+    if printer_config is None:
+        printer_config = _build_printer_config()
+
     if not batch_results:
         return None
 
@@ -420,7 +426,7 @@ def optimize_batch_global(batch_results, inventory=None):
         x, y = r['grid']
         copies = r.get('copies', 1)
         # 不传 inventory，每个抽屉选择成本最低的方案
-        scheme = find_best_scheme(x, y, inventory=None, copies=copies)
+        scheme = find_best_scheme(x, y, grid_config, inventory=None, copies=copies)
         initial_schemes.append(scheme)
 
     # 计算初始解的成本（打印次数或库存成本）
@@ -429,7 +435,7 @@ def optimize_batch_global(batch_results, inventory=None):
             initial_schemes, batch_results, inventory
         )
     else:
-        initial_total, _ = calculate_total_prints(batch_results, initial_schemes)
+        initial_total, _ = calculate_total_prints(batch_results, initial_schemes, printer_config)
         initial_cost = initial_total
 
     # 步骤2：为每个抽屉生成所有方案
@@ -439,7 +445,7 @@ def optimize_batch_global(batch_results, inventory=None):
             all_options.append([None])
             continue
         x, y = result['grid']
-        schemes = find_all_schemes(x, y)
+        schemes = find_all_schemes(x, y, grid_config)
         all_options.append(schemes)
 
     # 步骤3：找最优组合
@@ -466,7 +472,7 @@ def optimize_batch_global(batch_results, inventory=None):
                     test_schemes, batch_results, inventory
                 )
             else:
-                total, _ = calculate_total_prints(batch_results, test_schemes)
+                total, _ = calculate_total_prints(batch_results, test_schemes, printer_config)
 
             if total < best_cost:
                 best_schemes = test_schemes
@@ -495,7 +501,7 @@ def optimize_batch_global(batch_results, inventory=None):
     }
 
 
-def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=None):
+def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=None, printer_config: PrinterConfig = None):
     """构建统一的批量方案数据结构，用于生成人类可读输出和 JSON 输出
 
     Args:
@@ -503,14 +509,21 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
         merged_tiles: 合并后的瓦片字典
         inventory: 库存字典
         drawer_names: 抽屉名称映射 {index: "name"}
+        printer_config: PrinterConfig 实例，如果为 None 则使用默认配置
 
     Returns:
         包含所有信息的统一字典
     """
+    if printer_config is None:
+        printer_config = _build_printer_config()
+
+    from opengrid.core.constants import TILE_THICKNESS
+
     if drawer_names is None:
         drawer_names = {}
 
-    max_stacks = get_max_stacks()
+    tile_thickness = printer_config.tile_thickness
+    max_stacks = get_max_stacks(printer_config)
     sorted_tiles = sorted(merged_tiles.items(), key=lambda x: (x[0][0] * x[0][1], x[0][0]), reverse=True)
 
     total_main = 0
@@ -544,7 +557,7 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
             stacks_per_print = to_print // num_prints
             remainder = to_print % num_prints
 
-            height = stacks_per_print * FULL_THICKNESS
+            height = stacks_per_print * tile_thickness
             main_per, support_per, time_per = calculate_filament_and_time(cells, stacks_per_print)
 
             if remainder > 0:
@@ -716,7 +729,7 @@ def _build_single_inventory(scheme, inventory):
     }
 
 
-def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=False, drawer_names=None):
+def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=False, drawer_names=None, printer_config: PrinterConfig = None):
     """打印批量打印计划
 
     Args:
@@ -725,14 +738,33 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
         inventory: 库存字典
         json_output: 是否输出 JSON 格式
         drawer_names: 抽屉名称映射 {index: "name"}
+        printer_config: PrinterConfig 实例，如果为 None 则使用默认配置
     """
+    if printer_config is None:
+        printer_config = _build_printer_config()
+
+    from opengrid.core.constants import TILE_THICKNESS
+    from opengrid.config import get_printer_config_or_default, load_config_or_default
+
     # 如果 drawer_names 为 None，创建空映射
     if drawer_names is None:
         drawer_names = {}
+
+    # 计算 tile_thickness (瓦片厚度 + 接口间隙)
+    config = load_config_or_default()
+    tile_type = config.get("opengrid", {}).get("tile_type", "Full")
+    interface_separation = config.get("opengrid", {}).get("interface_separation", 0.2)
+    stacking_method = config.get("opengrid", {}).get("stacking_method", "Ironing")
+    base_thickness = TILE_THICKNESS.get(tile_type, 6.8)
+    if stacking_method == "Ironing":
+        tile_thickness = base_thickness + 2 * interface_separation
+    else:
+        tile_thickness = base_thickness + 0.4 + 2 * interface_separation
+
     # 如果是 JSON 模式，只计算统计信息不打印
     if json_output:
         # 使用统一的批量数据结构
-        output = build_batch_data(batch_results, merged_tiles, inventory, drawer_names)
+        output = build_batch_data(batch_results, merged_tiles, inventory, drawer_names, printer_config)
         print(json.dumps(output, indent=2, ensure_ascii=False))
         # 返回统计信息字典
         total_filament = output['stats']['total_filament_g']
@@ -794,7 +826,7 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
     print("--- 合并后的瓦片清单（可一起打印）---")
     print("=" * 70)
 
-    max_stacks = get_max_stacks()
+    max_stacks = get_max_stacks(printer_config)
 
     # 按尺寸排序
     sorted_tiles = sorted(merged_tiles.items(), key=lambda x: (x[0][0] * x[0][1], x[0][0]), reverse=True)
@@ -836,7 +868,7 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
             stacks_per_print = to_print // num_prints
             remainder = to_print % num_prints
 
-            height = stacks_per_print * FULL_THICKNESS
+            height = stacks_per_print * tile_thickness
 
             main_per, support_per, time_per = calculate_filament_and_time(cells, stacks_per_print)
 
@@ -856,7 +888,7 @@ def print_batch_plan(batch_results, merged_tiles, inventory=None, json_output=Fa
 
             total_prints += num_prints
         elif to_print > 0:
-            height = to_print * FULL_THICKNESS
+            height = to_print * tile_thickness
             main_g, support_g, time_min = calculate_filament_and_time(cells, to_print)
 
             print(f"  打印: 1次 ({to_print} stack, {height:.0f}mm)")
@@ -897,6 +929,10 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
         json_output: 是否输出 JSON 格式
     """
     import re
+
+    # 创建 GridConfig 和 PrinterConfig
+    grid_config = _build_grid_config()
+    printer_config = _build_printer_config()
 
     # 解析输入
     # 支持格式: "265x365:2 325x365:2" 或 "265 365 2 325 365 2"
@@ -983,7 +1019,7 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
     # 计算每个尺寸的分割方案
     batch_results = []
     for idx, (width, depth, copies) in enumerate(items):
-        result = calculate_single(width, depth, copies, verbose, index=idx)
+        result = calculate_single(width, depth, copies, verbose, index=idx, grid_config=grid_config)
         if result:
             batch_results.append(result)
         else:
@@ -996,17 +1032,17 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
     # 根据是否有库存选择不同的优化方式
     if inventory:
         # 使用全局优化（带库存）
-        optimized = optimize_batch_global(batch_results, inventory=inventory)
+        optimized = optimize_batch_global(batch_results, inventory=inventory, grid_config=grid_config, printer_config=printer_config)
         # 更新 batch_results 中的 schemes 为优化后的方案
         if optimized and 'schemes' in optimized:
             for i, scheme in enumerate(optimized['schemes']):
                 if i < len(batch_results) and scheme:
                     batch_results[i]['scheme'] = scheme
         # 始终使用 merge_and_optimize 获取合并的瓦片
-        merged = merge_and_optimize(batch_results, drawer_names)
+        merged = merge_and_optimize(batch_results, drawer_names, printer_config=printer_config)
     else:
         # 简单的合并优化
-        merged = merge_and_optimize(batch_results, drawer_names)
+        merged = merge_and_optimize(batch_results, drawer_names, printer_config=printer_config)
 
     # 打印计划
-    stats = print_batch_plan(batch_results, merged, inventory=inventory, json_output=json_output, drawer_names=drawer_names)
+    stats = print_batch_plan(batch_results, merged, inventory=inventory, json_output=json_output, drawer_names=drawer_names, printer_config=printer_config)
