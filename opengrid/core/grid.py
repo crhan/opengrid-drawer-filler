@@ -13,16 +13,28 @@ class GridConfig:
     min_tile: int = 2
 
 
-def get_max_stacks():
-    """Calculate maximum number of stacks based on Z height"""
-    from opengrid.config import get_printer_config_or_default
-    from .constants import TILE_THICKNESS
-    printer = get_printer_config_or_default()
-    max_z = printer.get("max_z", 256)
-    tile_type = "Full"  # TODO: make configurable
-    base_thickness = TILE_THICKNESS.get(tile_type, 6.8)
-    full_thickness = base_thickness + 0.4  # default with interface
-    return int(max_z // full_thickness)
+def get_max_stacks(printer_config=None):
+    """Calculate maximum number of stacks based on Z height
+
+    Args:
+        printer_config: optional PrinterConfig. If None, reads from config.
+
+    Returns:
+        Maximum number of stacks that fit in Z height
+    """
+    if printer_config is not None:
+        max_z = printer_config.max_z
+        thickness = printer_config.tile_thickness
+    else:
+        from opengrid.config import get_printer_config_or_default
+        from .constants import TILE_THICKNESS
+        printer = get_printer_config_or_default()
+        max_z = printer.get("max_z", 256)
+        tile_type = "Full"  # TODO: make configurable
+        base_thickness = TILE_THICKNESS.get(tile_type, 6.8)
+        thickness = base_thickness + 0.4  # default with interface
+
+    return int(max_z // thickness)
 
 
 def get_grid_dimensions(width_mm, depth_mm):
