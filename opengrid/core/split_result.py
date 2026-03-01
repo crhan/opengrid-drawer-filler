@@ -8,7 +8,7 @@ from .cost_v2 import (
 )
 from .cost import _match_inventory
 from .scheme import find_all_schemes
-from .grid import get_grid_dimensions
+from .grid import get_grid_dimensions, GridConfig
 from .splitter import calc_scheme_balance
 
 
@@ -95,8 +95,22 @@ class SplitResult:
         inv = inventory or {}
         grid_x, grid_y = get_grid_dimensions(width, depth)
 
-        # 获取所有候选方案（已按 unique_sizes, tile_count, balance 预排序）
-        candidates = find_all_schemes(grid_x, grid_y)
+        # Construct GridConfig from PrinterConfig
+        if printer.max_cells_x > 0 and printer.max_cells_y > 0:
+            grid_config = GridConfig(
+                max_cells_x=printer.max_cells_x,
+                max_cells_y=printer.max_cells_y,
+            )
+        else:
+            # Fallback: compute from bed dimensions
+            from .constants import TILE_SIZE
+            grid_config = GridConfig(
+                max_cells_x=printer.bed_x // TILE_SIZE,
+                max_cells_y=printer.bed_y // TILE_SIZE,
+            )
+
+        # Get all candidate schemes
+        candidates = find_all_schemes(grid_x, grid_y, grid_config)
 
         best_result = None
         best_score = None
