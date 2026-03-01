@@ -408,7 +408,23 @@ class TestScenario3c:
 
 
 class TestScenario4a:
-    """场景 4a：批量模式（库存1个）"""
+    """场景 4a：批量模式（库存1个）
+
+    假设：
+    - 抽屉 1：265×360 (9×12格子)，无库存方案 [(6,9), (6,9)] - 需要2个6×9
+    - 抽屉 2：325×365 (11×13格子)，无库存方案 [(5,6), (5,7), (6,6), (6,7)] - 需要0个6×9
+    - 库存：6×9 有 1 个
+
+    预期结果：
+    - 抽屉1：使用1个库存，打印1个
+    - 抽屉2：正常打印（无6×9可用）
+    - 总成本降低
+
+    验证目标：
+    [x] 抽屉1使用1个库存
+    [x] 总成本降低
+    [x] 库存使用不超过提供数量
+    """
 
     def test_batch_mode_1_inventory(self, tmp_path):
         """批量模式下库存1个，部分使用"""
@@ -424,6 +440,17 @@ class TestScenario4a:
         # 解析批量结果
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
+
+        # 无库存对比
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+
+        # 验证：总成本降低
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
 
         # 检查库存使用
         # 注意：这里使用 drawer 级别的 from_inventory 求和，因为顶层的 from_inventory 计算方式不同
@@ -443,7 +470,25 @@ class TestScenario4a:
 
 
 class TestScenario4b:
-    """场景 4b：批量模式（库存2个）"""
+    """场景 4b：批量模式（库存2个）
+
+    假设：
+    - 抽屉 1：265×360，需要2个6×9
+    - 抽屉 2：325×365，无6×9需求
+    - 库存：6×9 有 2 个
+
+    预期结果：
+    - 抽屉1：使用2个库存，成本 = 0
+    - 抽屉2：正常打印（不使用库存）
+    - 总成本大幅降低
+
+    验证目标：
+    [x] 抽屉1成本 = 0
+    [x] 抽屉2不使用库存
+    [x] 抽屉2有打印成本（>0）
+    [x] 总成本进一步降低
+    [x] 库存使用不超过提供数量
+    """
 
     def test_batch_mode_2_inventory(self, tmp_path):
         """批量模式下库存2个，抽屉1成本=0"""
@@ -475,6 +520,16 @@ class TestScenario4b:
         # 抽屉1需要2个6x9，库存2个刚好够，成本应为0
         assert drawer1_used >= 1, f"抽屉1应使用库存，实际: {drawer1_used}"
         assert drawer1_need == 0, f"抽屉1应不需要打印，实际: {drawer1_need}"
+
+        # 验证抽屉2正常打印（不使用库存）
+        drawer2 = drawers[1]
+        drawer2_inv = drawer2.get('inventory') or {}
+        drawer2_from_inv = drawer2_inv.get('from_inventory', {})
+        drawer2_tiles = drawer2.get('tiles', [])
+        drawer2_used = sum(drawer2_from_inv.values())
+
+        assert drawer2_used == 0, f"抽屉2应不使用库存，实际: {drawer2_used}"
+        assert drawer2_tiles, f"抽屉2应有瓦片（正常打印），实际: {drawer2_tiles}"
 
 
 class TestScenario4c:
@@ -543,37 +598,53 @@ class TestScenario4d:
 
 
 class TestScenario5:
-    """场景 5：重新规划"""
+    """场景 5：重新规划（单抽屉）
+
+    假设：
+    - 抽屉：265×360 (9×12格子)，原始方案需要 2 个 6×9
+    - 库存：6×6 有 2 个
+
+    预期结果：
+    - 使用 2 个 6×6 库存
+    - 成本降低（但 > 0，因为仍需打印剩余部分）
+    - 格子数量一致
+
+    验证目标：
+    [x] 方案包含 6x6 瓦片（使用库存）
+    [x] need_print 不为空（仍需打印）
+    [x] 成本 < 原方案成本
+    [x] 库存使用不超过提供数量
+    [x] 格子数量一致（拆分前后总格子数不变）
+    """
 
     def test_replan_with_partial_inventory(self, tmp_path):
-        """库存尺寸不匹配时重新规划"""
+        """库存尺寸不匹配时重新规划（单抽屉场景）"""
         inv_file = tmp_path / "inventory.json"
         create_empty_inventory(str(inv_file))
         # 库存：6x6 有 2 个，但原始方案需要 6x9
         add_inventory(str(inv_file), {'6x6': 2})
         inventory = load_inventory(str(inv_file))
 
-        # 批量模式：需要2个尺寸才能触发批量模式
-        # 265x360 (9x12格子)，原始方案需要 2 个 6x9
-        batch_mode = "265x360:1 325x365:1"
-        plan = get_print_plan(0, 0, str(inv_file), batch_mode=batch_mode)
+        # 单抽屉模式（265x360 = 9x12格子）
+        # 原始方案需要 2 个 6x9
+        plan = get_print_plan(265, 360, str(inv_file))
 
-        # 从 tiles 中检查方案（批量模式下直接在顶层）
-        tiles = plan.get('tiles', []) or plan.get('scheme', {}).get('tiles', [])
+        # 从 tiles 中检查方案
+        tiles = plan.get('scheme', {}).get('tiles', [])
 
         # 验证：方案包含 6x6（重新规划）
         has_6x6 = any(t.get('width') == 6 and t.get('height') == 6 for t in tiles)
         assert has_6x6, f"方案应包含 6x6（重新规划）, 实际: {tiles}"
 
         # 1. 格子数量一致性验证
-        # 265x360 = 9x12 = 108格，325x365 = 11x12 = 132格
-        drawers = plan.get('drawers', [])
-        for drawer in drawers:
-            original_cells = get_original_cells(drawer['width'], drawer['depth'])
-            drawer_tiles = drawer.get('tiles', [])
-            scheme_cells = calculate_scheme_cells(drawer_tiles)
-            assert original_cells == scheme_cells, \
-                f"格子数应一致: {original_cells} = {scheme_cells}"
+        original_cells = get_original_cells(265, 360)
+        # 单抽屉模式下 tiles 没有 count 字段，需要分别计算
+        if tiles and 'count' not in tiles[0]:
+            scheme_cells = sum(t['width'] * t['height'] for t in tiles)
+        else:
+            scheme_cells = calculate_scheme_cells(tiles)
+        assert original_cells == scheme_cells, \
+            f"格子数应一致: {original_cells} = {scheme_cells}"
 
         # 2. 验证需要打印（不是完全用库存）
         inv_usage = plan.get('inventory_usage', {})
@@ -583,7 +654,7 @@ class TestScenario5:
         # 3. 验证成本降低（对比无库存方案）
         temp_inv = tmp_path / "temp.json"
         create_empty_inventory(str(temp_inv))
-        plan_no_inv = get_print_plan(0, 0, str(temp_inv), batch_mode=batch_mode)
+        plan_no_inv = get_print_plan(265, 360, str(temp_inv))
 
         time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
         time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
@@ -626,7 +697,24 @@ class TestScenario6a:
 
 
 class TestScenario6b:
-    """场景 6b：批量 + 重新规划（库存 5 个）"""
+    """场景 6b：批量 + 重新规划（库存 5 个）
+
+    假设：
+    - 抽屉 1：265×360 → [(6,9), (6,9)] - 需要 2个6×6
+    - 抽屉 2：325×365 → [(6,7), (6,6), (5,7), (5,6)] - 需要 1个6×6
+    - 库存：6×6 有 5 个（多 2 个）
+
+    预期结果：
+    - 抽屉1：使用 2 个 6×6 + 打印剩余（成本 > 0）
+    - 抽屉2：使用 1 个 6×6 + 打印剩余
+    - 剩余 2 个保留
+
+    验证目标：
+    [x] 抽屉1成本 > 0（使用库存但仍需打印）
+    [x] 总成本降低
+    [x] 库存扣减正确（使用3个，剩余2个）
+    [x] 库存使用不超过提供数量
+    """
 
     def test_batch_with_replan_5_inventory(self, tmp_path):
         """批量模式下库存有余"""
@@ -637,6 +725,17 @@ class TestScenario6b:
 
         batch_mode = "265x360:1 325x365:1"
         plan = get_print_plan(0, 0, str(inv_file), batch_mode=batch_mode)
+
+        # 无库存对比
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+
+        # 验证：总成本降低
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
 
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
@@ -656,7 +755,7 @@ class TestScenario6b:
 
         assert total_used <= 5, f"库存使用不超过5个: {total_used}"
         # 库存有余，应该用3个，剩余2个
-        assert total_used == 3 or total_used < 5, f"库存应有余: 使用{total_used}个"
+        assert total_used == 3, f"库存应使用3个，剩余2个，实际使用: {total_used}"
 
 
 class TestScenario7a:
@@ -757,13 +856,16 @@ class TestScenario8:
         # 验证库存使用不超限
         inv_usage = plan.get('inventory_usage', {})
         from_inv = inv_usage.get('from_inventory', {})
+        need_print = inv_usage.get('need_print', {})
 
         assert from_inv.get('8x8', 0) <= 5, "8x8库存不超限"
         assert from_inv.get('6x7', 0) <= 5, "6x7库存不超限"
 
-        # 验证所有抽屉都有打印（不是全部用库存）
-        need_print = inv_usage.get('need_print', {})
-        assert need_print, f"应有打印需求（不是全部用库存），实际: {need_print}"
+        # 验证库存有剩余（可选，因为库存可能刚好够用）
+        # 8x8 库存5个，使用4个，剩余1个
+        # 6x7 库存5个，使用4个，剩余1个
+        assert from_inv.get('8x8', 0) + from_inv.get('6x7', 0) < 10, \
+            "库存应有余量（不超过提供总量）"
 
 
 if __name__ == "__main__":

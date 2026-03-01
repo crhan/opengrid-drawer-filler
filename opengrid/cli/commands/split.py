@@ -552,6 +552,10 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
 
     # 构建 drawers 列表（包含每个抽屉的详细信息）
     drawers_output = []
+    # 从每个 drawer 的 scheme 中收集库存使用情况
+    from_inventory_agg = {}
+    need_print_agg = {}
+
     for r in batch_results:
         if not r:
             continue
@@ -563,6 +567,17 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
 
         # 获取抽屉名称
         name = drawer_names.get(idx, f"{width}×{depth}") if idx is not None else f"{width}×{depth}"
+
+        # 获取该 drawer 的库存使用情况
+        drawer_inv = _build_single_inventory(scheme, inventory) or {}
+        drawer_from_inv = drawer_inv.get('from_inventory', {})
+        drawer_need_print = drawer_inv.get('need_print', {})
+
+        # 聚合到顶层
+        for k, v in drawer_from_inv.items():
+            from_inventory_agg[k] = from_inventory_agg.get(k, 0) + v
+        for k, v in drawer_need_print.items():
+            need_print_agg[k] = need_print_agg.get(k, 0) + v
 
         drawers_output.append({
             "name": name,
@@ -576,7 +591,7 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
                 "y_splits": scheme['y_splits'],
             },
             "tiles": _format_tiles_from_scheme(scheme),
-            "inventory": _build_single_inventory(scheme, inventory)
+            "inventory": drawer_inv
         })
 
     # 构建输出
@@ -590,11 +605,11 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
         }
     }
 
-    # 如果有库存，添加库存信息
-    if inventory and (from_inventory or need_print_tiles):
+    # 如果有库存，添加库存信息（从 drawer 级别聚合）
+    if inventory and (from_inventory_agg or need_print_agg):
         output["inventory_usage"] = {
-            "from_inventory": from_inventory,
-            "need_print": need_print_tiles
+            "from_inventory": from_inventory_agg,
+            "need_print": need_print_agg
         }
 
     return output
@@ -621,6 +636,27 @@ def _build_single_inventory(scheme, inventory):
     """构建单个方案的库存信息"""
     from_inv = scheme.get('from_inventory', {})
     need_print = scheme.get('need_print', {})
+
+    # 如果没有 need_print（抽屉没有使用库存），从 tiles 计算
+    if scheme.get('tiles'):
+        tiles = scheme.get('tiles', [])
+        # 先统计所有瓦片
+        tile_counts = {}
+        for w, h in tiles:
+            key = f"{w}x{h}"
+            tile_counts[key] = tile_counts.get(key, 0) + 1
+
+        # 如果有 from_inventory，计算需要打印的数量（总需求 - 库存）
+        if from_inv:
+            for key, inv_count in from_inv.items():
+                total_needed = tile_counts.get(key, 0)
+                need_print[key] = max(0, total_needed - inv_count)
+        else:
+            # 没有使用库存，全部需要打印
+            need_print = tile_counts
+
+    # 过滤掉 0 值的 need_print
+    need_print = {k: v for k, v in need_print.items() if v > 0}
 
     # 收集所有需要的瓦片尺寸
     all_needed = {}
