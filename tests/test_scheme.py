@@ -165,10 +165,14 @@ class TestNormalizeTiles:
 
     def test_rotation_needed_both_directions(self):
         """混合场景：部分需要旋转，部分不需要"""
+        # Use GridConfig for 280x308 bed (max_x=10, max_y=11)
+        from opengrid.core import GridConfig
+        grid_config = GridConfig(max_cells_x=10, max_cells_y=11)
         tiles = [(5, 5), (11, 5), (8, 10), (12, 3)]
-        result = normalize_tiles(tiles)
-        # (5,5) -> (5,5), (11,5) -> (5,11), (8,10) -> (8,10), (12,3) -> (3,12)
-        assert result == [(5, 5), (5, 11), (8, 10), (3, 12)]
+        result = normalize_tiles(tiles, grid_config)
+        # (5,5) -> (5,5) valid, (11,5) -> (5,11) rotated valid,
+        # (8,10) -> (8,10) valid, (12,3) -> (12,3) invalid both orientations
+        assert result == [(5, 5), (5, 11), (8, 10), (12, 3)]
 
     def test_both_exceed_max(self):
         """宽度和高度都超过限制时不旋转"""

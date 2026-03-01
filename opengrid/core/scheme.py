@@ -52,13 +52,16 @@ def validate_tiles(tiles):
 
 def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     """Find best scheme for given grid dimensions"""
-    from .grid import validate_tile as vt
+    from .grid import validate_tile as vt, GridConfig
     from .cost import calculate_print_cost
 
     # Get printer limits from config
     printer = get_printer_config_or_default()
     max_x = printer.get("bed_x", 256) // TILE_SIZE
     max_y = printer.get("bed_y", 256) // TILE_SIZE
+
+    # Create GridConfig for tile validation
+    grid_config = GridConfig(max_cells_x=max_x, max_cells_y=max_y)
 
     # Check if no split needed
     if vt(x, y):
@@ -128,7 +131,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             rotated = rotated_schemes[0]
 
             # Normalize rotated tiles
-            normalized_tiles = normalize_tiles(rotated['tiles'], max_x, max_y)
+            normalized_tiles = normalize_tiles(rotated['tiles'], grid_config)
 
             # Check if normalized tiles are valid
             if validate_tiles(normalized_tiles):

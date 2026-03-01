@@ -3,6 +3,14 @@
 # Grid dimensions
 TILE_SIZE = 28  # mm per cell
 MIN_TILE = 2    # minimum tile size in cells
+MAX_X = 10      # maximum tile width in cells (default)
+MAX_Y = 11      # maximum tile height in cells (default)
+
+# Tile thickness (mm) - 6.8 base + 0.4 ironing
+FULL_THICKNESS = 7.2
+
+# Printer limits (mm)
+MAX_Z = 325     # maximum print height (default)
 
 # Tile thickness by type (mm)
 TILE_THICKNESS = {
@@ -30,3 +38,34 @@ PRESETS = {
     "medium": (400, 400, "中抽屉"),
     "large": (500, 500, "大抽屉"),
 }
+
+
+def recalculate_derived_constants(tile_size=None, max_z=None, bed_x=None, bed_y=None,
+                                  tile_type="Full", interface_separation=0.2,
+                                  stacking_method="Ironing"):
+    """Update derived constants from config"""
+    global TILE_SIZE, MAX_X, MAX_Y, MAX_Z, FULL_THICKNESS
+
+    if tile_size is not None:
+        TILE_SIZE = tile_size
+    if max_z is not None:
+        MAX_Z = max_z
+    if bed_x is not None:
+        MAX_X = bed_x // TILE_SIZE
+    if bed_y is not None:
+        MAX_Y = bed_y // TILE_SIZE
+
+    # Calculate FULL_THICKNESS
+    base_thickness = TILE_THICKNESS.get(tile_type, 6.8)
+    if stacking_method == "Ironing":
+        FULL_THICKNESS = base_thickness + 2 * interface_separation
+    else:
+        FULL_THICKNESS = base_thickness + 0.4 + 2 * interface_separation
+
+    return {
+        "TILE_SIZE": TILE_SIZE,
+        "MAX_X": MAX_X,
+        "MAX_Y": MAX_Y,
+        "MAX_Z": MAX_Z,
+        "FULL_THICKNESS": FULL_THICKNESS,
+    }
