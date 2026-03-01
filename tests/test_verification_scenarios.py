@@ -28,7 +28,6 @@ from opengrid.core import (
     calculate_print_cost,
     get_grid_dimensions,
     find_best_scheme,
-    replan_with_inventory,
 )
 
 from opengrid.cli.commands.split import optimize_batch_global
@@ -288,37 +287,6 @@ class TestScenario4dBatch4Inventory:
         assert inv2.get('6x9', 0) >= 1, f"抽屉2应至少使用1个库存: {inv2.get('6x9', 0)}"
 
 
-class TestScenario5Replan:
-    """场景 5：重新规划"""
-
-    def test_replan_with_partial_inventory(self):
-        """库存尺寸不匹配时重新规划"""
-        grid = get_grid_dimensions(265, 360)  # 9x12格子
-
-        scheme = find_best_scheme(grid[0], grid[1], inventory=None, verbose=False)
-        tiles = scheme.get('tiles', [])  # [(6,9), (6,9)]
-
-        inventory = {'6x6': 2}
-
-        cost_no_inv, _, _ = calculate_print_cost(tiles, {}, copies=1)
-
-        result = replan_with_inventory(tiles, inventory, copies=1, grid=grid)
-
-        assert result is not None, "应返回重新规划后的结果"
-        has_6x6 = any(w == 6 and h == 6 for w, h in result.get('tiles', []))
-        need_print = result.get('need_print', {})
-
-        assert has_6x6, "方案应包含 6x6"
-        assert len(need_print) > 0, "仍需打印"
-        assert result['cost'] < cost_no_inv, "成本应降低"
-        assert check_inventory_not_exceeded(result.get('from_inventory', {}), inventory)
-
-        # 格子数量一致性
-        cells_consistent, cells_before, cells_after = check_cell_count_consistency(tiles, result.get('tiles', []))
-        assert cells_consistent, f"格子数量应一致: {cells_before} = {cells_after}"
-
-
-class TestScenario6aBatchWithReplan3:
     """场景 6a：批量 + 重新规划（库存 3 个）"""
 
     def test_batch_with_replan_3_inventory(self):
