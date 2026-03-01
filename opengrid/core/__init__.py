@@ -2,16 +2,12 @@
 from .constants import (
     TILE_SIZE,
     MIN_TILE,
-    MAX_X,
-    MAX_Y,
-    MAX_Z,
-    FULL_THICKNESS,
+    TILE_THICKNESS,
     FILAMENT_MAIN_PER_CELL,
     FILAMENT_SUPPORT_PER_CELL,
     PRINT_TIME_PER_CELL,
     SWAP_PENALTY,
     PRESETS,
-    recalculate_derived_constants,
 )
 
 from .grid import GridConfig, get_grid_dimensions, validate_tile, get_max_stacks

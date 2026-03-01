@@ -4,12 +4,15 @@ import pytest
 
 from opengrid.core import (
     get_grid_dimensions,
-    validate_tile,
-    find_best_scheme,
     TILE_SIZE,
+    MIN_TILE,
+)
+from conftest import (
     MAX_X,
     MAX_Y,
-    MIN_TILE,
+    validate_tile,
+    find_best_scheme,
+    TEST_GRID_CONFIG,
 )
 
 from opengrid.cli.commands.split import calculate_single

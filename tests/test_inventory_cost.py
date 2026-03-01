@@ -4,7 +4,11 @@ from opengrid.core import (
     calculate_print_cost,
     calculate_filament_and_time,
     get_grid_dimensions,
+)
+
+from conftest import (
     find_best_scheme,
+    TEST_GRID_CONFIG,
 )
 
 from opengrid.cli.commands.split import optimize_batch_global

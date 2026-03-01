@@ -96,18 +96,10 @@ class SplitResult:
         grid_x, grid_y = get_grid_dimensions(width, depth)
 
         # Construct GridConfig from PrinterConfig
-        if printer.max_cells_x > 0 and printer.max_cells_y > 0:
-            grid_config = GridConfig(
-                max_cells_x=printer.max_cells_x,
-                max_cells_y=printer.max_cells_y,
-            )
-        else:
-            # Fallback: compute from bed dimensions
-            from .constants import TILE_SIZE
-            grid_config = GridConfig(
-                max_cells_x=printer.bed_x // TILE_SIZE,
-                max_cells_y=printer.bed_y // TILE_SIZE,
-            )
+        grid_config = GridConfig(
+            max_cells_x=printer.max_cells_x,
+            max_cells_y=printer.max_cells_y,
+        )
 
         # Get all candidate schemes
         candidates = find_all_schemes(grid_x, grid_y, grid_config)

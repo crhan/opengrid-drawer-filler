@@ -3,7 +3,8 @@
 import pytest
 import time
 
-from opengrid.core import find_best_scheme, get_grid_dimensions
+from opengrid.core import get_grid_dimensions
+from conftest import find_best_scheme
 from opengrid.cli.commands.split import calculate_single
 
 

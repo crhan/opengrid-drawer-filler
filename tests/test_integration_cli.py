@@ -69,9 +69,18 @@ def load_inventory(inv_file):
     return data.get("inventory", {})
 
 
-def get_print_plan(width, depth, inv_file, batch_mode=None):
+def get_print_plan(width, depth, inv_file, batch_mode=None, config_file=None):
     """通过 CLI 获取打印计划，返回统一的数据结构"""
-    cmd = [sys.executable, 'opengrid.py', 'split']
+    # 默认使用 tests 目录下的测试配置
+    if config_file is None:
+        tests_dir = os.path.dirname(__file__)
+        config_file = os.path.join(tests_dir, 'opengrid_config.yaml')
+
+    cmd = [sys.executable, 'opengrid.py']
+    # 使用全局 -c 参数指定配置文件（必须在 split 子命令之前）
+    if os.path.exists(config_file):
+        cmd.extend(['-c', config_file])
+    cmd.append('split')
     if batch_mode:
         # 批量模式使用 -b 参数
         cmd.extend(['-b', batch_mode])

@@ -44,23 +44,96 @@ config_module._config = {}
 
 # 从 opengrid 库导入核心函数
 from opengrid.core import (
-    get_max_stacks,
+    get_max_stacks as core_get_max_stacks,
     get_grid_dimensions,
-    validate_tile,
-    normalize_tiles,
+    validate_tile as core_validate_tile,
+    normalize_tiles as core_normalize_tiles,
     split_with_limit,
     calc_balance,
     calc_scheme_balance,
-    find_best_scheme,
+    find_best_scheme as core_find_best_scheme,
     calculate_filament_and_time,
-    find_all_schemes,
+    find_all_schemes as core_find_all_schemes,
     TILE_SIZE,
-    MAX_X,
-    MAX_Y,
     MIN_TILE,
-    FULL_THICKNESS,
-    MAX_Z,
+    TILE_THICKNESS,
+    GridConfig,
 )
+
+# 测试专用的常量（用于测试断言）
+# 这些值对应测试配置 _TEST_PRINTER_CONFIG
+MAX_X = 10   # 280 // 28
+MAX_Y = 11   # 308 // 28
+MAX_Z = 325  # 测试配置中的 max_z
+FULL_THICKNESS = 7.2  # TILE_THICKNESS["Full"] + 2 * interface_separation (6.8 + 0.4)
+
+# 创建测试专用的 GridConfig
+TEST_GRID_CONFIG = GridConfig(max_cells_x=MAX_X, max_cells_y=MAX_Y)
+
+
+def validate_tile(w, h, grid_config: GridConfig = None):
+    """测试用的 validate_tile 包装函数
+
+    如果没有传入 grid_config，使用测试专用的配置
+    """
+    if grid_config is None:
+        grid_config = TEST_GRID_CONFIG
+    return core_validate_tile(w, h, grid_config)
+
+
+def find_best_scheme(x, y, grid_config: GridConfig = None, verbose=False, inventory=None, copies=1):
+    """测试用的 find_best_scheme 包装函数
+
+    如果没有传入 grid_config，使用测试专用的配置
+    """
+    if grid_config is None:
+        grid_config = TEST_GRID_CONFIG
+    return core_find_best_scheme(x, y, grid_config, verbose, inventory, copies)
+
+
+def find_all_schemes(x, y, grid_config: GridConfig = None, max_schemes=2000):
+    """测试用的 find_all_schemes 包装函数
+
+    如果没有传入 grid_config，使用测试专用的配置
+    """
+    if grid_config is None:
+        grid_config = TEST_GRID_CONFIG
+    return core_find_all_schemes(x, y, grid_config, max_schemes)
+
+
+def normalize_tiles(tiles, grid_config: GridConfig = None):
+    """测试用的 normalize_tiles 包装函数
+
+    如果没有传入 grid_config，使用测试专用的配置
+    """
+    if grid_config is None:
+        grid_config = TEST_GRID_CONFIG
+    return core_normalize_tiles(tiles, grid_config)
+
+
+# 导入 PrinterConfig 用于测试
+from opengrid.core.split_result import PrinterConfig
+
+# 创建测试专用的 PrinterConfig
+TEST_PRINTER_CONFIG = PrinterConfig(
+    max_z=325,
+    bed_x=280,
+    bed_y=308,
+    tile_thickness=7.2,
+    max_cells_x=MAX_X,
+    max_cells_y=MAX_Y,
+)
+
+
+def get_max_stacks(printer_config: PrinterConfig = None):
+    """测试用的 get_max_stacks 包装函数
+
+    如果没有传入 printer_config，使用测试专用的配置
+    """
+    if printer_config is None:
+        printer_config = TEST_PRINTER_CONFIG
+    return core_get_max_stacks(printer_config)
+
 
 from opengrid.cli.commands.split import (
     calculate_single,

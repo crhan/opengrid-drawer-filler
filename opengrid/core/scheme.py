@@ -1,35 +1,22 @@
 """Scheme generation and evaluation - core functions from split_calc.py"""
 from .splitter import split_with_limit, calc_balance, calc_scheme_balance
 from .grid import validate_tile, GridConfig
-from opengrid.config import get_printer_config_or_default
-from .constants import TILE_SIZE
 
 
 # 方案排序键：成本 -> 独特尺寸 -> 瓦片数 -> 均衡度
 SCHEME_SORT_KEY = lambda s: (s['cost'], s['unique_sizes'], s['total_tiles'], s['balance'])
 
 
-def normalize_tiles(tiles, grid_config: GridConfig = None):
+def normalize_tiles(tiles, grid_config: GridConfig):
     """Normalize tiles: rotate if it makes the tile valid
 
     Args:
         tiles: list of (width, height) tuples
-        grid_config: optional GridConfig. If None, reads from config.
+        grid_config: GridConfig instance with max_cells_x, max_cells_y, min_tile
     """
-    from opengrid.config import get_printer_config_or_default
-    from .constants import TILE_SIZE
-
-    if grid_config is not None:
-        max_x = grid_config.max_cells_x
-        max_y = grid_config.max_cells_y
-        min_tile = grid_config.min_tile
-    else:
-        printer = get_printer_config_or_default()
-        bed_x = printer.get("bed_x", 256)
-        bed_y = printer.get("bed_y", 256)
-        max_x = bed_x // TILE_SIZE
-        max_y = bed_y // TILE_SIZE
-        min_tile = 2
+    max_x = grid_config.max_cells_x
+    max_y = grid_config.max_cells_y
+    min_tile = grid_config.min_tile
 
     normalized = []
     for w, h in tiles:
@@ -45,26 +32,26 @@ def normalize_tiles(tiles, grid_config: GridConfig = None):
     return normalized
 
 
-def validate_tiles(tiles):
+def validate_tiles(tiles, grid_config: GridConfig):
     """Validate all tiles are within limits"""
-    return all(validate_tile(w, h) for w, h in tiles)
+    return all(validate_tile(w, h, grid_config) for w, h in tiles)
 
 
-def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
-    """Find best scheme for given grid dimensions"""
-    from .grid import validate_tile as vt, GridConfig
+def find_best_scheme(x, y, grid_config: GridConfig, verbose=False, inventory=None, copies=1):
+    """Find best scheme for given grid dimensions
+
+    Args:
+        x: grid width in cells
+        y: grid height in cells
+        grid_config: GridConfig instance with max_cells_x, max_cells_y
+        verbose: whether to print debug info
+        inventory: inventory dict
+        copies: number of copies
+    """
     from .cost import calculate_print_cost
 
-    # Get printer limits from config
-    printer = get_printer_config_or_default()
-    max_x = printer.get("bed_x", 256) // TILE_SIZE
-    max_y = printer.get("bed_y", 256) // TILE_SIZE
-
-    # Create GridConfig for tile validation
-    grid_config = GridConfig(max_cells_x=max_x, max_cells_y=max_y)
-
     # Check if no split needed
-    if vt(x, y):
+    if validate_tile(x, y, grid_config):
         return {
             'x_parts': 1,
             'y_parts': 1,
@@ -80,7 +67,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
 
     # Find all schemes and score them
     if inventory:
-        all_schemes = find_all_schemes(x, y)
+        all_schemes = find_all_schemes(x, y, grid_config)
         scored = []
         for scheme in all_schemes:
             cost, from_inv, need_print = calculate_print_cost(scheme['tiles'], inventory, copies)
@@ -113,7 +100,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
         return best
 
     # No inventory - find simplest scheme
-    all_schemes = find_all_schemes(x, y)
+    all_schemes = find_all_schemes(x, y, grid_config)
     if not all_schemes:
         return None
 
@@ -125,7 +112,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
 
     # If x != y, also check rotated direction
     if x != y:
-        rotated_schemes = find_all_schemes(y, x)
+        rotated_schemes = find_all_schemes(y, x, grid_config)
         if rotated_schemes:
             rotated_schemes.sort(key=lambda s: (len(set(s['tiles'])), len(s['tiles']), calc_scheme_balance(s['x_splits'], s['y_splits'])))
             rotated = rotated_schemes[0]
@@ -134,7 +121,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
             normalized_tiles = normalize_tiles(rotated['tiles'], grid_config)
 
             # Check if normalized tiles are valid
-            if validate_tiles(normalized_tiles):
+            if validate_tiles(normalized_tiles, grid_config):
                 rotated_best = {
                     'x_parts': rotated['y_parts'],
                     'y_parts': rotated['x_parts'],
@@ -155,7 +142,7 @@ def find_best_scheme(x, y, verbose=False, inventory=None, copies=1):
     return best
 
 
-def find_all_schemes(x, y, grid_config: GridConfig = None, max_schemes=2000):
+def find_all_schemes(x, y, grid_config: GridConfig, max_schemes=2000):
     """Generate all valid split schemes for grid dimensions
 
     Uses intelligent search range:
@@ -165,17 +152,11 @@ def find_all_schemes(x, y, grid_config: GridConfig = None, max_schemes=2000):
     Args:
         x: grid width in cells
         y: grid height in cells
-        grid_config: optional GridConfig. If None, reads from config.
+        grid_config: GridConfig instance with max_cells_x, max_cells_y
         max_schemes: maximum number of schemes to generate
     """
-    # Get limits from grid_config or config
-    if grid_config is not None:
-        max_x = grid_config.max_cells_x
-        max_y = grid_config.max_cells_y
-    else:
-        printer = get_printer_config_or_default()
-        max_x = printer.get("bed_x", 256) // TILE_SIZE
-        max_y = printer.get("bed_y", 256) // TILE_SIZE
+    max_x = grid_config.max_cells_x
+    max_y = grid_config.max_cells_y
 
     # Check if no split needed
     if validate_tile(x, y, grid_config):

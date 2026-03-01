@@ -27,8 +27,9 @@ import pytest
 from opengrid.core import (
     calculate_print_cost,
     get_grid_dimensions,
-    find_best_scheme,
 )
+
+from conftest import find_best_scheme
 
 from opengrid.cli.commands.split import optimize_batch_global
 
