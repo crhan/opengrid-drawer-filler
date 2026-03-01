@@ -437,6 +437,16 @@ def test_calculate_stacks_empty():
     assert len(stacks) == 0
 
 
+def test_calculate_stacks_max_z_less_than_thickness():
+    """边界: max_z < tile_thickness 时，max_per_stack 应为 1"""
+    # max_z=5 < tile_thickness=6.8，此时 max_per_stack 会小于 1 被设为 1
+    tiles = [Tile(w=6, h=8, copies=3)]
+    stacks = calculate_stacks(tiles, max_z=5, tile_thickness=6.8, stack_gap=0.4)
+    # 每个 tile 单独一个 stack
+    assert len(stacks) == 3
+    assert all(s.count == 1 for s in stacks)
+
+
 # ========== calculate_plates 测试 ==========
 
 def test_calculate_plates_single():

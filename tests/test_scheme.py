@@ -5,6 +5,9 @@ from conftest import (
     find_best_scheme,
     find_all_schemes,
     validate_tile,
+    normalize_tiles,
+    MAX_X,
+    MAX_Y,
 )
 
 
@@ -142,6 +145,83 @@ class TestFindAllSchemes:
         assert len(schemes) >= 1
         # 至少包含原始方案
         assert any(s['x_parts'] == 1 and s['y_parts'] == 1 for s in schemes)
+
+
+class TestNormalizeTiles:
+    """normalize_tiles 函数测试"""
+
+    def test_no_rotation_needed(self):
+        """正常尺寸不需要旋转"""
+        tiles = [(5, 5), (8, 10), (3, 7)]
+        result = normalize_tiles(tiles)
+        assert result == [(5, 5), (8, 10), (3, 7)]
+
+    def test_rotation_needed(self):
+        """宽度超过 MAX_X 但高度在范围内时需要旋转"""
+        # (11, 5): 宽度 11 > MAX_X(10)，高度 5 <= MAX_Y(11)，应该旋转为 (5, 11)
+        tiles = [(11, 5), (5, 5)]
+        result = normalize_tiles(tiles)
+        assert result == [(5, 11), (5, 5)]
+
+    def test_rotation_needed_both_directions(self):
+        """混合场景：部分需要旋转，部分不需要"""
+        tiles = [(5, 5), (11, 5), (8, 10), (12, 3)]
+        result = normalize_tiles(tiles)
+        # (5,5) -> (5,5), (11,5) -> (5,11), (8,10) -> (8,10), (12,3) -> (3,12)
+        assert result == [(5, 5), (5, 11), (8, 10), (3, 12)]
+
+    def test_both_exceed_max(self):
+        """宽度和高度都超过限制时不旋转"""
+        tiles = [(12, 12)]
+        result = normalize_tiles(tiles)
+        # 两者都超过，不旋转
+        assert result == [(12, 12)]
+
+
+class TestFindAllSchemesEmpty:
+    """find_all_schemes 返回空列表的边界情况"""
+
+    def test_undersized_dimensions_return_none(self):
+        """小于最小瓦片尺寸应返回 None"""
+        # 1x1 低于 MIN_TILE(2)，所有分割方案都会无效
+        scheme = find_best_scheme(1, 1)
+        # find_best_scheme 在无方案时应返回 None
+        assert scheme is None
+
+    def test_find_all_schemes_empty_for_undersized(self):
+        """小于最小尺寸 find_all_schemes 返回空列表"""
+        schemes = find_all_schemes(1, 1)
+        assert schemes == []
+
+    def test_undersized_x_dimension(self):
+        """x 维度小于 MIN_TILE"""
+        scheme = find_best_scheme(1, 10)
+        assert scheme is None
+        schemes = find_all_schemes(1, 10)
+        assert schemes == []
+
+    def test_undersized_y_dimension(self):
+        """y 维度小于 MIN_TILE"""
+        scheme = find_best_scheme(10, 1)
+        assert scheme is None
+        schemes = find_all_schemes(10, 1)
+        assert schemes == []
+
+
+class TestFindAllSchemesInvalidSplit:
+    """find_all_schemes 中跳过无效分割的边界情况"""
+
+    def test_skips_invalid_tile_splits(self):
+        """算法应跳过产生无效瓦片的分割方案"""
+        # 30x30 尝试多种分割，但有些分割会产生无效瓦片
+        # 测试确保最终结果只包含有效瓦片
+        schemes = find_all_schemes(30, 30)
+        # 至少应该有一些有效方案
+        assert len(schemes) > 0
+        # 验证所有方案中的瓦片都是有效的
+        for scheme in schemes:
+            for w, h in scheme['tiles']:
+                assert validate_tile(w, h)
 
 
 if __name__ == "__main__":

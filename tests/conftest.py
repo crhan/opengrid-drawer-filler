@@ -47,6 +47,7 @@ from opengrid.core import (
     get_max_stacks,
     get_grid_dimensions,
     validate_tile,
+    normalize_tiles,
     split_with_limit,
     calc_balance,
     calc_scheme_balance,

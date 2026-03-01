@@ -18,3 +18,8 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 timeout = 60
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
+]
