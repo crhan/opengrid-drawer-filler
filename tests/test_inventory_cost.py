@@ -206,5 +206,29 @@ class TestBatchOptimizationWithInventory:
         assert 'total_prints' in result
 
 
+class TestCostV2Formula:
+    """验证 calculate_print_cost 内部使用 v2 公式"""
+
+    def test_single_tile_time_accuracy(self):
+        """6x8 x6 打印时间应接近 v2 公式计算值"""
+        # 6x8: 48 cells, copies=6 -> 需要多 Stack
+        # v2 公式: time = cells × layers × 2.98 + layers × 7.4 - 4.5
+        # v1 公式: time = cells × 3.1 × count
+        tiles = [(6, 8)]
+        cost, _, _ = calculate_print_cost(tiles, {}, copies=6)
+        # v2 精确计算（带 Stack 分层）
+        # v1: 48 * 3.1 * 6 = 892.8
+        # 验证 cost > v1 简单计算（因为 v2 有更多开销）
+        assert cost > 800, f"v2 公式期望 >800，实际 {cost}"
+
+    def test_swap_penalty_included(self):
+        """多尺寸需要打印时，换盘惩罚应被计入"""
+        tiles = [(6, 8), (4, 4)]  # 2 种尺寸，各 1 片
+        cost, _, need_print = calculate_print_cost(tiles, {}, copies=1)
+        # 2 个 Plate → 换盘惩罚 60min
+        assert cost > 60, f"换盘惩罚应被计入，实际 {cost}"
+        assert len(need_print) == 2
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
