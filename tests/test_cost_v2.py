@@ -1,6 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from opengrid.core.cost_v2 import Tile, Stack, Plate, PlateCost, CostResult, calculate_stacks, calculate_plates
+from opengrid.core.cost_v2 import Tile, Stack, Plate, PlateCost, CostResult, calculate_stacks, calculate_plates, calculate_cost
 
 
 def test_tile_model():
@@ -445,3 +445,51 @@ def test_calculate_plates_single():
     # 当前每个 Stack 独占一盘
     assert len(plates) == 1
     assert plates[0].index == 0
+
+
+def test_calculate_plates_multiple_stacks():
+    """多 stacks -> 多 plates"""
+    stacks = [
+        Stack(tile=Tile(w=6, h=8), count=3),
+        Stack(tile=Tile(w=4, h=4), count=2)
+    ]
+    plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
+    assert len(plates) == 2
+    assert plates[0].index == 0
+    assert plates[1].index == 1
+    # 验证 stack 正确分配
+    assert plates[0].stacks[0].count == 3
+    assert plates[1].stacks[0].count == 2
+
+
+def test_calculate_plates_empty():
+    """空 stacks -> 空 plates"""
+    stacks = []
+    plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
+    assert len(plates) == 0
+
+
+# ========== calculate_cost 测试 ==========
+
+def test_calculate_cost_single_stack():
+    """测试单个 Stack 的成本计算：6x4s1"""
+    # 6x4s1: 24 cells, 1 layer
+    stacks = [Stack(tile=Tile(w=6, h=4), count=1)]
+    plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
+    result = calculate_cost(plates)
+    # 预期: 79 min (24 * 1 * 2.89 + 1 * 2.14 + 8.1 = 79.2)
+    assert abs(result.total_cost - 79) < 5
+    assert abs(result.total_filament_g - 28.6) < 2
+
+
+def test_calculate_cost_6x8s6():
+    """测试 6x8s6 的成本计算"""
+    # 6x8s6: 48 cells, 6 layers
+    # 打印时间 = 48*6*2.89 + 6*2.14 + 8.1 = 832.32 + 12.84 + 8.1 = 853.26
+    # 耗材 = 48*6*1.19 = 342.72g
+    stacks = [Stack(tile=Tile(w=6, h=8), count=6)]
+    plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
+    result = calculate_cost(plates)
+    # 预期: 853 min, 343g
+    assert abs(result.total_cost - 853) < 10
+    assert abs(result.total_filament_g - 343) < 10

@@ -2,6 +2,17 @@ from pydantic import BaseModel, Field
 from typing import List
 
 
+# 时间计算参数 (min/cell/layer, min/layer, min)
+TIME_PER_CELL_LAYER = 2.89   # d: 每格每层时间
+TIME_PER_LAYER = 2.14        # c: 每层固定开销
+TIME_PREP = 8.1              # prep: 打印开始准备时间
+SAME_PLATE_PENALTY = 42      # 同盘切换开销
+SWAP_PENALTY = 60            # 换盘惩罚
+
+# 耗材计算参数 (g/cell/layer)
+FILAMENT_PER_CELL_LAYER = 1.19  # d_filament: 每格每层耗材量
+
+
 def calculate_plates(
     stacks: List[Stack],
     plate_width: int,
@@ -17,6 +28,76 @@ def calculate_plates(
         Plate(index=i, stacks=[stack])
         for i, stack in enumerate(stacks)
     ]
+
+
+def calculate_cost(plates: List[Plate]) -> CostResult:
+    """
+    计算打印成本
+
+    参数:
+        plates: 打印盘列表
+
+    返回:
+        CostResult: 包含总时间、总耗材、盘数、换盘惩罚等
+
+    成本计算公式:
+        - 打印时间 = cells * layers * TIME_PER_CELL_LAYER + layers * TIME_PER_LAYER
+        - 第一个 Stack 有 TIME_PREP，后续 Stack 有 SAME_PLATE_PENALTY
+        - 换盘惩罚 = (plate_count - 1) * SWAP_PENALTY
+        - 耗材 = cells * layers * FILAMENT_PER_CELL_LAYER
+    """
+    total_cost = 0.0
+    total_filament = 0.0
+    swap_penalty_total = 0
+    plate_costs = []
+
+    for plate in plates:
+        plate_time = 0.0
+        plate_filament = 0.0
+
+        for i, stack in enumerate(plate.stacks):
+            cells = stack.tile.w * stack.tile.h
+            layers = stack.count
+
+            # 打印时间 = cells * layers * d + layers * c + prep
+            # 第一个 Stack 有 prep，后续 Stack 有同盘切换开销
+            stack_time = cells * layers * TIME_PER_CELL_LAYER
+            stack_time += layers * TIME_PER_LAYER
+
+            if i == 0:
+                stack_time += TIME_PREP
+            else:
+                stack_time += SAME_PLATE_PENALTY
+
+            # 耗材 = cells * layers * d_filament
+            stack_filament = cells * layers * FILAMENT_PER_CELL_LAYER
+
+            plate_time += stack_time
+            plate_filament += stack_filament
+
+        plate_costs.append(PlateCost(
+            index=plate.index,
+            stacks=plate.stacks,
+            print_time=plate_time,
+            filament_g=plate_filament
+        ))
+
+        total_cost += plate_time
+        total_filament += plate_filament
+
+    # 换盘惩罚：Plate 数 - 1
+    num_plates = len(plates)
+    if num_plates > 1:
+        swap_penalty_total = (num_plates - 1) * SWAP_PENALTY
+        total_cost += swap_penalty_total
+
+    return CostResult(
+        total_cost=total_cost,
+        total_filament_g=total_filament,
+        plate_count=num_plates,
+        swap_penalty_total=swap_penalty_total,
+        plates=plate_costs
+    )
 
 
 class Tile(BaseModel):
