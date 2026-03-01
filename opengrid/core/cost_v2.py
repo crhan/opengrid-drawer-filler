@@ -2,6 +2,23 @@ from pydantic import BaseModel, Field
 from typing import List
 
 
+def calculate_plates(
+    stacks: List[Stack],
+    plate_width: int,
+    plate_depth: int
+) -> List[Plate]:
+    """
+    根据盘面尺寸将 Stacks 分配到各 Plate
+
+    当前实现：每个 Stack 独占一盘
+    """
+    # 当前简化实现：每个 Stack 独占一盘
+    return [
+        Plate(index=i, stacks=[stack])
+        for i, stack in enumerate(stacks)
+    ]
+
+
 class Tile(BaseModel):
     """基础面板"""
     w: int = Field(ge=1)  # 宽度 (cells)，必须 >= 1

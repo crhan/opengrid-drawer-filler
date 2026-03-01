@@ -1,6 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from opengrid.core.cost_v2 import Tile, Stack, Plate, PlateCost, CostResult, calculate_stacks
+from opengrid.core.cost_v2 import Tile, Stack, Plate, PlateCost, CostResult, calculate_stacks, calculate_plates
 
 
 def test_tile_model():
@@ -401,3 +401,47 @@ def test_calculate_stacks_multiple():
     assert len(stacks) == 2
     assert stacks[0].count == 25
     assert stacks[1].count == 25
+
+
+def test_calculate_stacks_single_copy():
+    """边界: copies = 1"""
+    tiles = [Tile(w=6, h=8, copies=1)]
+    stacks = calculate_stacks(tiles, max_z=325, tile_thickness=6.8, stack_gap=0.4)
+    assert len(stacks) == 1
+    assert stacks[0].count == 1
+
+
+def test_calculate_stacks_max_z_small():
+    """边界: max_z 只能容纳 1 层"""
+    tiles = [Tile(w=6, h=8, copies=10)]
+    stacks = calculate_stacks(tiles, max_z=7, tile_thickness=6.8, stack_gap=0.4)
+    assert len(stacks) == 10
+    assert all(s.count == 1 for s in stacks)
+
+
+def test_calculate_stacks_multiple_tile_types():
+    """多 tile 类型"""
+    tiles = [
+        Tile(w=6, h=8, copies=3),
+        Tile(w=4, h=4, copies=10)
+    ]
+    stacks = calculate_stacks(tiles, max_z=325, tile_thickness=6.8, stack_gap=0.4)
+    # 验证总数
+    assert sum(s.count for s in stacks) == 13
+
+
+def test_calculate_stacks_empty():
+    """空 tiles 列表"""
+    tiles = []
+    stacks = calculate_stacks(tiles, max_z=325, tile_thickness=6.8, stack_gap=0.4)
+    assert len(stacks) == 0
+
+
+# ========== calculate_plates 测试 ==========
+
+def test_calculate_plates_single():
+    stacks = [Stack(tile=Tile(w=6, h=8), count=3)]
+    plates = calculate_plates(stacks, plate_width=256, plate_depth=256)
+    # 当前每个 Stack 独占一盘
+    assert len(plates) == 1
+    assert plates[0].index == 0
