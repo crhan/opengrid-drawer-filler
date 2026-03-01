@@ -45,7 +45,9 @@ def add_parser(subparsers):
     parser = subparsers.add_parser('split', help='抽屉分割计算')
     parser.add_argument('dimensions', nargs='*', help='尺寸列表')
     parser.add_argument('-c', '--copies', type=int, default=1, help='打印份数')
-    parser.add_argument('-j', '--json', action='store_true', help='JSON 输出')
+    parser.add_argument('-j', '--json', action='store_true', help='JSON 输出并保存到文件（默认临时目录）')
+    parser.add_argument('--print-json', action='store_true', help='JSON 输出到标准输出（用于管道重定向）')
+    parser.add_argument('-o', '--output', help='JSON 输出文件路径（默认临时目录）')
     parser.add_argument('-H', '--html', help='生成 HTML 报告并保存到指定路径')
     parser.add_argument('-P', '--project-dir', help='生成完整项目到指定目录')
     parser.add_argument('-b', '--batch', help='批量输入')
@@ -56,13 +58,16 @@ def add_parser(subparsers):
 
 def handle_split(args):
     """处理 split 命令"""
+    import tempfile
+    from pathlib import Path
+    import time
+
     # 初始化常量
     _init_constants()
 
     # 加载库存文件（如果指定）
     inventory = None
     if args.inventory:
-        import json
         try:
             with open(args.inventory, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -100,8 +105,29 @@ def handle_split(args):
     scheme = find_best_scheme(grid_w, grid_h, inventory=inventory)
 
     # 输出
-    if args.json:
+    if args.print_json:
+        # 输出到 stdout（原有行为，用于管道重定向）
         print(output_json(width, depth, scheme, copies, inventory=inventory))
+    elif args.json or args.output:
+        json_data = output_json(width, depth, scheme, copies, inventory=inventory)
+
+        # 确定输出路径
+        if args.output:
+            output_path = Path(args.output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            # 使用临时目录
+            temp_dir = Path(tempfile.gettempdir()) / 'opengrid'
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            # 生成唯一的文件名
+            timestamp = int(time.time() * 1000)
+            output_path = temp_dir / f'scheme_{timestamp}.json'
+
+        # 写入文件
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(json_data)
+
+        print(f"方案已保存: {output_path}")
     elif args.html:
         from opengrid.ui.visualizer import Visualizer
         v = Visualizer()
@@ -118,12 +144,11 @@ def handle_split(args):
         v.generate_html(plan_data, args.html)
         print(f"已生成 HTML 报告: {args.html}")
     elif args.project_dir:
-        from pathlib import Path
         from opengrid.ui.presenter import generate_print_plan_html
         project_path = Path(args.project_dir)
         project_path.mkdir(parents=True, exist_ok=True)
         (project_path / "stl").mkdir(exist_ok=True)
-        
+
         # 转换格式以匹配 generate_print_plan_html
         scheme_data = {
             'scheme': scheme,
@@ -137,7 +162,7 @@ def handle_split(args):
             }
         }
         drawer_specs = [{'width': width, 'depth': depth, 'copies': copies}]
-        
+
         generate_print_plan_html(
             project_path=project_path,
             project_name=project_path.name,
@@ -923,4 +948,3 @@ def batch_mode(input_str, verbose=False, inventory=None, json_output=False):
 
     # 打印计划
     stats = print_batch_plan(batch_results, merged, inventory=inventory, json_output=json_output, drawer_names=drawer_names)
-

@@ -63,6 +63,7 @@ done
 **关键原则**：库存文件在**当前项目目录**，不是 skill 目录！
 
 查找顺序：
+
 1. **首先检查当前目录**是否有 `opengrid_config.yaml`
 2. 根据配置中的 `inventory_path` 定位库存文件（通常是 `./inventory.json`）
 
@@ -307,9 +308,20 @@ uv run scripts/opengrid.py present scheme_no_inv.json scheme_with_inv.json -o co
 
 获取方案的 JSON 输出：
 
+**方式一：输出到标准输出（用于管道重定向）**
+
 ```bash
-uv run scripts/opengrid.py split 265x365 -j > scheme.json
+uv run scripts/opengrid.py split 265x365 --print-json > scheme.json
 ```
+
+**方式二：自动保存到临时目录**
+
+```bash
+uv run scripts/opengrid.py split 265x365 -j
+# 输出: 方案已保存: /tmp/opengrid/scheme_1234567890.json
+```
+
+脚本会自动将 JSON 保存到临时目录 `/tmp/opengrid/`，并输出文件路径。
 
 #### 5.2 提取需要打印的瓦片
 
@@ -395,8 +407,14 @@ uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py -i inventory.json split 265x365
 # 生成 STL
 uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py slicer generate 7x5x2
 
-# 生成 HTML 对比并打开
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py compare scheme_a.json scheme_b.json -o comparison.html
+# 生成方案 JSON（输出到 stdout，用于管道重定向）
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425 --print-json > scheme.json
+
+# 或者使用自动保存到临时目录
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py split 485 425 -j
+
+# 生成 HTML 对比并打开（使用临时目录中的 JSON 文件）
+uv run ${CLAUDE_PLUGIN_ROOT}/scripts/opengrid.py compare /tmp/opengrid/scheme_xxx.json /tmp/opengrid/scheme_yyy.json -o comparison.html
 ```
 
 详细命令、配置说明、算法规则等请参考以下文档：
