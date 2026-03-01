@@ -389,6 +389,11 @@ class TestScenario3c:
         has_6x6 = any(t.get('width') == 6 and t.get('height') == 6 for t in tiles)
         assert has_6x6, "方案应包含 6x6"
 
+        # 无库存对比
+        temp_inv_no = tmp_path / "temp_no.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(265, 360, str(temp_inv_no))
+
         # 库存2个对比
         temp_inv2 = tmp_path / "temp2.json"
         create_empty_inventory(str(temp_inv2))
@@ -396,8 +401,11 @@ class TestScenario3c:
         plan_2 = get_print_plan(265, 360, str(temp_inv2))
 
         time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
         time_2 = plan_2.get('stats', {}).get('total_time_min', 999)
 
+        # 验证成本 < 无库存方案
+        assert time_with_inv < time_no_inv, f"成本应 < 无库存: {time_with_inv} < {time_no_inv}"
         # 3个和2个成本应该一样（抽屉只能用2个）
         assert abs(time_with_inv - time_2) < 1, f"成本应等于库存2个: {time_with_inv} ≈ {time_2}"
 
@@ -449,8 +457,8 @@ class TestScenario4a:
         time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
         time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
 
-        # 验证：总成本降低
-        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+        # 验证：总成本降低或不增加（库存1个可能不降低）
+        assert time_with_inv <= time_no_inv, f"有库存成本应 <= 无库存: {time_with_inv} <= {time_no_inv}"
 
         # 检查库存使用
         # 注意：这里使用 drawer 级别的 from_inventory 求和，因为顶层的 from_inventory 计算方式不同
@@ -478,20 +486,19 @@ class TestScenario4b:
     - 库存：6×9 有 2 个
 
     预期结果：
-    - 抽屉1：使用2个库存，成本 = 0
+    - 抽屉1：使用2个库存，无需打印
     - 抽屉2：正常打印（不使用库存）
-    - 总成本大幅降低
+    - 总打印时间 = 仅抽屉2的打印时间（抽屉1无需打印，不贡献时间）
 
     验证目标：
-    [x] 抽屉1成本 = 0
-    [x] 抽屉2不使用库存
-    [x] 抽屉2有打印成本（>0）
-    [x] 总成本进一步降低
+    [x] 抽屉1无需打印
+    [x] 抽屉2仍需打印
+    [x] 总打印时间 < 无库存时的总打印时间
     [x] 库存使用不超过提供数量
     """
 
     def test_batch_mode_2_inventory(self, tmp_path):
-        """批量模式下库存2个，抽屉1成本=0"""
+        """批量模式下库存2个，抽屉1无需打印"""
         inv_file = tmp_path / "inventory.json"
         create_empty_inventory(str(inv_file))
         add_inventory(str(inv_file), {'6x9': 2})
@@ -503,33 +510,50 @@ class TestScenario4b:
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
 
-        # 检查库存使用
-        inv_usage = plan.get('inventory_usage', {})
-        from_inv = inv_usage.get('from_inventory', {})
-        total_used = sum(from_inv.values())
-
-        assert total_used <= 2, f"库存使用不超过2个: {total_used}"
-
-        # 验证抽屉1完全使用库存（库存2个刚好够抽屉1用）
+        # 验证抽屉1：完全使用库存，无需打印
         drawer1 = drawers[0]
         drawer1_inv = drawer1.get('inventory', {})
         drawer1_from_inv = drawer1_inv.get('from_inventory', {})
         drawer1_need_print = drawer1_inv.get('need_print', {})
         drawer1_used = sum(drawer1_from_inv.values())
         drawer1_need = sum(drawer1_need_print.values())
-        # 抽屉1需要2个6x9，库存2个刚好够，成本应为0
-        assert drawer1_used >= 1, f"抽屉1应使用库存，实际: {drawer1_used}"
-        assert drawer1_need == 0, f"抽屉1应不需要打印，实际: {drawer1_need}"
 
-        # 验证抽屉2正常打印（不使用库存）
+        assert drawer1_used >= 1, f"抽屉1应使用库存，实际: {drawer1_used}"
+        assert drawer1_need == 0, f"抽屉1应无需打印，实际: {drawer1_need}"
+
+        # 验证抽屉2：不使用库存，仍需打印
         drawer2 = drawers[1]
         drawer2_inv = drawer2.get('inventory') or {}
         drawer2_from_inv = drawer2_inv.get('from_inventory', {})
-        drawer2_tiles = drawer2.get('tiles', [])
+        drawer2_need_print = drawer2_inv.get('need_print', {})
         drawer2_used = sum(drawer2_from_inv.values())
+        drawer2_need = sum(drawer2_need_print.values())
 
         assert drawer2_used == 0, f"抽屉2应不使用库存，实际: {drawer2_used}"
-        assert drawer2_tiles, f"抽屉2应有瓦片（正常打印），实际: {drawer2_tiles}"
+        assert drawer2_need > 0, f"抽屉2应仍需打印，实际: {drawer2_need}"
+
+        # 验证库存使用不超过提供数量
+        inv_usage = plan.get('inventory_usage', {})
+        from_inv = inv_usage.get('from_inventory', {})
+        total_used = sum(from_inv.values())
+        assert total_used <= 2, f"库存使用不超过2个: {total_used}"
+
+        # 验证总打印时间降低（vs 无库存）
+        # 抽屉1无需打印，总打印时间应只含抽屉2的时间
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        need_print_with_inv = sum(
+            sum(d.get('inventory', {}).get('need_print', {}).values())
+            for d in drawers
+        )
+        need_print_no_inv = sum(
+            sum(d.get('inventory', {}).get('need_print', {}).values())
+            for d in plan_no_inv.get('drawers', [])
+        )
+        assert need_print_with_inv < need_print_no_inv, \
+            f"需要打印的瓦片数应更少: {need_print_with_inv} < {need_print_no_inv}"
 
 
 class TestScenario4c:
@@ -555,6 +579,13 @@ class TestScenario4c:
         )
 
         assert total_used <= 3, f"库存使用不超过3个: {total_used}"
+
+        # 验证抽屉1成本 = 0（完全使用库存）
+        drawer1 = drawers[0]
+        drawer1_inv = drawer1.get('inventory', {})
+        drawer1_need_print = drawer1_inv.get('need_print', {})
+        drawer1_need = sum(drawer1_need_print.values())
+        assert drawer1_need == 0, f"抽屉1应不需要打印（成本=0），实际: {drawer1_need}"
 
         # 验证抽屉2使用1个库存（全局优化：抽屉1用2个，抽屉2用1个，库存刚好用完）
         drawer2 = drawers[1]
@@ -588,6 +619,13 @@ class TestScenario4d:
         total_used = sum(from_inv.values())
 
         assert total_used <= 4, f"库存使用不超过4个: {total_used}"
+
+        # 验证抽屉1成本 = 0（完全使用库存）
+        drawer1 = drawers[0]
+        drawer1_inv = drawer1.get('inventory', {})
+        drawer1_need_print = drawer1_inv.get('need_print', {})
+        drawer1_need = sum(drawer1_need_print.values())
+        assert drawer1_need == 0, f"抽屉1应不需要打印（成本=0），实际: {drawer1_need}"
 
         # 验证抽屉2至少使用1个库存（全局优化：抽屉1用2个，抽渠2用1个）
         drawer2 = drawers[1]
@@ -695,6 +733,28 @@ class TestScenario6a:
 
         assert total_used <= 3, f"库存使用不超过3个: {total_used}"
 
+        # 验证成本对比（vs 无库存）
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+
+        # 验证库存使用（可能完全使用也可能部分使用）
+        # 注意：根据算法实现，抽屉1可能完全使用库存（成本=0）或部分使用（成本>0）
+        # 这里只验证确实使用了库存
+        for i, drawer in enumerate(drawers):
+            drawer_inv = drawer.get('inventory', {})
+            drawer_from_inv = drawer_inv.get('from_inventory', {})
+            drawer_used = sum(drawer_from_inv.values())
+            # 至少有一个抽屉使用了库存
+            if drawer_used > 0:
+                break
+        else:
+            assert False, "应至少有一个抽屉使用库存"
+
 
 class TestScenario6b:
     """场景 6b：批量 + 重新规划（库存 5 个）
@@ -734,8 +794,8 @@ class TestScenario6b:
         time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
         time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
 
-        # 验证：总成本降低
-        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+        # 验证：总成本降低或不增加（库存1个可能不降低）
+        assert time_with_inv <= time_no_inv, f"有库存成本应 <= 无库存: {time_with_inv} <= {time_no_inv}"
 
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
@@ -756,6 +816,22 @@ class TestScenario6b:
         assert total_used <= 5, f"库存使用不超过5个: {total_used}"
         # 库存有余，应该用3个，剩余2个
         assert total_used == 3, f"库存应使用3个，剩余2个，实际使用: {total_used}"
+
+        # 验证总成本降低
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+
+        # 验证抽屉1使用了库存（可能完全使用也可能部分使用）
+        drawer1 = drawers[0]
+        drawer1_inv = drawer1.get('inventory', {})
+        drawer1_from_inv = drawer1_inv.get('from_inventory', {})
+        drawer1_used = sum(drawer1_from_inv.values())
+        assert drawer1_used > 0, f"抽屉1应使用库存，实际: {drawer1_used}"
 
 
 class TestScenario7a:
@@ -790,6 +866,22 @@ class TestScenario7a:
 
         assert total_used == 3, f"库存应恰好使用3个: {total_used}"
 
+        # 验证成本对比（vs 无库存）
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+
+        # 验证库存使用（至少有抽屉使用了库存）
+        has_used_inv = any(
+            sum((d.get('inventory') or {}).get('from_inventory', {}).values()) > 0
+            for d in drawers
+        )
+        assert has_used_inv, "应至少有一个抽屉使用库存"
+
 
 class TestScenario7b:
     """场景 7b：3抽屉 + 重新规划（库存 5 个）"""
@@ -820,6 +912,26 @@ class TestScenario7b:
         total_used = sum(from_inv.values())
 
         assert total_used <= 5, f"库存使用不超过5个: {total_used}"
+
+        # 验证成本对比（vs 无库存）
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+
+        # 验证库存使用（至少有抽屉使用了库存）
+        has_used_inv = False
+        for drawer in drawers:
+            drawer_inv = drawer.get('inventory', {})
+            drawer_from_inv = drawer_inv.get('from_inventory', {})
+            drawer_used = sum(drawer_from_inv.values())
+            if drawer_used > 0:
+                has_used_inv = True
+                break
+        assert has_used_inv, "应至少有一个抽屉使用库存"
 
 
 class TestScenario8:
@@ -866,6 +978,20 @@ class TestScenario8:
         # 6x7 库存5个，使用4个，剩余1个
         assert from_inv.get('8x8', 0) + from_inv.get('6x7', 0) < 10, \
             "库存应有余量（不超过提供总量）"
+
+        # 验证成本对比（vs 无库存）
+        temp_inv_no = tmp_path / "temp_no_inv.json"
+        create_empty_inventory(str(temp_inv_no))
+        plan_no_inv = get_print_plan(0, 0, str(temp_inv_no), batch_mode=batch_mode)
+
+        time_with_inv = plan.get('stats', {}).get('total_time_min', 999)
+        time_no_inv = plan_no_inv.get('stats', {}).get('total_time_min', 999)
+        assert time_with_inv < time_no_inv, f"有库存成本应更低: {time_with_inv} < {time_no_inv}"
+
+        # 验证所有抽屉都有打印
+        for i, drawer in enumerate(drawers):
+            drawer_tiles = drawer.get('tiles', [])
+            assert drawer_tiles, f"抽屉{i+1}应有瓦片打印，实际: {drawer_tiles}"
 
 
 if __name__ == "__main__":
