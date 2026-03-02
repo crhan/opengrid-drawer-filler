@@ -17,7 +17,11 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 timeout = 60
+timeout_method = "thread"
 
 [dependency-groups]
 dev = [

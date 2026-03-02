@@ -435,6 +435,14 @@ class TestScenario4a:
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
 
+        # 格子数量一致性验证
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
+
         # 无库存对比
         temp_inv_no = tmp_path / "temp_no_inv.json"
         create_empty_inventory(str(temp_inv_no), tmp_path)
@@ -495,6 +503,14 @@ class TestScenario4b:
 
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
+
+        # 格子数量一致性验证
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
 
         # 验证抽屉1：完全使用库存，无需打印
         drawer1 = drawers[0]
@@ -558,6 +574,14 @@ class TestScenario4c:
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
 
+        # 格子数量一致性验证
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
+
         # 注意：这里使用 drawer 级别的 from_inventory 求和，因为顶层的 from_inventory 计算方式不同
         total_used = sum(
             sum((d.get('inventory') or {}).get('from_inventory', {}).values())
@@ -599,6 +623,14 @@ class TestScenario4d:
 
         drawers = plan.get('drawers', [])
         assert len(drawers) == 2, "应有2个抽屉"
+
+        # 格子数量一致性验证
+        for drawer in drawers:
+            original_cells = get_original_cells(drawer['width'], drawer['depth'])
+            drawer_tiles = drawer.get('tiles', [])
+            scheme_cells = calculate_scheme_cells(drawer_tiles)
+            assert original_cells == scheme_cells, \
+                f"格子数应一致: {original_cells} = {scheme_cells}"
 
         inv_usage = plan.get('inventory_usage', {})
         from_inv = inv_usage.get('from_inventory', {})
