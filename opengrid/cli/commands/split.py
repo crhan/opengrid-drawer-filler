@@ -725,20 +725,25 @@ def _build_single_inventory(scheme, inventory):
     if not all_needed:
         return None
 
-    covered = 0
-    total_sizes = 0
+    # 按面积（cell数量）计算库存覆盖率
+    total_cells_needed = 0
+    cells_covered = 0
     for key in all_needed.keys():
+        w, h = map(int, key.split("x"))
+        area = w * h  # 面积（cell数量）
         need = all_needed[key]
         available = inventory.get(key, 0) if inventory else 0
-        total_sizes += 1
-        if available >= need:
-            covered += 1
+
+        total_cells_needed += need * area
+        cells_covered += min(need, available) * area
+
+    coverage_percent = int(cells_covered / total_cells_needed * 100) if total_cells_needed > 0 else 0
 
     return {
         "coverage": {
-            "covered": covered,
-            "total": total_sizes,
-            "percent": int(covered / total_sizes * 100) if total_sizes > 0 else 0
+            "covered_cells": cells_covered,
+            "total_cells": total_cells_needed,
+            "percent": coverage_percent
         },
         "from_inventory": from_inv,
         "need_print": need_print
