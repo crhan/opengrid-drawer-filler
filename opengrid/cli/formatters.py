@@ -5,11 +5,12 @@ from opengrid.core.constants import FILAMENT_MAIN_PER_CELL, FILAMENT_SUPPORT_PER
 from opengrid.core.cost import calculate_print_cost
 
 
-def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
+def print_plan(width: int, depth: int, scheme: Any, copies: int = 1, inventory: dict = None):
     """打印人类可读的方案
 
     Args:
         scheme: SplitResult 实例或向下兼容的 scheme dict
+        inventory: 库存字典（可选）
     """
     from opengrid.core.split_result import SplitResult
 
@@ -21,6 +22,17 @@ def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
         print("瓦片分割:")
         for tile in scheme.tiles:
             print(f"  {tile[0]}x{tile[1]}")
+
+        # 显示库存使用情况
+        if scheme.from_inventory or scheme.need_print:
+            print("\n库存使用:")
+            if scheme.from_inventory:
+                for size, count in scheme.from_inventory.items():
+                    print(f"  库存: {size} × {count}")
+            if scheme.need_print:
+                for size, count in scheme.need_print.items():
+                    print(f"  需打印: {size} × {count}")
+
         print(f"总打印次数: {scheme.cost.plate_count if scheme.cost.plate_count > 0 else 1}")
         return
 
@@ -33,6 +45,21 @@ def print_plan(width: int, depth: int, scheme: Any, copies: int = 1):
     print("瓦片分割:")
     for tile in scheme.get('tiles', []):
         print(f"  {tile[0]}x{tile[1]}")
+
+    # 显示库存使用情况（如果传入了 inventory）
+    if inventory:
+        from opengrid.core.cost import calculate_print_cost
+        tiles = scheme.get('tiles', [])
+        _, from_inv, need_print = calculate_print_cost(tiles, inventory, copies)
+        if from_inv or need_print:
+            print("\n库存使用:")
+            if from_inv:
+                for size, count in from_inv.items():
+                    print(f"  库存: {size} × {count}")
+            if need_print:
+                for size, count in need_print.items():
+                    print(f"  需打印: {size} × {count}")
+
     print(f"总打印次数: {scheme.get('prints', 1)}")
 
 

@@ -1,5 +1,5 @@
 """inventory 子命令实现"""
-from opengrid.config import load_config_or_default
+from opengrid.config import load_config_or_default, get_config_path
 from opengrid.inventory import (
     load_inventory,
     add_inventory,
@@ -16,6 +16,9 @@ def add_parser(subparsers):
 
     # list
     sub.add_parser('list', help='列出库存')
+
+    # init
+    sub.add_parser('init', help='初始化库存文件（创建空白库存）')
 
     # add
     add_p = sub.add_parser('add', help='添加库存')
@@ -36,7 +39,8 @@ def add_parser(subparsers):
 
 def _build_inventory_config(config):
     """从项目配置构建库存配置"""
-    inv_path = get_inventory_path(config)
+    config_dir = get_config_path().parent
+    inv_path = get_inventory_path(config, config_dir)
     return {"inventory_path": str(inv_path)}
 
 
@@ -49,6 +53,19 @@ def handle_inventory(args):
 
     if cmd == 'list':
         print_inventory(inv_config)
+
+    elif cmd == 'init':
+        from opengrid.inventory import get_inventory_path
+        inv_path = get_inventory_path(config)
+        import json
+        if inv_path.exists():
+            print(f"库存文件已存在: {inv_path}")
+        else:
+            inv_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {"inventory": {}, "log": []}
+            with open(inv_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            print(f"已创建空白库存文件: {inv_path}")
 
     elif cmd == 'add':
         from opengrid.inventory import parse_items

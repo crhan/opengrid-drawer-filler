@@ -7,11 +7,12 @@ from datetime import datetime
 from pathlib import Path
 
 
-def _resolve_path(path_str):
-    """解析路径：绝对路径直接返回，相对路径相对于 cwd
+def _resolve_path(path_str, base_dir=None):
+    """解析路径：绝对路径直接返回，相对路径相对于 base_dir（默认为 cwd）
 
     Args:
         path_str: 路径字符串
+        base_dir: 基准目录，默认为当前工作目录
 
     Returns:
         Path: 解析后的绝对路径
@@ -19,7 +20,9 @@ def _resolve_path(path_str):
     path_obj = Path(path_str)
     if path_obj.is_absolute():
         return path_obj
-    return Path.cwd() / path_obj
+    if base_dir is None:
+        base_dir = Path.cwd()
+    return Path(base_dir) / path_obj
 
 
 def parse_items(args):
@@ -37,11 +40,12 @@ def parse_items(args):
     return items, reason
 
 
-def get_inventory_path(config):
+def get_inventory_path(config, config_dir=None):
     """从配置获取库存文件路径
 
     Args:
         config: 配置字典，必须包含 inventory_path
+        config_dir: 配置文件所在目录，用于解析相对路径
 
     Returns:
         Path: 库存文件路径
@@ -68,7 +72,7 @@ def get_inventory_path(config):
             "请在 opengrid_config.yaml 中设置 inventory_path"
         )
 
-    return _resolve_path(inventory_path)
+    return _resolve_path(inventory_path, config_dir)
 
 
 def _get_inventory_file(config):

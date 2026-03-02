@@ -68,9 +68,10 @@ def handle_split(args):
     from pathlib import Path
     import time
 
-    # 加载库存文件（如果指定）
+    # 加载库存文件
     inventory = None
     if args.inventory:
+        # 显式指定了库存文件路径
         try:
             with open(args.inventory, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -81,6 +82,21 @@ def handle_split(args):
         except json.JSONDecodeError:
             print(f"错误: 库存文件格式无效: {args.inventory}")
             return
+    else:
+        # 从配置文件读取库存（如果配置了 inventory_path）
+        try:
+            from opengrid.config import load_config_or_default, get_config_path
+            config = load_config_or_default()
+            config_dir = get_config_path().parent
+            from opengrid.inventory import get_inventory_path
+            inv_path = get_inventory_path(config, config_dir)
+            if inv_path.exists():
+                with open(inv_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                inventory = data.get('inventory', {})
+        except Exception:
+            # 配置没有 inventory_path 或文件不存在，跳过
+            pass
 
     # 批处理模式
     if args.batch:
@@ -176,7 +192,7 @@ def handle_split(args):
         )
         print(f"已生成项目计划: {project_path}/print_plan.html")
     else:
-        print_plan(width, depth, scheme, copies)
+        print_plan(width, depth, scheme, copies, inventory)
 
 
 __all__ = ['add_parser']
