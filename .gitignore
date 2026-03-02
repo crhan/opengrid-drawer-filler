@@ -51,3 +51,5 @@ config.yaml
 scripts/inventory.json
 inventory/
 .envrc
+.mcp_data/identifier-embeddings-cache.json
+.mcp_data/embeddings-cache.json

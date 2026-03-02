@@ -99,6 +99,47 @@ uv run scripts/opengrid.py inventory add 8x8:5 "原因"
 uv run scripts/opengrid.py inventory deduct 8x8:2 "原因"
 ```
 
+## 代码分析工具 (contextplus MCP)
+
+本项目配置了 **contextplus** MCP 服务，提供基于语义理解的代码分析能力。
+
+### 核心工具
+
+| 工具 | 用途 |
+|------|------|
+| `semantic_code_search` | 按语义搜索代码，不仅仅是精确的变量名。例如搜索"抽屉分割算法"能找到相关函数 |
+| `semantic_identifier_search` | 语义级别搜索标识符（函数、方法、类、变量），返回定义行和调用链 |
+| `get_file_skeleton` | 获取文件的详细函数签名、类方法、类型定义，不读取完整代码体 |
+| `get_context_tree` | 获取项目的结构树，包含文件头、函数名、类、枚举和行范围 |
+| `get_blast_radius` | 在删除或修改代码前检查爆炸半径，追踪特定符号在代码库中的使用位置 |
+| `run_static_analysis` | 运行项目的原生 linter/compiler 来查找未使用变量、死代码、类型错误 |
+| `semantic_navigate` | 按语义浏览代码库，使用聚类将相关文件分组 |
+| `get_feature_hub` | Obsidian 风格的特性中心导航器，通过 wiki 链接组织相关文件 |
+
+### 使用场景
+
+- **理解代码结构**：使用 `get_context_tree` 或 `get_file_skeleton` 快速了解模块 API
+- **搜索功能**：使用 `semantic_code_search` 按自然语言意图搜索，而非精确匹配
+- **追踪调用链**：使用 `semantic_identifier_search` 找到函数的所有调用位置
+- **重构前检查**：使用 `get_blast_radius` 了解修改代码的影响范围
+- **代码质量检查**：使用 `run_static_analysis` 查找类型错误和死代码
+
+### 示例
+
+```
+# 语义搜索"分割计算"
+mcp__contextplus__semantic_code_search("抽屉分割算法")
+
+# 查找函数调用
+mcp__contextplus__semantic_identifier_search("find_best_scheme")
+
+# 获取文件骨架
+mcp__contextplus__get_file_skeleton("opengrid/core/scheme.py")
+
+# 检查修改影响
+mcp__contextplus__get_blast_radius("Tile", "opengrid/core/tile.py")
+```
+
 ## 核心设计原则
 
 **Agent 负责用户交互，脚本负责计算和生成。**
