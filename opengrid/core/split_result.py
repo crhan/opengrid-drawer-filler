@@ -150,7 +150,7 @@ class SplitResult:
             cost_result = calculate_cost(plates)
 
             score = (
-                cost_result.total_cost,
+                round(cost_result.total_cost, 1),  # 0.1 min 精度，消除浮点噪声
                 len(set(tiles)),
                 len(tiles),
                 calc_scheme_balance(candidate["x_splits"], candidate["y_splits"])

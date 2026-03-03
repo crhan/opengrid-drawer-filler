@@ -1118,11 +1118,16 @@ class TestScenario10b:
         plate_count = plan.get('cost', {}).get('plate_count', -1)
         swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
         unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
 
-        # y=13 是质数，任何分割都产生不等长，必然 2 Plate
+        # y=13 质数，无法均等分割，最均衡的分割是 [6,7]
         assert plate_count == 2, f"质数 y=13 分割应为 2 Plates，实际: {plate_count}"
         assert swap_penalty == 60, f"swap_penalty 应为 60，实际: {swap_penalty}"
         assert unique_sizes == 2, f"不等分割应有 2 种尺寸，实际: {unique_sizes}"
+        assert (10, 6) in tile_set and (10, 7) in tile_set, (
+            f"均衡度最优分割应产生 (10,6) 和 (10,7)，实际: {tile_set}"
+        )
 
         # 与 10a 对比：时间应更长（含 60 分钟惩罚）
         inv_file_10a = tmp_path / "inv_10a.json"
