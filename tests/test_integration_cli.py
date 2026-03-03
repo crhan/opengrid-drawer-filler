@@ -1012,5 +1012,64 @@ class TestScenario8:
             assert drawer_tiles, f"抽屉{i+1}应有瓦片打印，实际: {drawer_tiles}"
 
 
+class TestScenario9a:
+    """场景 9a：无库存精确适配（基准）
+
+    抽屉 280x308mm（10x11 格子，恰好等于 H2D 床面上限）
+    预期：tile(10,11)，1 Stack，1 Plate，swap_penalty=0
+    """
+
+    def test_exact_fit_single_plate(self, tmp_path):
+        """H2D 床面恰好填满时应生成 1 Plate，无换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 308, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+
+        assert plate_count == 1, f"应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert unique_sizes == 1, f"应只有 1 种尺寸，实际: {unique_sizes}"
+        tile_set = {(t['width'], t['height']) for t in tiles}
+        assert tile_set == {(10, 11)}, f"tiles 应为 {{(10, 11)}}，实际: {tile_set}"
+
+
+class TestScenario9b:
+    """场景 9b：无库存转置维度 ⚠️ 已知缺陷
+
+    抽屉 308x280mm（11x10 格子，是 9a 的宽深对调）
+    正确行为：与 9a 相同，1 Plate，tile(10,11)
+    当前缺陷：x=11 > max_cells_x=10，算法被迫分割 → 2 Plates
+    此测试用于追踪 Bug 修复进度，当前应 XFAIL
+    """
+
+    @pytest.mark.xfail(reason="已知缺陷：算法不支持整体转置，x=11 超出 max_cells_x=10")
+    def test_transposed_dimensions_same_result(self, tmp_path):
+        """转置后等价抽屉应与 9a 产生相同的 1 Plate 结果"""
+        inv_file_9a = tmp_path / "inv_9a.json"
+        config_9a = create_empty_inventory(str(inv_file_9a), tmp_path)
+        plan_9a = get_print_plan(280, 308, str(inv_file_9a), tmp_path, config_file=config_9a)
+
+        inv_file_9b = tmp_path / "inv_9b.json"
+        config_9b = create_empty_inventory(str(inv_file_9b), tmp_path)
+        plan_9b = get_print_plan(308, 280, str(inv_file_9b), tmp_path, config_file=config_9b)
+
+        plate_count = plan_9b.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan_9b.get('cost', {}).get('swap_penalty_total', -1)
+        tiles = plan_9b.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
+        time_9a = plan_9a.get('stats', {}).get('total_time_min', -1)
+        time_9b = plan_9b.get('stats', {}).get('total_time_min', -1)
+
+        assert plate_count == 1, f"应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert tile_set == {(10, 11)}, f"tiles 应为 {{(10, 11)}}，实际: {tile_set}"
+        assert abs(time_9a - time_9b) < 1, f"时间应与 9a 相同: {time_9a} ≈ {time_9b}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
