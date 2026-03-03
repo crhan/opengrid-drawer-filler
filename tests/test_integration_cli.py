@@ -99,7 +99,7 @@ def load_inventory(inv_file):
     return data.get("inventory", {})
 
 
-def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_file=None):
+def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_file=None, copies=1):
     """通过 CLI 获取打印计划，返回统一的数据结构
 
     Args:
@@ -109,6 +109,7 @@ def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_fil
         tmp_path: 临时目录路径（用于默认 config 路径）
         batch_mode: 批量模式字符串
         config_file: 配置文件路径（可选，默认使用 tmp_path/config.yaml）
+        copies: 打印份数（默认 1），通过 WxDxN 格式传入 CLI
     """
     # 使用传入的 config_file，或默认使用 tmp_path/config.yaml
     if config_file is None:
@@ -118,7 +119,9 @@ def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_fil
     if batch_mode:
         cmd.extend(['-b', batch_mode])
     else:
-        cmd.append(f'{width}x{depth}')
+        # copies > 1 时用 WxDxN 格式，CLI 通过 parse_dimensions 解析第三个数为 copies
+        dim_str = f'{width}x{depth}x{copies}' if copies > 1 else f'{width}x{depth}'
+        cmd.append(dim_str)
     cmd.extend(['-i', inv_file, '--print-json'])
 
     result = run_cmd(cmd, cwd=SCRIPTS_DIR)
@@ -1158,6 +1161,61 @@ class TestScenario11:
         assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
         assert unique_sizes == 1, f"应只有 1 种尺寸，实际: {unique_sizes}"
         assert tile_set == {(10, 11)}, f"tiles 应全为 (10,11)，实际: {tile_set}"
+
+
+class TestScenario12a:
+    """场景 12a：无库存 Z 轴边界（copies=45，恰好不超堆叠上限）
+
+    抽屉 280x308mm（10x11 格子），tile_type: Full（厚度 6.8mm）
+    max_per_stack = floor((325 + 0.4) / (6.8 + 0.4)) = floor(325.4 / 7.2) = 45
+    copies=45 ≤ 45 → 1 Stack → 1 Plate，无换盘惩罚
+    """
+
+    def test_copies_at_z_limit_single_plate(self, tmp_path):
+        """copies=45 恰好在 Z 轴上限时应为 1 Plate，无换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 308, str(inv_file), tmp_path,
+                              config_file=config_file, copies=45)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+
+        assert plate_count == 1, f"copies=45 应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+
+
+class TestScenario12b:
+    """场景 12b：无库存 Z 轴边界（copies=46，超出堆叠上限触发换盘）
+
+    抽屉 280x308mm，copies=46 > max_per_stack=45
+    → 2 Stacks（23+23）→ 2 Plates → swap_penalty=60
+    仅比 12a 多打 1 份，总时间陡增 60 分钟
+    """
+
+    def test_copies_over_z_limit_swap_penalty(self, tmp_path):
+        """copies=46 超出 Z 轴上限时触发换盘惩罚，时间比 12a 多 60min 以上"""
+        inv_file_12a = tmp_path / "inv_12a.json"
+        config_12a = create_empty_inventory(str(inv_file_12a), tmp_path)
+        plan_12a = get_print_plan(280, 308, str(inv_file_12a), tmp_path,
+                                  config_file=config_12a, copies=45)
+
+        inv_file_12b = tmp_path / "inv_12b.json"
+        config_12b = create_empty_inventory(str(inv_file_12b), tmp_path)
+        plan_12b = get_print_plan(280, 308, str(inv_file_12b), tmp_path,
+                                  config_file=config_12b, copies=46)
+
+        plate_count = plan_12b.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan_12b.get('cost', {}).get('swap_penalty_total', -1)
+        time_12a = plan_12a.get('stats', {}).get('total_time_min', 0)
+        time_12b = plan_12b.get('stats', {}).get('total_time_min', 0)
+
+        assert plate_count == 2, f"copies=46 应为 2 Plates，实际: {plate_count}"
+        assert swap_penalty == 60, f"swap_penalty 应为 60，实际: {swap_penalty}"
+        assert time_12b > time_12a + 60, (
+            f"时间应比 12a 多 60min 以上: {time_12b} > {time_12a} + 60"
+        )
 
 
 if __name__ == "__main__":
