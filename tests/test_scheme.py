@@ -8,6 +8,7 @@ from conftest import (
     normalize_tiles,
     MAX_X,
     MAX_Y,
+    calc_scheme_balance,
 )
 
 
@@ -122,6 +123,62 @@ class TestFindBestScheme:
             scheme = find_best_scheme(x, y)
             for w, h in scheme['tiles']:
                 assert validate_tile(w, h)
+
+    def test_balance_prefers_balanced_splits(self):
+        """验证当多个方案的 unique_sizes 和 tile_count 相同时，选择均衡度更好的方案
+
+        10x13 可以分割为:
+        - [6, 7]: unique=2, tile_count=2, balance=1.167
+        - [5, 8]: unique=2, tile_count=2, balance=1.600
+        - [4, 9]: unique=2, tile_count=2, balance=2.250
+
+        应该选择 [6, 7]，因为 balance 最低（最均衡）
+        """
+        scheme = find_best_scheme(10, 13)
+        assert scheme is not None
+
+        # 验证选择了均衡度最好的 [6, 7] 方案
+        assert scheme['y_splits'] == [6, 7] or scheme['y_splits'] == [7, 6]
+        # 验证均衡度是所有方案中最低的
+        balance = scheme['balance']
+        assert balance == pytest.approx(1.167, abs=0.01)
+
+    def test_balance_prefers_perfect_balance(self):
+        """验证完全均衡的方案优先于非完全均衡的方案
+
+        10x14 可以分割为:
+        - [7, 7]: unique=1 (完全均衡, balance=1.0)
+        - [6, 8]: unique=2 (非均衡, balance=1.333)
+
+        应该选择 [7, 7]，因为 unique=1 更优先
+        """
+        scheme = find_best_scheme(10, 14)
+        assert scheme is not None
+
+        # 验证选择了完全均衡的 [7, 7] 方案
+        assert scheme['y_splits'] == [7, 7]
+        assert scheme['unique_sizes'] == 1
+        assert scheme['balance'] == 1.0
+
+    def test_balance_prefers_even_3way(self):
+        """验证 3 向分割时的均衡度选择
+
+        10x23 (y=23) 可以分割为:
+        - [7, 8, 8]: balance = 8/7 = 1.143
+        - [6, 8, 9]: balance = 9/6 = 1.500
+
+        应该选择 [7, 8, 8]，因为更均衡
+        """
+        scheme = find_best_scheme(10, 23)
+        assert scheme is not None
+
+        # 验证选择了均衡度更好的方案
+        y_splits = scheme['y_splits']
+        # [7,8,8] 或 [8,7,8] 或 [8,8,7] 都可以
+        assert sorted(y_splits) == [7, 8, 8]
+        # 验证均衡度
+        balance = calc_scheme_balance(scheme['x_splits'], scheme['y_splits'])
+        assert balance == pytest.approx(1.143, abs=0.01)
 
 
 class TestFindAllSchemes:
