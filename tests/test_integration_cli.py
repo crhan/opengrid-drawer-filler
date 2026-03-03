@@ -189,7 +189,7 @@ class TestScenario1:
 
     预期结果：
     - 成本 = 0（完全使用库存）
-    - from_inventory = {'6x7': 2}
+    - from_inventory = {'6x9': 2}
     - need_print = {}
 
     验证目标：
