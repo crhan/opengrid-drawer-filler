@@ -1133,5 +1133,32 @@ class TestScenario10b:
         )
 
 
+class TestScenario11:
+    """场景 11：无库存双倍床尺寸 → 均等分割仍 1 Plate
+
+    抽屉 280x616mm（10x22 格子，y = 2 × max_cells_y=11）
+    y=22 均等分割 [11,11] → tile(10,11)×2 → 1 Stack → 1 Plate
+    验证算法在整倍数大抽屉时不退化为多 Plate
+    """
+
+    def test_double_bed_size_single_plate(self, tmp_path):
+        """恰好 2 倍床尺寸时均等分割，仍为 1 Plate"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 616, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
+
+        assert plate_count == 1, f"2 倍床尺寸均等分割应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert unique_sizes == 1, f"应只有 1 种尺寸，实际: {unique_sizes}"
+        assert tile_set == {(10, 11)}, f"tiles 应全为 (10,11)，实际: {tile_set}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
