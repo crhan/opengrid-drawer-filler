@@ -99,7 +99,7 @@ def load_inventory(inv_file):
     return data.get("inventory", {})
 
 
-def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_file=None):
+def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_file=None, copies=1):
     """通过 CLI 获取打印计划，返回统一的数据结构
 
     Args:
@@ -109,6 +109,7 @@ def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_fil
         tmp_path: 临时目录路径（用于默认 config 路径）
         batch_mode: 批量模式字符串
         config_file: 配置文件路径（可选，默认使用 tmp_path/config.yaml）
+        copies: 打印份数（默认 1），通过 WxDxN 格式传入 CLI
     """
     # 使用传入的 config_file，或默认使用 tmp_path/config.yaml
     if config_file is None:
@@ -118,7 +119,9 @@ def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_fil
     if batch_mode:
         cmd.extend(['-b', batch_mode])
     else:
-        cmd.append(f'{width}x{depth}')
+        # copies > 1 时用 WxDxN 格式，CLI 通过 parse_dimensions 解析第三个数为 copies
+        dim_str = f'{width}x{depth}x{copies}' if copies > 1 else f'{width}x{depth}'
+        cmd.append(dim_str)
     cmd.extend(['-i', inv_file, '--print-json'])
 
     result = run_cmd(cmd, cwd=SCRIPTS_DIR)
@@ -1010,6 +1013,214 @@ class TestScenario8:
         for i, drawer in enumerate(drawers):
             drawer_tiles = drawer.get('tiles', [])
             assert drawer_tiles, f"抽屉{i+1}应有瓦片打印，实际: {drawer_tiles}"
+
+
+class TestScenario9a:
+    """场景 9a：无库存精确适配（基准）
+
+    抽屉 280x308mm（10x11 格子，恰好等于 H2D 床面上限）
+    预期：tile(10,11)，1 Stack，1 Plate，swap_penalty=0
+    """
+
+    def test_exact_fit_single_plate(self, tmp_path):
+        """H2D 床面恰好填满时应生成 1 Plate，无换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 308, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+
+        assert plate_count == 1, f"应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert unique_sizes == 1, f"应只有 1 种尺寸，实际: {unique_sizes}"
+        tile_set = {(t['width'], t['height']) for t in tiles}
+        assert tile_set == {(10, 11)}, f"tiles 应为 {{(10, 11)}}，实际: {tile_set}"
+
+
+class TestScenario9b:
+    """场景 9b：无库存转置维度 ⚠️ 已知缺陷
+
+    抽屉 308x280mm（11x10 格子，是 9a 的宽深对调）
+    正确行为：与 9a 相同，1 Plate，tile(10,11)
+    当前缺陷：x=11 > max_cells_x=10，算法被迫分割 → 2 Plates
+    此测试用于追踪 Bug 修复进度，当前应 XFAIL
+    """
+
+    @pytest.mark.xfail(reason="已知缺陷：算法不支持整体转置，x=11 超出 max_cells_x=10")
+    def test_transposed_dimensions_same_result(self, tmp_path):
+        """转置后等价抽屉应与 9a 产生相同的 1 Plate 结果"""
+        inv_file_9a = tmp_path / "inv_9a.json"
+        config_9a = create_empty_inventory(str(inv_file_9a), tmp_path)
+        plan_9a = get_print_plan(280, 308, str(inv_file_9a), tmp_path, config_file=config_9a)
+
+        inv_file_9b = tmp_path / "inv_9b.json"
+        config_9b = create_empty_inventory(str(inv_file_9b), tmp_path)
+        plan_9b = get_print_plan(308, 280, str(inv_file_9b), tmp_path, config_file=config_9b)
+
+        plate_count = plan_9b.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan_9b.get('cost', {}).get('swap_penalty_total', -1)
+        tiles = plan_9b.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
+        time_9a = plan_9a.get('stats', {}).get('total_time_min', -1)
+        time_9b = plan_9b.get('stats', {}).get('total_time_min', -1)
+
+        assert plate_count == 1, f"应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert tile_set == {(10, 11)}, f"tiles 应为 {{(10, 11)}}，实际: {tile_set}"
+        assert abs(time_9a - time_9b) < 1, f"时间应与 9a 相同: {time_9a} ≈ {time_9b}"
+
+
+class TestScenario10a:
+    """场景 10a：无库存 Y 轴偶数超出 → 仍 1 Plate
+
+    抽屉 280x336mm（10x12 格子，y=12 超出 max_cells_y=11）
+    y=12 均等分割 [6,6] → tile(10,6)×2 → 1 Stack → 1 Plate
+    """
+
+    def test_even_y_overflow_single_plate(self, tmp_path):
+        """Y 轴偶数超出时均等分割，仍为 1 Plate"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 336, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
+
+        assert plate_count == 1, f"均等分割应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert unique_sizes == 1, f"应只有 1 种尺寸，实际: {unique_sizes}"
+        assert tile_set == {(10, 6)}, f"tiles 应全为 (10,6)，实际: {tile_set}"
+
+
+class TestScenario10b:
+    """场景 10b：无库存 Y 轴奇数超出 → 必须 2 Plates
+
+    抽屉 280x364mm（10x13 格子，y=13 质数，无法均等分割）
+    最优分割 [6,7] → tile(10,6)+tile(10,7) → 2 Stack → 2 Plate → swap_penalty=60
+    对比 10a：仅 y 差 1 格（336mm vs 364mm），Plate 数从 1 变 2
+    """
+
+    def test_prime_y_overflow_two_plates(self, tmp_path):
+        """Y 轴质数超出时不等分割，必须 2 Plates，触发换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 364, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
+
+        # y=13 质数，无法均等分割，最均衡的分割是 [6,7]
+        assert plate_count == 2, f"质数 y=13 分割应为 2 Plates，实际: {plate_count}"
+        assert swap_penalty == 60, f"swap_penalty 应为 60，实际: {swap_penalty}"
+        assert unique_sizes == 2, f"不等分割应有 2 种尺寸，实际: {unique_sizes}"
+        assert (10, 6) in tile_set and (10, 7) in tile_set, (
+            f"均衡度最优分割应产生 (10,6) 和 (10,7)，实际: {tile_set}"
+        )
+
+        # 与 10a 对比：时间应更长（含 60 分钟惩罚）
+        inv_file_10a = tmp_path / "inv_10a.json"
+        config_10a = create_empty_inventory(str(inv_file_10a), tmp_path)
+        plan_10a = get_print_plan(280, 336, str(inv_file_10a), tmp_path, config_file=config_10a)
+        time_10a = plan_10a.get('stats', {}).get('total_time_min', 0)
+        time_10b = plan.get('stats', {}).get('total_time_min', 0)
+
+        assert time_10b > time_10a + 60, (
+            f"时间应比 10a 多 60min 以上: {time_10b} > {time_10a} + 60"
+        )
+
+
+class TestScenario11:
+    """场景 11：无库存双倍床尺寸 → 均等分割仍 1 Plate
+
+    抽屉 280x616mm（10x22 格子，y = 2 × max_cells_y=11）
+    y=22 均等分割 [11,11] → tile(10,11)×2 → 1 Stack → 1 Plate
+    验证算法在整倍数大抽屉时不退化为多 Plate
+    """
+
+    def test_double_bed_size_single_plate(self, tmp_path):
+        """恰好 2 倍床尺寸时均等分割，仍为 1 Plate"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 616, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
+
+        assert plate_count == 1, f"2 倍床尺寸均等分割应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert unique_sizes == 1, f"应只有 1 种尺寸，实际: {unique_sizes}"
+        assert tile_set == {(10, 11)}, f"tiles 应全为 (10,11)，实际: {tile_set}"
+
+
+class TestScenario12a:
+    """场景 12a：无库存 Z 轴边界（copies=45，恰好不超堆叠上限）
+
+    抽屉 280x308mm（10x11 格子），tile_type: Full（厚度 6.8mm）
+    max_per_stack = floor((325 + 0.4) / (6.8 + 0.4)) = floor(325.4 / 7.2) = 45
+    copies=45 ≤ 45 → 1 Stack → 1 Plate，无换盘惩罚
+    """
+
+    def test_copies_at_z_limit_single_plate(self, tmp_path):
+        """copies=45 恰好在 Z 轴上限时应为 1 Plate，无换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 308, str(inv_file), tmp_path,
+                              config_file=config_file, copies=45)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+
+        assert plate_count == 1, f"copies=45 应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+
+
+class TestScenario12b:
+    """场景 12b：无库存 Z 轴边界（copies=46，超出堆叠上限触发换盘）
+
+    抽屉 280x308mm，copies=46 > max_per_stack=45
+    → 2 Stacks（23+23）→ 2 Plates → swap_penalty=60
+    仅比 12a 多打 1 份，总时间陡增 60 分钟
+    """
+
+    def test_copies_over_z_limit_swap_penalty(self, tmp_path):
+        """copies=46 超出 Z 轴上限时触发换盘惩罚，时间比 12a 多 60min 以上"""
+        inv_file_12a = tmp_path / "inv_12a.json"
+        config_12a = create_empty_inventory(str(inv_file_12a), tmp_path)
+        plan_12a = get_print_plan(280, 308, str(inv_file_12a), tmp_path,
+                                  config_file=config_12a, copies=45)
+
+        inv_file_12b = tmp_path / "inv_12b.json"
+        config_12b = create_empty_inventory(str(inv_file_12b), tmp_path)
+        plan_12b = get_print_plan(280, 308, str(inv_file_12b), tmp_path,
+                                  config_file=config_12b, copies=46)
+
+        plate_count = plan_12b.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan_12b.get('cost', {}).get('swap_penalty_total', -1)
+        time_12a = plan_12a.get('stats', {}).get('total_time_min', 0)
+        time_12b = plan_12b.get('stats', {}).get('total_time_min', 0)
+
+        assert plate_count == 2, f"copies=46 应为 2 Plates，实际: {plate_count}"
+        assert swap_penalty == 60, f"swap_penalty 应为 60，实际: {swap_penalty}"
+        assert time_12b > time_12a + 60, (
+            f"时间应比 12a 多 60min 以上: {time_12b} > {time_12a} + 60"
+        )
 
 
 if __name__ == "__main__":
