@@ -1071,5 +1071,67 @@ class TestScenario9b:
         assert abs(time_9a - time_9b) < 1, f"时间应与 9a 相同: {time_9a} ≈ {time_9b}"
 
 
+class TestScenario10a:
+    """场景 10a：无库存 Y 轴偶数超出 → 仍 1 Plate
+
+    抽屉 280x336mm（10x12 格子，y=12 超出 max_cells_y=11）
+    y=12 均等分割 [6,6] → tile(10,6)×2 → 1 Stack → 1 Plate
+    """
+
+    def test_even_y_overflow_single_plate(self, tmp_path):
+        """Y 轴偶数超出时均等分割，仍为 1 Plate"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 336, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+        tiles = plan.get('scheme', {}).get('tiles', [])
+        tile_set = {(t['width'], t['height']) for t in tiles}
+
+        assert plate_count == 1, f"均等分割应为 1 Plate，实际: {plate_count}"
+        assert swap_penalty == 0, f"swap_penalty 应为 0，实际: {swap_penalty}"
+        assert unique_sizes == 1, f"应只有 1 种尺寸，实际: {unique_sizes}"
+        assert tile_set == {(10, 6)}, f"tiles 应全为 (10,6)，实际: {tile_set}"
+
+
+class TestScenario10b:
+    """场景 10b：无库存 Y 轴奇数超出 → 必须 2 Plates
+
+    抽屉 280x364mm（10x13 格子，y=13 质数，无法均等分割）
+    最优分割 [6,7] → tile(10,6)+tile(10,7) → 2 Stack → 2 Plate → swap_penalty=60
+    对比 10a：仅 y 差 1 格（336mm vs 364mm），Plate 数从 1 变 2
+    """
+
+    def test_prime_y_overflow_two_plates(self, tmp_path):
+        """Y 轴质数超出时不等分割，必须 2 Plates，触发换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        config_file = create_empty_inventory(str(inv_file), tmp_path)
+
+        plan = get_print_plan(280, 364, str(inv_file), tmp_path, config_file=config_file)
+
+        plate_count = plan.get('cost', {}).get('plate_count', -1)
+        swap_penalty = plan.get('cost', {}).get('swap_penalty_total', -1)
+        unique_sizes = plan.get('stats', {}).get('unique_sizes', -1)
+
+        # y=13 是质数，任何分割都产生不等长，必然 2 Plate
+        assert plate_count == 2, f"质数 y=13 分割应为 2 Plates，实际: {plate_count}"
+        assert swap_penalty == 60, f"swap_penalty 应为 60，实际: {swap_penalty}"
+        assert unique_sizes == 2, f"不等分割应有 2 种尺寸，实际: {unique_sizes}"
+
+        # 与 10a 对比：时间应更长（含 60 分钟惩罚）
+        inv_file_10a = tmp_path / "inv_10a.json"
+        config_10a = create_empty_inventory(str(inv_file_10a), tmp_path)
+        plan_10a = get_print_plan(280, 336, str(inv_file_10a), tmp_path, config_file=config_10a)
+        time_10a = plan_10a.get('stats', {}).get('total_time_min', 0)
+        time_10b = plan.get('stats', {}).get('total_time_min', 0)
+
+        assert time_10b > time_10a + 60, (
+            f"时间应比 10a 多 60min 以上: {time_10b} > {time_10a} + 60"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
