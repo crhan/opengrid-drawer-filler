@@ -7,7 +7,7 @@ from .cost_v2 import (
     calculate_stacks, calculate_plates, calculate_cost,
 )
 from .cost import _match_inventory
-from .scheme import find_all_schemes
+from .scheme import find_all_schemes, normalize_tiles, validate_tiles
 from .grid import get_grid_dimensions, GridConfig
 from .splitter import calc_scheme_balance
 
@@ -15,6 +15,42 @@ from .splitter import calc_scheme_balance
 # 候选方案精算上限：超过此数量后只用启发式排序
 # 初始值 100，性能测试后调整
 _SCORE_LIMIT = 100
+
+
+def _get_rotated_candidates(
+    grid_x: int, grid_y: int, grid_config: GridConfig
+) -> list[dict]:
+    """生成转置方向的候选方案列表。
+
+    对于 grid_x > max_cells_x 的抽屉（如 11x10），可通过将 tile 旋转 90°
+    放置来填满：打印 (grid_y, grid_x) 方向的 tile，旋转后放入抽屉。
+    本函数生成以 (grid_y, grid_x) 为方向的方案，并将 x/y splits 对调后
+    返回，使其与原始 (grid_x, grid_y) 抽屉方向一致。
+
+    Args:
+        grid_x: 抽屉宽度（格子数），可能超出打印机 max_cells_x
+        grid_y: 抽屉深度（格子数）
+        grid_config: 含打印机限制的 GridConfig
+
+    Returns:
+        已适配到原始抽屉方向的候选方案列表
+    """
+    rotated_schemes = find_all_schemes(grid_y, grid_x, grid_config)
+    adapted = []
+    for scheme in rotated_schemes:
+        # 将 tile 规范化到合法打印机方向
+        norm_tiles = normalize_tiles(scheme["tiles"], grid_config)
+        if not validate_tiles(norm_tiles, grid_config):
+            continue
+        # 对调 x/y splits：转置方向 x→原始 y，转置方向 y→原始 x
+        adapted.append({
+            "x_parts": scheme["y_parts"],
+            "y_parts": scheme["x_parts"],
+            "x_splits": scheme["y_splits"],
+            "y_splits": scheme["x_splits"],
+            "tiles": norm_tiles,
+        })
+    return adapted
 
 
 @dataclass
@@ -103,6 +139,19 @@ class SplitResult:
 
         # Get all candidate schemes
         candidates = find_all_schemes(grid_x, grid_y, grid_config)
+
+        # 非方形抽屉：补充转置方向候选（tile 旋转 90° 放置），解决
+        # grid_x > max_cells_x 时无法生成单 tile 方案的问题。
+        # 合并后重新排序，保证最优候选在精算窗口（_SCORE_LIMIT）内。
+        if grid_x != grid_y:
+            rotated = _get_rotated_candidates(grid_x, grid_y, grid_config)
+            if rotated:
+                candidates = candidates + rotated
+                candidates.sort(key=lambda s: (
+                    len(set(s["tiles"])),
+                    len(s["tiles"]),
+                    calc_scheme_balance(s["x_splits"], s["y_splits"]),
+                ))
 
         best_result = None
         best_score = None

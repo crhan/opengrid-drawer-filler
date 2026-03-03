@@ -1042,15 +1042,12 @@ class TestScenario9a:
 
 
 class TestScenario9b:
-    """场景 9b：无库存转置维度 ⚠️ 已知缺陷
+    """场景 9b：无库存转置维度
 
     抽屉 308x280mm（11x10 格子，是 9a 的宽深对调）
-    正确行为：与 9a 相同，1 Plate，tile(10,11)
-    当前缺陷：x=11 > max_cells_x=10，算法被迫分割 → 2 Plates
-    此测试用于追踪 Bug 修复进度，当前应 XFAIL
+    期望行为：与 9a 相同，1 Plate，tile(10,11) 旋转 90° 放置
     """
 
-    @pytest.mark.xfail(reason="已知缺陷：算法不支持整体转置，x=11 超出 max_cells_x=10")
     def test_transposed_dimensions_same_result(self, tmp_path):
         """转置后等价抽屉应与 9a 产生相同的 1 Plate 结果"""
         inv_file_9a = tmp_path / "inv_9a.json"
