@@ -547,5 +547,97 @@ class TestScenario8SixDrawersDualInventory:
         assert all_cells_consistent, "格子数量应一致"
 
 
+class TestScenario13aBasicTileSharing:
+    """场景 13a：批量模式瓦片共享基础验证
+
+    A=504×308(18×11格子,copies=1) 独立最优 {9×11:2}
+    B=336×308(12×11格子,copies=1) 独立最优 {6×11:2}
+    optimize_batch_global 应把 A 切换为 {6×11:3}，total_prints 从 2 降至 1
+    """
+
+    def test_batch_unifies_tile_sizes_to_reduce_plates(self):
+        """两抽屉各自最优 tile 不同时，批量优化统一到同种 tile 减少打印次数"""
+        from opengrid.cli.commands.split import calculate_single, calculate_total_prints
+
+        result_A = calculate_single(504, 308, copies=1)
+        result_B = calculate_single(336, 308, copies=1)
+        batch_results = [result_A, result_B]
+
+        opt = optimize_batch_global(batch_results, inventory=None)
+
+        assert opt['improved'] is True
+        assert opt['initial_prints'] == 2, f"优化前应为 2 plates，实际: {opt['initial_prints']}"
+        assert opt['total_prints'] == 1, f"优化后应为 1 plate，实际: {opt['total_prints']}"
+
+        scheme_A_tiles = set(opt['schemes'][0]['tiles'])
+        assert (6, 11) in scheme_A_tiles, f"A 优化后应有 (6,11)，实际: {scheme_A_tiles}"
+        assert (9, 11) not in scheme_A_tiles, f"A 优化后不应有 (9,11)，实际: {scheme_A_tiles}"
+
+        _, details = calculate_total_prints(batch_results, opt['schemes'])
+        assert details.get((6, 11), {}).get('stacks', 0) == 5, (
+            f"6×11 总 stacks 应为 5(3+2)，实际: {details}"
+        )
+
+
+class TestScenario13bTileSharingInventoryAmplification:
+    """场景 13b：瓦片共享 × 库存命中率倍增
+
+    在 13a 基础上引入库存 {6x11: 5}。
+    独立计算时 A({9×11})无法命中，批量优化后 A+B 共用 6×11，库存恰好全部用尽，cost=0。
+    """
+
+    def test_tile_sharing_enables_full_inventory_coverage(self):
+        """切换到 6×11 后，库存 5 个恰好覆盖 A(3个)+B(2个)，总成本降至 0"""
+        from opengrid.cli.commands.split import calculate_single
+
+        inventory = {'6x11': 5}
+        result_A = calculate_single(504, 308, copies=1)
+        result_B = calculate_single(336, 308, copies=1)
+        batch_results = [result_A, result_B]
+
+        opt = optimize_batch_global(batch_results, inventory=inventory)
+
+        assert opt['improved'] is True, "库存命中率提升，应标记为 improved"
+        assert opt['cost'] == 0.0, f"5 个库存恰好覆盖，总成本应为 0，实际: {opt['cost']}"
+
+
+class TestScenario13cThreeDrawersPartialSharing:
+    """场景 13c：3 抽屉部分共享
+
+    A=504×308(18×11) 独立最优 {9×11:2}，可切换为 {6×11:3}
+    B=336×308(12×11) 独立最优 {6×11:2}
+    C=392×308(14×11) 独立最优 {7×11:2}，14 不能被 6 整除，无法纯切换为 6×11
+    预期：A+B 共享 6×11，C 保持 7×11，unique sizes 从 3 降至 2，total_prints 从 3 降至 2
+    """
+
+    def test_partial_sharing_reduces_unique_sizes_to_two(self):
+        """A+B 可共享 6×11，C 无法整除，unique sizes 3→2，total_prints 3→2"""
+        from opengrid.cli.commands.split import calculate_single, calculate_total_prints
+
+        result_A = calculate_single(504, 308, copies=1)
+        result_B = calculate_single(336, 308, copies=1)
+        result_C = calculate_single(392, 308, copies=1)
+        batch_results = [result_A, result_B, result_C]
+
+        opt = optimize_batch_global(batch_results, inventory=None)
+
+        assert opt['improved'] is True, "A 切换为 6×11 可减少 plates，应标记为 improved"
+        assert opt['initial_prints'] == 3, f"优化前应为 3 plates，实际: {opt['initial_prints']}"
+        assert opt['total_prints'] == 2, f"优化后应为 2 plates，实际: {opt['total_prints']}"
+
+        scheme_A_tiles = set(opt['schemes'][0]['tiles'])
+        assert (6, 11) in scheme_A_tiles, f"A 应切换为 6×11，实际: {scheme_A_tiles}"
+        assert (9, 11) not in scheme_A_tiles, f"A 不应保留 9×11，实际: {scheme_A_tiles}"
+
+        scheme_C_tiles = set(opt['schemes'][2]['tiles'])
+        assert (7, 11) in scheme_C_tiles, f"C 应保持 7×11，实际: {scheme_C_tiles}"
+        assert (6, 11) not in scheme_C_tiles, f"C 不应被切换为 6×11，实际: {scheme_C_tiles}"
+
+        _, details = calculate_total_prints(batch_results, opt['schemes'])
+        assert len(details) == 2, f"应有 2 种独立 tile，实际: {list(details.keys())}"
+        assert (6, 11) in details, "6×11 应在合并结果中"
+        assert (7, 11) in details, "7×11 应在合并结果中"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

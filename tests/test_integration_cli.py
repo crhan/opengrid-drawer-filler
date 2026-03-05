@@ -122,7 +122,7 @@ def get_print_plan(width, depth, inv_file, tmp_path, batch_mode=None, config_fil
         # copies > 1 时用 WxDxN 格式，CLI 通过 parse_dimensions 解析第三个数为 copies
         dim_str = f'{width}x{depth}x{copies}' if copies > 1 else f'{width}x{depth}'
         cmd.append(dim_str)
-    cmd.extend(['-i', inv_file, '--print-json'])
+    cmd.extend(['-i', inv_file, '-j'])
 
     result = run_cmd(cmd, cwd=SCRIPTS_DIR)
     if result.returncode != 0:
@@ -1218,6 +1218,167 @@ class TestScenario12b:
         assert time_12b > time_12a + 60, (
             f"时间应比 12a 多 60min 以上: {time_12b} > {time_12a} + 60"
         )
+
+
+class TestScenario14a:
+    """场景 14a：多抽屉自然共享 tile，stacks 合计恰好 = 47（不换盘）
+
+    批量模式 max_stacks = int(325 // 6.8) = 47（与单抽屉 45 不同）
+    A=504×308:23 + B=252×308:1 → 自然共享 9×11：46+1=47 stacks → 1 plate
+    与场景 14b 仅差 B 的 copies=1 vs copies=2
+    """
+
+    def test_natural_shared_tile_exactly_fills_one_plate(self, tmp_path):
+        """多抽屉自然共享 9×11，总 stacks=47 恰好 1 plate，无换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        create_empty_inventory(str(inv_file), tmp_path)
+
+        batch_mode = "504x308:23 252x308:1"
+        plan = get_print_plan(0, 0, str(inv_file), tmp_path, batch_mode=batch_mode)
+
+        tiles = plan.get('tiles', [])
+        nine_eleven = next(
+            (t for t in tiles if t['width'] == 9 and t['height'] == 11), None
+        )
+        total_prints = plan.get('stats', {}).get('total_prints', -1)
+
+        assert nine_eleven is not None, f"应有 9×11 tile，实际 tiles: {tiles}"
+        assert nine_eleven['stacks'] == 47, (
+            f"9×11 总 stacks 应为 47(23×2+1×1)，实际: {nine_eleven['stacks']}"
+        )
+        assert total_prints == 1, f"47 stacks 恰好 1 plate，实际: {total_prints}"
+
+
+class TestScenario14b:
+    """场景 14b：多抽屉自然共享，stacks 合计 = 48（触发换盘）
+
+    A=504×308:23 + B=252×308:2 → 9×11: 46+2=48 stacks > max_stacks=47 → 2 plates
+    仅比场景 14a 的 B copies 多 1
+    """
+
+    def test_one_extra_stack_triggers_second_plate(self, tmp_path):
+        """48 stacks 超出 47 上限，触发 2 plates 与换盘惩罚"""
+        inv_file = tmp_path / "inventory.json"
+        create_empty_inventory(str(inv_file), tmp_path)
+
+        batch_mode = "504x308:23 252x308:2"
+        plan = get_print_plan(0, 0, str(inv_file), tmp_path, batch_mode=batch_mode)
+
+        tiles = plan.get('tiles', [])
+        nine_eleven = next(
+            (t for t in tiles if t['width'] == 9 and t['height'] == 11), None
+        )
+        total_prints = plan.get('stats', {}).get('total_prints', -1)
+
+        assert nine_eleven is not None, f"应有 9×11 tile，实际 tiles: {tiles}"
+        assert nine_eleven['stacks'] == 48, (
+            f"9×11 总 stacks 应为 48(23×2+2×1)，实际: {nine_eleven['stacks']}"
+        )
+        assert total_prints == 2, f"48 stacks 需要 2 plates，实际: {total_prints}"
+
+
+class TestScenario14c:
+    """场景 14c：两种独立 tile，其中一种溢出，plates 独立累加
+
+    A=504×308:20 → {9×11:2}，20×2=40 stacks → ceil(40/45)=1 plate
+    B=336×308:25 → {6×11:2}，25×2=50 stacks → ceil(50/45)=2 plates
+    total_prints = 1+2 = 3
+    """
+
+    def test_two_independent_tile_types_plates_sum_correctly(self, tmp_path):
+        """两种独立 tile 各自计算 plates，溢出的那种贡献 2 plates，合计 3"""
+        inv_file = tmp_path / "inventory.json"
+        create_empty_inventory(str(inv_file), tmp_path)
+
+        batch_mode = "504x308:20 336x308:25"
+        plan = get_print_plan(0, 0, str(inv_file), tmp_path, batch_mode=batch_mode)
+
+        tiles = plan.get('tiles', [])
+        nine_eleven = next(
+            (t for t in tiles if t['width'] == 9 and t['height'] == 11), None
+        )
+        six_eleven = next(
+            (t for t in tiles if t['width'] == 6 and t['height'] == 11), None
+        )
+        total_prints = plan.get('stats', {}).get('total_prints', -1)
+
+        assert len(tiles) == 2, f"应有 2 种独立 tile，实际: {[(t['width'], t['height']) for t in tiles]}"
+        assert nine_eleven is not None, "应有 9×11 tile"
+        assert nine_eleven['stacks'] == 40, (
+            f"9×11 应有 40 stacks(20×2)，实际: {nine_eleven['stacks']}"
+        )
+        assert six_eleven is not None, "应有 6×11 tile"
+        assert six_eleven['stacks'] == 50, (
+            f"6×11 应有 50 stacks(25×2)，实际: {six_eleven['stacks']}"
+        )
+        assert total_prints == 3, f"1+2=3 plates，实际: {total_prints}"
+
+
+class TestNoInventoryFlag:
+    """测试 --no-inventory 标志禁用自动库存加载"""
+
+    def test_no_inventory_ignores_config_inventory(self, tmp_path):
+        """--no-inventory 时，即使 config 有 inventory_path 且文件存在，也不使用库存"""
+        inv_file = tmp_path / "inventory.json"
+        create_empty_inventory(str(inv_file), tmp_path)
+
+        # 添加库存：168x252 (6x9格子) 的抽屉，完整匹配需要 6x9 x2
+        add_inventory(str(inv_file), {'6x9': 2}, tmp_path)
+
+        config_file = tmp_path / "config.yaml"
+
+        # 不带 --no-inventory：应使用库存，from_inventory 不为空
+        cmd_with = [
+            sys.executable, 'opengrid.py',
+            '-c', str(config_file),
+            'split', '168x252',
+            '-j'
+        ]
+        result_with = run_cmd(cmd_with, cwd=SCRIPTS_DIR)
+        assert result_with.returncode == 0
+        plan_with = json.loads(result_with.stdout)
+        from_inv_with = plan_with.get('inventory_usage', {}).get('from_inventory', {})
+
+        # 带 --no-inventory：应忽略库存，from_inventory 为空
+        cmd_without = [
+            sys.executable, 'opengrid.py',
+            '-c', str(config_file),
+            'split', '168x252',
+            '--no-inventory',
+            '-j'
+        ]
+        result_without = run_cmd(cmd_without, cwd=SCRIPTS_DIR)
+        assert result_without.returncode == 0
+        plan_without = json.loads(result_without.stdout)
+        from_inv_without = plan_without.get('inventory_usage', {}).get('from_inventory', {})
+
+        assert from_inv_with, "不加 --no-inventory 时应使用库存"
+        assert not from_inv_without, (
+            f"--no-inventory 时 from_inventory 应为空，实际: {from_inv_without}"
+        )
+
+    def test_no_inventory_with_explicit_i_flag_is_error(self, tmp_path):
+        """同时传 -i 和 --no-inventory 时，-i 优先（显式指定胜过禁用）"""
+        inv_file = tmp_path / "inventory.json"
+        create_empty_inventory(str(inv_file), tmp_path)
+        add_inventory(str(inv_file), {'6x9': 2}, tmp_path)
+
+        config_file = tmp_path / "config.yaml"
+
+        # -i 和 --no-inventory 同时传：-i 优先，仍使用指定的库存文件
+        cmd = [
+            sys.executable, 'opengrid.py',
+            '-c', str(config_file),
+            'split', '168x252',
+            '-i', str(inv_file),
+            '--no-inventory',
+            '-j'
+        ]
+        result = run_cmd(cmd, cwd=SCRIPTS_DIR)
+        assert result.returncode == 0
+        plan = json.loads(result.stdout)
+        from_inv = plan.get('inventory_usage', {}).get('from_inventory', {})
+        assert from_inv, "-i 显式指定库存时即使有 --no-inventory 也应使用库存"
 
 
 if __name__ == "__main__":
