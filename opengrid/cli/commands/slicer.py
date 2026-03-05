@@ -1,4 +1,5 @@
 """slicer 子命令实现"""
+import sys
 from opengrid.stl import generator as stl_generator
 
 
@@ -12,12 +13,12 @@ def add_parser(subparsers):
     gen_p.add_argument('-f', '--force', action='store_true', help='强制重新生成')
 
     # slice
-    slice_p = sub.add_parser('slice', help='切片 STL')
+    slice_p = sub.add_parser('slice', help='[未实现] 切片 STL')
     slice_p.add_argument('file', help='STL 文件')
     slice_p.add_argument('--slicer', default='bambu', choices=['bambu', 'orca'], help='切片器')
 
     # open
-    open_p = sub.add_parser('open', help='在切片器中打开')
+    open_p = sub.add_parser('open', help='[未实现] 在切片器中打开')
     open_p.add_argument('file', help='STL 文件')
     open_p.add_argument('--slicer', default='bambu', choices=['bambu', 'orca'], help='切片器')
 
@@ -33,8 +34,8 @@ def handle_slicer(args):
         # 解析尺寸
         dims = args.dimensions.split('x')
         if len(dims) != 3:
-            print("错误: 尺寸格式应为 WxHxS")
-            return
+            print("错误: 尺寸格式应为 WxHxS", file=sys.stderr)
+            sys.exit(1)
         w, h, s = map(int, dims)
 
         # 生成 STL

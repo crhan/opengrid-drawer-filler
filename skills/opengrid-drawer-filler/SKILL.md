@@ -98,7 +98,7 @@ uv run $PLUGIN_ROOT/scripts/opengrid.py -c /path/to/opengrid_config.yaml status
 ========== openGrid 状态 ==========
 
 ╔════════════════════════════════════════╗
-║  📦 库存状态                          ║
+║  库存状态                              ║
 ╚════════════════════════════════════════╝
 
 ┌──────────┬──────────┐
@@ -110,9 +110,9 @@ uv run $PLUGIN_ROOT/scripts/opengrid.py -c /path/to/opengrid_config.yaml status
 
 共 **2 种尺寸**, **14 stack** (可用)
 
-🖨️ 打印机: P1P (256×256×256mm)
-📁 输出目录: ~/3D打印/opengrid/
-🔧 瓦片类型: Full | 堆叠: Ironing
+打印机: P1P (256x256x256mm)
+输出目录: ~/3D打印/opengrid/
+瓦片类型: Full | 堆叠: Ironing
 ```
 
 如果当前目录没有 `opengrid_config.yaml`，需要先配置项目。
@@ -130,10 +130,10 @@ uv run $PLUGIN_ROOT/scripts/opengrid.py -c /path/to/opengrid_config.yaml status
 uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory list
 
 # 添加库存 (格式: 宽x高:数量)
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory add 8x8:5 6x7:3 "入库原因"
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory add 8x8:5 6x7:3 --reason "入库原因"
 
 # 扣减库存
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory deduct 8x8:2 "扣减原因"
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory deduct 8x8:2 --reason "扣减原因"
 
 # 撤销上次操作
 uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory undo
@@ -210,15 +210,15 @@ uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i
 
 将脚本输出展示给用户，询问选择。可选：使用 `present` 命令生成 HTML 对比页面。
 
-#### 使用 present 命令（可选）
+#### 使用 compare 命令（可选）
 
 ```bash
 # 先生成两个方案的 JSON
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 325x460 -j > scheme_no_inv.json
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i $PROJECT_ROOT/inventory.json split 325x460 -j > scheme_with_inv.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 325x460 --json > scheme_no_inv.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i $PROJECT_ROOT/inventory.json split 325x460 --json > scheme_with_inv.json
 
-# 生成 HTML 对比页面
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml present scheme_no_inv.json scheme_with_inv.json -o comparison.html
+# 生成 HTML 对比页面并打开
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml compare scheme_no_inv.json scheme_with_inv.json -o comparison.html
 ```
 
 生成的 HTML 页面包含：
@@ -310,22 +310,17 @@ uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml pr
 
 #### 5.1 获取方案 JSON
 
-获取方案的 JSON 输出：
-
-**方式一：输出到标准输出（用于管道重定向）**
+获取方案的 JSON 输出（输出到 stdout，用于管道重定向）：
 
 ```bash
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365 --print-json > scheme.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365 --json > scheme.json
 ```
 
-**方式二：自动保存到临时目录**
+或直接保存到指定文件：
 
 ```bash
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365 -j
-# 输出: 方案已保存: /tmp/opengrid/scheme_1234567890.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 265x365 -o scheme.json
 ```
-
-脚本会自动将 JSON 保存到临时目录 `/tmp/opengrid/`，并输出文件路径。
 
 #### 5.2 提取需要打印的瓦片
 
@@ -413,13 +408,13 @@ uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml -i
 uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml slicer generate 7x5x2
 
 # 生成方案 JSON（输出到 stdout，用于管道重定向）
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 485 425 --print-json > scheme.json
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 485 425 --json > scheme.json
 
-# 或者使用自动保存到临时目录
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 485 425 -j
+# 或者保存到指定文件
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml split 485 425 -o scheme.json
 
-# 生成 HTML 对比并打开（使用临时目录中的 JSON 文件）
-uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml compare /tmp/opengrid/scheme_xxx.json /tmp/opengrid/scheme_yyy.json -o comparison.html
+# 生成 HTML 对比并打开
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml compare scheme_no_inv.json scheme_with_inv.json -o comparison.html
 ```
 
 详细命令、配置说明、算法规则等请参考以下文档：

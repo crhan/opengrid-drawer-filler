@@ -26,7 +26,7 @@ class TestInventoryCLIScope:
         # 添加库存
         result = subprocess.run(
             [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
-             "inventory", "add", "8x8:5", "test reason"],
+             "inventory", "add", "8x8:5", "--reason", "test reason"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -47,7 +47,7 @@ class TestInventoryCLIScope:
         # 添加库存
         subprocess.run(
             [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
-             "inventory", "add", "7x7:3", "test log"],
+             "inventory", "add", "7x7:3", "--reason", "test log"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -73,7 +73,7 @@ class TestInventoryCLIScope:
         # 扣减库存
         result = subprocess.run(
             [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
-             "inventory", "deduct", "10x5:3", "test deduct"],
+             "inventory", "deduct", "10x5:3", "--reason", "test deduct"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -97,7 +97,7 @@ class TestInventoryCLIScope:
         # 添加库存
         subprocess.run(
             [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
-             "inventory", "add", "5x5:2", "undo test"],
+             "inventory", "add", "5x5:2", "--reason", "undo test"],
              capture_output=True,
             text=True,
             cwd=tmp_path

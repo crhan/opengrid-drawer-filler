@@ -71,7 +71,7 @@ class TestInventoryCLIIntegration:
         """测试 add 命令 - 添加新物品"""
         # 执行添加
         result = run_inventory_cli(
-            ["add", "8x8:5", "6x7:3", "测试入库"],
+            ["add", "8x8:5", "6x7:3", "--reason", "测试入库"],
             tmp_project_dir
         )
 
@@ -92,11 +92,11 @@ class TestInventoryCLIIntegration:
     def test_add_to_existing_inventory(self, tmp_project_dir):
         """测试 add 命令 - 追加到现有库存"""
         # 先添加一些库存
-        run_inventory_cli(["add", "8x8:5", "初始入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:5", "--reason", "初始入库"], tmp_project_dir)
 
         # 再添加更多
         result = run_inventory_cli(
-            ["add", "8x8:3", "6x7:2", "追加入库"],
+            ["add", "8x8:3", "6x7:2", "--reason", "追加入库"],
             tmp_project_dir
         )
 
@@ -112,11 +112,11 @@ class TestInventoryCLIIntegration:
     def test_deduct_items(self, tmp_project_dir):
         """测试 deduct 命令 - 扣减库存"""
         # 先添加库存
-        run_inventory_cli(["add", "8x8:10", "初始入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:10", "--reason", "初始入库"], tmp_project_dir)
 
         # 扣减
         result = run_inventory_cli(
-            ["deduct", "8x8:4", "打印使用"],
+            ["deduct", "8x8:4", "--reason", "打印使用"],
             tmp_project_dir
         )
 
@@ -136,11 +136,11 @@ class TestInventoryCLIIntegration:
     def test_deduct_exact_amount(self, tmp_project_dir):
         """测试 deduct 命令 - 扣减到零"""
         # 先添加库存
-        run_inventory_cli(["add", "8x8:5", "初始入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:5", "--reason", "初始入库"], tmp_project_dir)
 
         # 扣减全部
         result = run_inventory_cli(
-            ["deduct", "8x8:5", "全部使用"],
+            ["deduct", "8x8:5", "--reason", "全部使用"],
             tmp_project_dir
         )
 
@@ -154,11 +154,11 @@ class TestInventoryCLIIntegration:
     def test_deduct_insufficient_raises_error(self, tmp_project_dir):
         """测试 deduct 命令 - 库存不足应报错"""
         # 先添加少量库存
-        run_inventory_cli(["add", "8x8:2", "初始入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:2", "--reason", "初始入库"], tmp_project_dir)
 
         # 尝试扣减超过库存的数量
         result = run_inventory_cli(
-            ["deduct", "8x8:5", "超出库存"],
+            ["deduct", "8x8:5", "--reason", "超出库存"],
             tmp_project_dir
         )
 
@@ -169,7 +169,7 @@ class TestInventoryCLIIntegration:
     def test_undo_add_operation(self, tmp_project_dir):
         """测试 undo 命令 - 撤销添加操作"""
         # 添加库存
-        run_inventory_cli(["add", "8x8:5", "测试入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:5", "--reason", "测试入库"], tmp_project_dir)
 
         # 验证添加成功
         data = read_inventory_json(tmp_project_dir)
@@ -193,10 +193,10 @@ class TestInventoryCLIIntegration:
     def test_undo_deduct_operation(self, tmp_project_dir):
         """测试 undo 命令 - 撤销扣减操作"""
         # 先添加库存
-        run_inventory_cli(["add", "8x8:10", "初始入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:10", "--reason", "初始入库"], tmp_project_dir)
 
         # 扣减库存
-        run_inventory_cli(["deduct", "8x8:4", "测试扣减"], tmp_project_dir)
+        run_inventory_cli(["deduct", "8x8:4", "--reason", "测试扣减"], tmp_project_dir)
 
         # 验证扣减后库存
         data = read_inventory_json(tmp_project_dir)
@@ -224,16 +224,16 @@ class TestInventoryCLIIntegration:
     def test_multiple_operations_sequence(self, tmp_project_dir):
         """测试多步操作序列"""
         # 1. 添加库存
-        run_inventory_cli(["add", "8x8:10", "6x7:5", "初始入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:10", "6x7:5", "--reason", "初始入库"], tmp_project_dir)
 
         # 2. 添加更多
-        run_inventory_cli(["add", "8x8:2", "追加入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:2", "--reason", "追加入库"], tmp_project_dir)
 
         # 3. 扣减
-        run_inventory_cli(["deduct", "8x8:5", "打印使用"], tmp_project_dir)
+        run_inventory_cli(["deduct", "8x8:5", "--reason", "打印使用"], tmp_project_dir)
 
         # 4. 再次扣减
-        run_inventory_cli(["deduct", "6x7:3", "用于测试"], tmp_project_dir)
+        run_inventory_cli(["deduct", "6x7:3", "--reason", "用于测试"], tmp_project_dir)
 
         # 检查最终状态
         data = read_inventory_json(tmp_project_dir)
@@ -249,7 +249,7 @@ class TestInventoryCLIIntegration:
     def test_list_with_items(self, tmp_project_dir):
         """测试 list 命令 - 有库存时"""
         # 添加库存
-        run_inventory_cli(["add", "8x8:5", "6x7:3", "测试入库"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:5", "6x7:3", "--reason", "测试入库"], tmp_project_dir)
 
         # 列出库存
         result = run_inventory_cli(["list"], tmp_project_dir)
@@ -276,7 +276,7 @@ class TestInventoryCLIIntegration:
     def test_reason_is_optional_for_deduct(self, tmp_project_dir):
         """测试 deduct 命令 - reason 是可选的"""
         # 先添加库存
-        run_inventory_cli(["add", "8x8:5", "初始"], tmp_project_dir)
+        run_inventory_cli(["add", "8x8:5", "--reason", "初始"], tmp_project_dir)
 
         # 不提供 reason 扣减
         result = run_inventory_cli(["deduct", "8x8:2"], tmp_project_dir)

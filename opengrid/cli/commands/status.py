@@ -55,9 +55,9 @@ def _print_inventory(inv):
 
 def _print_config(model, bed_x, bed_y, max_z, output_dir, tile_type, stacking):
     """打印配置信息"""
-    print(f"🖨️  打印机: {model.upper()} ({bed_x}×{bed_y}×{max_z}mm)")
-    print(f"📁 输出目录: {output_dir}")
-    print(f"🔧 瓦片类型: {tile_type} | 堆叠: {stacking}")
+    print(f"打印机: {model.upper()} ({bed_x}x{bed_y}x{max_z}mm)")
+    print(f"输出目录: {output_dir}")
+    print(f"瓦片类型: {tile_type} | 堆叠: {stacking}")
 
 
 __all__ = ['add_parser']

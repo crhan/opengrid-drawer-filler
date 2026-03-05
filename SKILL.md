@@ -67,26 +67,26 @@ compatibility: 需要 Python 3.12+, OpenSCAD, Python 依赖 (pyyaml, Pillow, pyt
 
 ```bash
 # 变量定义
-SKILL_DIR=/Users/ruohanc/.claude/skills/opengrid-drawer-filler
+PLUGIN_ROOT=/Users/ruohanc/Documents/projects/opengrid_plugin
+PROJECT_ROOT=$(pwd)  # 有 opengrid_config.yaml 的目录
 
-# 查看当前库存（使用项目级配置）
-cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project list
+# 查看当前库存
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory list
 
 # 添加库存 (格式: 宽x高:数量)
-cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project add 8x8:5 6x7:3 "入库原因：购买新材料"
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory add 8x8:5 6x7:3 --reason "入库原因：购买新材料"
 
 # 扣减库存
-cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project deduct 8x8:2 "扣减原因：打印使用"
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory deduct 8x8:2 --reason "扣减原因：打印使用"
 
 # 撤销上次操作
-cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inventory.py -l project undo
+uv run $PLUGIN_ROOT/scripts/opengrid.py -c $PROJECT_ROOT/opengrid_config.yaml inventory undo
 ```
 
 **重要**：执行 inventory 命令时必须：
 
-1. **切换到项目目录**（有 `opengrid_config.yaml` 的目录）
-2. **使用 `-l project` 参数**（或确保当前目录有 `opengrid_config.yaml`）
-3. **使用绝对路径**调用 `.venv` 和 `scripts/inventory.py`
+1. **指定配置文件路径**（使用 `-c` 参数）
+2. 使用绝对路径或相对于当前目录的路径
 
 如果不在项目目录下，会使用全局配置，无法找到项目库存。
 
@@ -117,18 +117,18 @@ cd /path/to/your/project && $SKILL_DIR/.venv/bin/python $SKILL_DIR/scripts/inven
 
 ```bash
 # 方案 A：不使用库存 (获取 JSON)
-python3 scripts/opengrid.py split 325x460 -j > no_inv.json
+python3 scripts/opengrid.py split 325x460 --json > no_inv.json
 
 # 方案 B：使用库存 (获取 JSON)
-python3 scripts/opengrid.py split 325x460 -i inventory.json -j > with_inv.json
+python3 scripts/opengrid.py split 325x460 -i inventory.json --json > with_inv.json
 ```
 
 ### Step 4: 方案对比与决策
 
-使用 `present` 命令生成可视化的**网格填充蓝图**进行对比决策：
+使用 `compare` 命令生成可视化的**网格填充蓝图**进行对比决策：
 
 ```bash
-python3 scripts/opengrid.py present no_inv.json with_inv.json -o comparison.html
+python3 scripts/opengrid.py compare no_inv.json with_inv.json -o comparison.html
 ```
 
 **对比报告 (`comparison.html`) 特点**：
@@ -162,7 +162,7 @@ python3 scripts/opengrid.py split 325x460 -i inventory.json -P ./projects/my_dra
 1. 根据施工单的“打印任务”进行切片和打印。
 2. 施工完成后，手动通过 CLI 更新库存：
 ```bash
-python3 scripts/opengrid.py inventory deduct 8x8:2 "完成 325x460 项目施工"
+python3 scripts/opengrid.py inventory deduct 8x8:2 --reason "完成 325x460 项目施工"
 ```
 
 ## 快速命令

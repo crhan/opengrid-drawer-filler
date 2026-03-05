@@ -1,4 +1,5 @@
 """project 子命令实现"""
+import sys
 from opengrid.project.manager import ProjectManager
 from opengrid.cli.utils import parse_dimensions
 
@@ -13,7 +14,7 @@ def add_parser(subparsers):
     # create
     create_p = sub.add_parser('create', help='创建项目')
     create_p.add_argument('name', help='项目名称')
-    create_p.add_argument('dimensions', help='尺寸')
+    create_p.add_argument('dimensions', help='抽屉尺寸，如 265x365 或 265x365:2（份数）')
 
     # show
     show_p = sub.add_parser('show', help='显示项目')
@@ -58,9 +59,9 @@ def handle_project(args):
         # 解析尺寸
         dims = parse_dimensions([args.dimensions])
         if not dims:
-            print(f"错误: 无效的尺寸格式 '{args.dimensions}'")
-            print("支持的格式: 265x365, 265x365:2, 265 365")
-            return
+            print(f"错误: 无效的尺寸格式 '{args.dimensions}'", file=sys.stderr)
+            print("支持的格式: 265x365, 265x365:2, 265 365", file=sys.stderr)
+            sys.exit(1)
 
         width, depth, copies = dims[0]
 
@@ -81,8 +82,8 @@ def handle_project(args):
     elif cmd == 'show':
         project_path = mgr.get_project_path(args.name)
         if not project_path:
-            print(f"错误: 项目 '{args.name}' 不存在")
-            return
+            print(f"错误: 项目 '{args.name}' 不存在", file=sys.stderr)
+            sys.exit(1)
 
         import yaml
         config_path = project_path / "project.yaml"

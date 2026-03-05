@@ -10,12 +10,14 @@ def add_parser(subparsers):
     parser.add_argument('scheme_a', help='方案A的JSON文件路径（无库存）')
     parser.add_argument('scheme_b', help='方案B的JSON文件路径（有库存）')
     parser.add_argument('-o', '--output', help='输出文件路径（默认 stdout）')
+    parser.add_argument('-f', '--force', action='store_true', help='强制覆盖已存在的文件')
     parser.set_defaults(func=handle_present)
     return parser
 
 
 def handle_present(args):
     """处理 present 命令"""
+    print("警告: present 命令已废弃，请改用 compare 命令", file=sys.stderr)
     # 读取方案A
     scheme_a_path = Path(args.scheme_a)
     if not scheme_a_path.exists():
@@ -44,6 +46,9 @@ def handle_present(args):
     # 输出
     if args.output:
         output_path = Path(args.output)
+        if output_path.exists() and not args.force:
+            print(f"错误: 文件已存在: {output_path}，使用 --force 覆盖", file=sys.stderr)
+            sys.exit(1)
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html)
         print(f"已生成: {output_path.absolute()}")
