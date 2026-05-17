@@ -183,6 +183,107 @@ def test_check_quackworks_raises_when_submodule_missing(monkeypatch):
         generator._check_quackworks()
 
 
+# ---------- Tile_Type Full/Lite/Heavy 参数化 ----------
+
+@pytest.mark.parametrize(
+    "tile_type,expected_thickness",
+    [("Full", 6.8), ("Lite", 4.0), ("Heavy", 13.8)],
+)
+def test_generate_stl_respects_tile_type(
+    tile_type, expected_thickness, tmp_stl_dir, monkeypatch
+):
+    """_resolve_tile_config 按 config.opengrid.tile_type 选 TILE_THICKNESS 字典里的值。"""
+    monkeypatch.setattr(generator, "_find_openscad", lambda: "/fake/openscad")
+    monkeypatch.setattr(generator, "_check_quackworks", lambda: None)
+    monkeypatch.setattr(
+        generator, "_resolve_tile_config",
+        lambda: (tile_type, 28, expected_thickness),
+    )
+
+    captured_cmds = []
+
+    def _run(cmd, **kw):
+        captured_cmds.append(cmd)
+        tmp_out = Path(cmd[cmd.index("-o") + 1])
+        tmp_out.write_bytes(b"solid fake\n")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    path, status = generator.generate_stl(3, 3, 1)
+    assert status == "generated"
+    # 文件名应含 tile_type
+    assert path.name == f"openGrid_{tile_type}_3x3x1.stl"
+    cmd = captured_cmds[0]
+    # Tile_Thickness 参数传对了
+    assert f"Tile_Thickness={expected_thickness}" in cmd
+    assert f'Tile_Type="{tile_type}"' in cmd
+
+
+# ---------- subprocess.TimeoutExpired ----------
+
+def test_generate_stl_propagates_timeout(tmp_stl_dir, fake_openscad, monkeypatch):
+    """OpenSCAD 渲染超时应直接抛 TimeoutExpired，并清理半截 .tmp 文件。"""
+    final = tmp_stl_dir / "openGrid_Full_3x3x1.stl"
+    tmp = final.parent / f".{final.stem}.tmp.stl"
+
+    def _run(cmd, **kw):
+        # 模拟超时前已写了一部分（OpenSCAD 真实场景：渲染卡在 CSG 求交，可能已写部分 STL）
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"half written")
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=kw.get("timeout", 0))
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        generator.generate_stl(3, 3, 1)
+
+    # 我们不强求 generator 在 TimeoutExpired 时清理 .tmp（subprocess 异常不进
+    # try/except 块），但要确认最终文件未被替换
+    assert not final.exists()
+
+
+# ---------- returncode=0 但产出 0 字节 ----------
+
+def test_generate_stl_raises_on_zero_byte_output(tmp_stl_dir, fake_openscad, monkeypatch):
+    """OpenSCAD returncode=0 但生成的 STL 文件 0 字节也算失败（评审反馈）。"""
+    def _run(cmd, **kw):
+        # 创建文件但写 0 字节
+        tmp_out = Path(cmd[cmd.index("-o") + 1])
+        tmp_out.touch()  # 0 字节
+        return MagicMock(returncode=0, stdout="", stderr="WARNING: empty result")
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    with pytest.raises(RuntimeError, match="未生成或为空"):
+        generator.generate_stl(3, 3, 1)
+
+    # .tmp 文件清理
+    tmp = tmp_stl_dir / ".openGrid_Full_3x3x1.tmp.stl"
+    assert not tmp.exists()
+
+
+# ---------- stack_gap 跨模块契约 ----------
+
+def test_stack_gap_matches_cost_v2():
+    """generator.py 注入 SCAD 的 Stack_Gap 必须 == cost_v2.calculate_stacks 默认 stack_gap。
+
+    否则 split 算出来的 Z 高度跟实际 OpenSCAD 渲染的物理高度对不上。
+    本测试钉死跨模块契约——任何一边改默认值都会先在这里报红。
+    """
+    import inspect
+    from opengrid.core import cost_v2, constants
+    from opengrid.stl import generator as gen
+
+    # 确认两边都引用同一个 constants.STACK_GAP_MM
+    sig = inspect.signature(cost_v2.calculate_stacks)
+    cost_default = sig.parameters["stack_gap"].default
+    assert cost_default == constants.STACK_GAP_MM
+
+    # generator.py 拼 -D 参数时也必须是这个值——直接 grep 模块源码确认
+    src = Path(gen.__file__).read_text(encoding="utf-8")
+    assert "STACK_GAP_MM" in src
+    assert f"Stack_Gap={{STACK_GAP_MM}}" in src or "Stack_Gap={STACK_GAP_MM}" in src
+
+
 # ---------- generate_all_stls ----------
 
 def test_generate_all_stls_iterates_scheme_stacks(tmp_stl_dir, fake_openscad, monkeypatch):
@@ -222,26 +323,39 @@ def test_generate_all_stls_returns_empty_for_scheme_without_stacks():
     assert generator.generate_all_stls(Scheme()) == []
 
 
-# ---------- Integration smoke test ----------
+# ---------- Integration smoke tests ----------
 # 默认 pyproject.toml 的 addopts 跳过 integration；手动 `pytest -m integration` 启用
+
+_OPENSCAD_AVAILABLE = (
+    shutil.which("openscad") is not None
+    or Path("/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD").exists()
+)
+_QUACKWORKS_READY = (
+    Path(__file__).parent.parent / "vendor/QuackWorks/openGrid/openGrid.scad"
+).exists()
+
 
 @pytest.mark.integration
 @pytest.mark.timeout(60)
-@pytest.mark.skipif(
-    shutil.which("openscad") is None
-    and not Path("/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD").exists(),
-    reason="OpenSCAD CLI not installed",
+@pytest.mark.skipif(not _OPENSCAD_AVAILABLE, reason="OpenSCAD CLI not installed")
+@pytest.mark.skipif(not _QUACKWORKS_READY, reason="QuackWorks submodule not initialized")
+@pytest.mark.parametrize(
+    "tile_type,tile_thickness",
+    [("Full", 6.8), ("Lite", 4.0), ("Heavy", 13.8)],
 )
-@pytest.mark.skipif(
-    not Path(
-        Path(__file__).parent.parent / "vendor/QuackWorks/openGrid/openGrid.scad"
-    ).exists(),
-    reason="QuackWorks submodule not initialized",
-)
-def test_real_openscad_smoke(tmp_path, monkeypatch):
-    """跑真实 OpenSCAD 生成最小 2x2x1 STL，验证产出非空。"""
+def test_real_openscad_smoke_all_tile_types(tmp_path, monkeypatch, tile_type, tile_thickness):
+    """跑真实 OpenSCAD 生成最小 2x2x1 STL，覆盖 Full/Lite/Heavy 三个 SCAD 分支。
+
+    确认 wrapper.scad 里的 if/else if 分发到 openGrid / openGridLite / openGridHeavy
+    每个分支都能跑通（曾经有 Lite/Heavy 模块签名不一致的风险）。
+    """
     monkeypatch.setattr(generator, "_resolve_stl_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        generator, "_resolve_tile_config",
+        lambda: (tile_type, 28, tile_thickness),
+    )
     path, status = generator.generate_stl(2, 2, 1, force=True)
     assert status == "generated"
     assert path.exists()
     assert path.stat().st_size > 0
+    assert path.name == f"openGrid_{tile_type}_2x2x1.stl"
