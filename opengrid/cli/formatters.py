@@ -93,6 +93,13 @@ def output_json(width: int, depth: int, result: Any, copies: int = 1, inventory:
             'filament_support_g': result.cost.total_filament_g * 0.3,  # 估算
         }
 
+        # slicer 命令串：每个 Stack 直接映射为一条 `slicer generate WxHxS`。
+        # 让 Agent 跳过 stack 推导逻辑，直接 exec。
+        slicer_commands = [
+            f"slicer generate {stack.tile.w}x{stack.tile.h}x{stack.count}"
+            for stack in result.stacks
+        ]
+
         data = {
             'dimensions': {'width': width, 'depth': depth, 'copies': copies},
             'grid': result.grid,
@@ -111,7 +118,8 @@ def output_json(width: int, depth: int, result: Any, copies: int = 1, inventory:
                 'total_filament_g': result.cost.total_filament_g,
                 'plate_count': result.cost.plate_count,
                 'swap_penalty_total': result.cost.swap_penalty_total,
-            }
+            },
+            'slicer_commands': slicer_commands,
         }
 
         # 如果有库存信息
