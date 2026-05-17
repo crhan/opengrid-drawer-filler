@@ -1,0 +1,24 @@
+# openGrid 抽屉铺满 - 项目配置
+# 修改后请保持 initialized: true，否则脚本会拒绝运行
+
+initialized: true
+
+# 打印机型号
+# 可选预设：a1_mini, a1, p1p, p1s, x1c, x1e, h2d
+# 自定义床位见 references/CONFIG.md
+printer:
+  model: p1p
+
+# STL 输出目录（支持 ~ 展开）
+output:
+  stl_dir: ~/3D打印/opengrid/
+
+# 库存文件位置（相对仓库根）
+inventory_path: ./inventory.json
+
+# openGrid 瓦片配置
+opengrid:
+  tile_type: Full           # Full / Lite / Heavy
+  stacking_method: Ironing  # Ironing / Interface
+  interface_separation: 0.2 # mm
+  tile_size: 28             # 网格单元大小 mm

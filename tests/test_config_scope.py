@@ -14,9 +14,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'opengrid'))
 class TestConfigScope:
     """测试配置 scope 功能"""
 
-    def test_config_scope_detection(self):
+    def test_config_scope_detection(self, tmp_path, monkeypatch):
         """测试 scope 检测功能（仅支持项目级）"""
-        from opengrid.config import get_config_path
+        from opengrid.config import get_config_path, set_cli_config_path
+
+        # 切到一个干净的临时目录，确保没有 opengrid_config.yaml
+        monkeypatch.chdir(tmp_path)
+        set_cli_config_path(None)  # 清掉测试间残留的 CLI 路径
 
         # 由于 config.py 已简化，不再支持全局配置
         # 只测试 get_config_path 在无配置文件时抛出异常
