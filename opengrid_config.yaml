@@ -7,7 +7,7 @@ initialized: true
 # 可选预设：a1_mini, a1, p1p, p1s, x1c, x1e, h2d
 # 自定义床位见 references/CONFIG.md
 printer:
-  model: p1p
+  model: h2d
 
 # STL 输出目录（支持 ~ 展开）
 output:

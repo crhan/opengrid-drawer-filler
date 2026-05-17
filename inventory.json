@@ -1,4 +1,35 @@
 {
-  "inventory": {},
-  "log": []
+  "inventory": {
+    "7x6": 3,
+    "6x6": 1,
+    "8x8": 2
+  },
+  "log": [
+    {
+      "action": "add",
+      "items": {
+        "8x9": 2
+      },
+      "reason": "测试",
+      "timestamp": "2026-05-17T16:38:54.324601"
+    },
+    {
+      "action": "deduct",
+      "items": {
+        "8x9": 2
+      },
+      "reason": "测试还原",
+      "timestamp": "2026-05-17T16:38:54.865590"
+    },
+    {
+      "action": "add",
+      "items": {
+        "7x6": 3,
+        "6x6": 1,
+        "8x8": 2
+      },
+      "reason": "初始化已有库存",
+      "timestamp": "2026-05-17T16:46:04.172524"
+    }
+  ]
 }

@@ -1,0 +1,3 @@
+[submodule "vendor/QuackWorks"]
+	path = vendor/QuackWorks
+	url = https://github.com/AndyLevesque/QuackWorks

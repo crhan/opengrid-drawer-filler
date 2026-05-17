@@ -41,8 +41,7 @@ Thumbs.db
 # Worktrees
 .worktrees/
 
-# Vendor (external dependencies, cloned at install time)
-vendor/
+# Note: vendor/ is intentionally tracked — QuackWorks and BOSL2 are git submodules
 
 # User configuration (copy from config.example.yaml)
 config.yaml
