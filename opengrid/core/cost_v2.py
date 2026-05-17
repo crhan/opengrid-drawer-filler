@@ -2,6 +2,8 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from typing import List, TYPE_CHECKING
 
+from .constants import STACK_GAP_MM as _DEFAULT_STACK_GAP
+
 
 # 时间计算参数 (基于 12 个实测数据拟合)
 TIME_PER_CELL_LAYER = 2.98   # d: 每格每层时间 (min/cell/layer)
@@ -161,7 +163,7 @@ def calculate_stacks(
     tiles: List[Tile],
     max_z: int,
     tile_thickness: float,
-    stack_gap: float = 0.4
+    stack_gap: float = _DEFAULT_STACK_GAP,
 ) -> List[Stack]:
     """
     根据 Z 高度限制计算 Stack 划分
