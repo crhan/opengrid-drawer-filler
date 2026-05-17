@@ -1,6 +1,5 @@
 """status 子命令实现 - 展示项目状态"""
 import json
-import sys
 
 from opengrid.config import load_config_or_default, get_printer_config_or_default
 from opengrid.inventory import load_inventory, format_inventory_for_display, get_inventory_path
@@ -29,11 +28,24 @@ def _collect_status() -> dict:
     tile_type = config.get('opengrid', {}).get('tile_type', 'Full')
     stacking = config.get('opengrid', {}).get('stacking_method', 'Ironing')
 
+    # 库存状态分四种：未配置 / 文件不存在 / 文件坏 / 正常读到（可能为空）
+    inv = {}
+    inv_status = 'loaded'
+    inv_path_str = None
     try:
         inv_path = get_inventory_path(config)
-        inv = load_inventory({"inventory_path": str(inv_path)})
-    except (ValueError, FileNotFoundError):
-        inv = {}
+        inv_path_str = str(inv_path)
+        inv = load_inventory({"inventory_path": inv_path_str})
+        if not inv:
+            inv_status = 'empty'
+    except FileNotFoundError:
+        # FileNotFoundError 不是 ValueError 子类，先后顺序无所谓
+        inv_status = 'not_found'
+    except json.JSONDecodeError:
+        # JSONDecodeError 是 ValueError 子类，**必须**在 ValueError 之前 catch
+        inv_status = 'invalid'
+    except ValueError:
+        inv_status = 'unconfigured'
 
     return {
         'printer': {
@@ -50,6 +62,10 @@ def _collect_status() -> dict:
             'stacking_method': stacking,
         },
         'inventory': inv,
+        '_inventory_meta': {
+            'status': inv_status,
+            'path': inv_path_str,
+        },
     }
 
 
@@ -65,14 +81,25 @@ def handle_status(args):
 
 
 def _emit_json(data: dict) -> None:
-    """Agent 友好的 JSON 输出。"""
+    """Agent 友好的 JSON 输出。
+
+    inventory.status 区分五种情形（让 Agent 不再把"真没货"和"配置坏"混淆）：
+      - loaded:       配置 OK 文件 OK 且有库存
+      - empty:        配置 OK 文件 OK 但库存为空
+      - unconfigured: opengrid_config.yaml 没配 inventory_path
+      - not_found:    配了 path 但文件不存在
+      - invalid:      文件存在但 JSON 坏
+    """
     inv = data['inventory']
+    meta = data['_inventory_meta']
     items = [{'size': key, 'count': inv[key]} for key in sorted(inv.keys())]
     payload = {
         'printer': data['printer'],
         'output': data['output'],
         'opengrid': data['opengrid'],
         'inventory': {
+            'status': meta['status'],
+            'path': meta['path'],
             'items': items,
             'total_types': len(items),
             'total_count': sum(inv.values()),
