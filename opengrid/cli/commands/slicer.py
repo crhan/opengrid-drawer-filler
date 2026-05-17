@@ -30,39 +30,57 @@ def add_parser(subparsers):
     return parser
 
 
-def _parse_slicer_dims(text: str) -> tuple[int, int, int]:
-    """解析 slicer generate 的 WxHxS 尺寸串，失败时给清晰错误并退出。
+def _parse_dims(text: str) -> tuple[int, int, int] | str:
+    """纯函数：解析 WxHxS 字符串。
 
-    Returns: (width, height, stacks)，三者均为正整数（单位：cells / 层）
-    校验：上限来自当前打印机配置（PrinterConfig），跨打印机切换 yaml 后自动适配。
+    Returns:
+        成功时返回 (w, h, s) tuple；失败时返回错误消息字符串（不退出，不打印）。
     """
     dims = text.split('x')
     if len(dims) != 3:
-        print(f"错误: 尺寸格式应为 WxHxS（宽x深x堆叠层数），如 7x5x2", file=sys.stderr)
-        print(f"  收到: {text!r}", file=sys.stderr)
-        sys.exit(1)
+        return f"尺寸格式应为 WxHxS（宽x深x堆叠层数），如 7x5x2\n  收到: {text!r}"
     try:
         w, h, s = int(dims[0]), int(dims[1]), int(dims[2])
     except ValueError:
-        print(f"错误: 宽/深/堆叠层数必须为整数，如 7x5x2", file=sys.stderr)
-        print(f"  收到: {text!r}", file=sys.stderr)
-        sys.exit(1)
+        return f"宽/深/堆叠层数必须为整数，如 7x5x2\n  收到: {text!r}"
     if w <= 0 or h <= 0 or s <= 0:
-        print(f"错误: 宽/深/堆叠层数必须为正整数，收到 {w}x{h}x{s}", file=sys.stderr)
-        sys.exit(1)
+        return f"宽/深/堆叠层数必须为正整数，收到 {w}x{h}x{s}"
+    return (w, h, s)
 
-    # 上限校验：避免用户/Agent 拿到一个永远打不出的尺寸跑到 OpenSCAD 才炸。
-    printer = build_printer_config()
+
+def _validate_dims(w: int, h: int, s: int, printer) -> str | None:
+    """纯函数：用 PrinterConfig 检查 WxHxS 是否超出上限。
+
+    Returns:
+        None 表示合法；超限时返回错误消息字符串。
+    """
     max_w = printer.max_cells_x
     max_h = printer.max_cells_y
     max_s = get_max_stacks(printer)
     if w > max_w or h > max_h or s > max_s:
-        print(
-            f"错误: 尺寸超出当前打印机限制 ({printer.bed_x}x{printer.bed_y}x{printer.max_z}mm)\n"
+        return (
+            f"尺寸超出当前打印机限制 ({printer.bed_x}x{printer.bed_y}x{printer.max_z}mm)\n"
             f"  收到: {w}x{h}x{s}\n"
-            f"  允许: 宽≤{max_w} cells / 深≤{max_h} cells / 堆叠≤{max_s} 层",
-            file=sys.stderr,
+            f"  允许: 宽≤{max_w} cells / 深≤{max_h} cells / 堆叠≤{max_s} 层"
         )
+    return None
+
+
+def _parse_slicer_dims(text: str) -> tuple[int, int, int]:
+    """CLI wrapper：解析 + 上限校验，失败时打 stderr 并 sys.exit(1)。
+
+    上限来自当前打印机配置（PrinterConfig），跨打印机切换 yaml 后自动适配。
+    业务逻辑在纯函数 _parse_dims / _validate_dims 里，便于单元测试。
+    """
+    parsed = _parse_dims(text)
+    if isinstance(parsed, str):
+        print(f"错误: {parsed}", file=sys.stderr)
+        sys.exit(1)
+
+    w, h, s = parsed
+    err = _validate_dims(w, h, s, build_printer_config())
+    if err is not None:
+        print(f"错误: {err}", file=sys.stderr)
         sys.exit(1)
 
     return w, h, s
