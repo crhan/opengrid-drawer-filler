@@ -1,42 +1,79 @@
 # 故障排除
 
-## 首次使用
+## 配置文件读不到
 
-**Q: 首次使用不知道如何配置？**
+**Q: 报 `未找到 opengrid_config.yaml`？**
 
-- 请使用 `/setup` 技能进行初始化配置
+脚本只在当前工作目录查找配置文件。确保：
 
-## 脚本运行失败
+1. 当前 shell 在仓库根目录（有 `opengrid_config.yaml` 的目录）
+2. 或者用 `-c /绝对路径/opengrid_config.yaml` 指定
 
-**Q: 脚本运行失败？**
+```bash
+# 看看现在在哪
+pwd && ls opengrid_config.yaml
+```
 
-- 确认已运行初始化配置（setup skill）
-- 确保配置文件存在：`opengrid_config.yaml`（必须在项目目录下）
+**Q: 报 `项目未初始化`？**
 
-## 无法生成有效方案
+打开 `opengrid_config.yaml`，确认顶部有 `initialized: true`。本仓库 ship 出来的默认配置就是 true，除非有人手改了。
 
-**Q: 无法生成有效方案？**
+## 库存读不到
 
-- 抽屉尺寸可能太小或太大
-- 尝试增加分割数（当前最多 20 块瓦片）
+**Q: `inventory list` 显示库存为空但记得加过？**
+
+确认配置的 `inventory_path` 指的就是当前操作的文件：
+
+```bash
+grep inventory_path opengrid_config.yaml   # 看配置
+cat inventory.json                          # 看实际文件
+```
+
+**Q: 想手动改 `inventory.json` 行不行？**
+
+不行。必须走 `uv run scripts/opengrid.py inventory add/deduct/undo`——日志（`log` 数组）丢了就没法审计和回溯了。
+
+## 算不出方案
+
+**Q: 报 "无法生成有效方案"？**
+
+- 抽屉太小（< 28mm 单边）：openGrid 最小单元 28mm，放不下
+- 抽屉太大且分割数超限：当前上限 20 块瓦片，再切就拒了
+- 单边超过打印机 `max_x * tile_size`：需要换更大打印机或减小瓦片
 
 ## STL 生成失败
 
-**Q: STL 生成失败？**
+**Q: `slicer generate` 报 OpenSCAD 找不到？**
 
-- 检查 OpenSCAD 是否已安装
-- 确认 SCAD 文件路径正确
+```bash
+# macOS:
+brew install --cask openscad@snapshot
 
-## 配置文件问题
+# 还要装 BOSL2 库
+git clone https://github.com/revarwin/BOSL2 \
+  "$HOME/Library/Application Support/OpenSCAD/libraries/BOSL2"
+```
 
-**Q: 配置文件报错？**
+**Q: `slicer slice` 或 `slicer open` 报未实现？**
 
-- 检查 YAML 语法是否正确
-- 确保 `initialized: true` 已设置
+是的，这俩子命令是占位符。原因：OrcaSlicer CLI 在 macOS 上需要 GUI 上下文，无法无头运行。
 
-## 库存问题
+**替代方案**：生成 STL 后手动拖进 OrcaSlicer/BambuStudio 打开切片。
 
-**Q: 库存不匹配？**
+## 方案算出来不符合直觉
 
-- 检查 `inventory/inventory.json` 文件格式
-- 确认库存数量是否正确更新
+**Q: 两个方案算出来一模一样？**
+
+如果 `opengrid_config.yaml` 配了 `inventory_path`，`split` 默认会用库存。要算"不考虑库存"的方案 A，必须加 `--no-inventory`：
+
+```bash
+# 方案 A：忽略库存
+uv run scripts/opengrid.py split 225x255 --no-inventory --json > a.json
+
+# 方案 B：用库存
+uv run scripts/opengrid.py split 225x255 --json > b.json
+```
+
+**Q: 为什么算法选了独特尺寸更多的方案？**
+
+算法优先级：最小化独特尺寸 → 最小化瓦片总数 → 最大化均衡度。如果"用库存"模式覆盖了某些尺寸，整体打印次数下降，可能会接受更多独特尺寸。详见 [ALGORITHM.md](ALGORITHM.md)。
