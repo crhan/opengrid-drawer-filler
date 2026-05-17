@@ -17,6 +17,11 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 timeout = 5
 timeout_method = "thread"
+# 默认不跑 integration（需真实 OpenSCAD），手动 `pytest -m integration` 才跑
+addopts = "-m 'not integration'"
+markers = [
+    "integration: end-to-end tests that call real external tools (OpenSCAD, etc.)",
+]
 
 [dependency-groups]
 dev = [

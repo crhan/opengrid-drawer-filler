@@ -9,7 +9,7 @@ initialized: true
 printer:
   model: h2d
 
-# STL 输出目录（支持 ~ 展开）
+# STL 输出目录（支持 ~ 展开；`slicer generate` 读取，目录不存在时自动创建）
 output:
   stl_dir: ~/3D打印/opengrid/
 
