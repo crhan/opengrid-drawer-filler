@@ -67,15 +67,23 @@ def test_generate_stl_passes_correct_d_flags(tmp_stl_dir, fake_openscad, monkeyp
     assert path.name == "openGrid_Full_7x5x2.stl"
     cmd = captured_cmds[0]
     assert "-D" in cmd
+    # 核心几何
+    assert 'Full_or_Lite="Full"' in cmd
     assert "Board_Width=7" in cmd
     assert "Board_Height=5" in cmd
     assert "Stack_Count=2" in cmd
-    assert 'Tile_Type="Full"' in cmd
     assert "Tile_Size=28" in cmd
     assert "Tile_Thickness=6.8" in cmd
-    assert "Stack_Gap=0.4" in cmd
-    # 最后一个参数应该是 wrapper.scad
-    assert cmd[-1].endswith("wrapper.scad")
+    # 堆叠模式 + Z 间距对齐 cost_v2
+    assert 'Stacking_Method="Ironing - BETA"' in cmd
+    assert "Interface_Separation=0.2" in cmd  # STACK_GAP_MM / 2
+    # 装饰特性关掉
+    assert 'Screw_Mounting="None"' in cmd
+    assert 'Chamfers="None"' in cmd
+    assert "Connector_Holes=false" in cmd
+    # 直接调 QuackWorks 顶层 openGrid.scad（不再过 wrapper.scad）
+    assert cmd[-1].endswith("openGrid.scad")
+    assert "vendor/QuackWorks" in cmd[-1]
 
 
 # ---------- 副作用 / 文件管理 ----------
@@ -217,7 +225,8 @@ def test_generate_stl_respects_tile_type(
     cmd = captured_cmds[0]
     # Tile_Thickness 参数传对了
     assert f"Tile_Thickness={expected_thickness}" in cmd
-    assert f'Tile_Type="{tile_type}"' in cmd
+    # QuackWorks 用 Full_or_Lite 字符串切分三态
+    assert f'Full_or_Lite="{tile_type}"' in cmd
 
 
 # ---------- subprocess.TimeoutExpired ----------
@@ -264,24 +273,27 @@ def test_generate_stl_raises_on_zero_byte_output(tmp_stl_dir, fake_openscad, mon
 # ---------- stack_gap 跨模块契约 ----------
 
 def test_stack_gap_matches_cost_v2():
-    """generator.py 注入 SCAD 的 Stack_Gap 必须 == cost_v2.calculate_stacks 默认 stack_gap。
+    """Z 高度跨模块契约：cost_v2 算出来的高度必须 == openGrid.scad 实际渲染的高度。
 
-    否则 split 算出来的 Z 高度跟实际 OpenSCAD 渲染的物理高度对不上。
-    本测试钉死跨模块契约——任何一边改默认值都会先在这里报红。
+    cost_v2.calculate_stacks 公式：spacing = tile_thickness + stack_gap
+    QuackWorks Ironing 模式公式：spacing = Tile_Thickness + 2 × Interface_Separation
+    所以 generator.py 必须传 Interface_Separation = STACK_GAP_MM / 2。
+    任何一边漂移会先在这里报红。
     """
     import inspect
     from opengrid.core import cost_v2, constants
     from opengrid.stl import generator as gen
 
-    # 确认两边都引用同一个 constants.STACK_GAP_MM
+    # cost_v2 默认 stack_gap 引用 constants.STACK_GAP_MM
     sig = inspect.signature(cost_v2.calculate_stacks)
     cost_default = sig.parameters["stack_gap"].default
     assert cost_default == constants.STACK_GAP_MM
 
-    # generator.py 拼 -D 参数时也必须是这个值——直接 grep 模块源码确认
+    # generator.py 注入 SCAD 的 Interface_Separation 必须是 STACK_GAP_MM / 2
     src = Path(gen.__file__).read_text(encoding="utf-8")
     assert "STACK_GAP_MM" in src
-    assert f"Stack_Gap={{STACK_GAP_MM}}" in src or "Stack_Gap={STACK_GAP_MM}" in src
+    assert "interface_separation = STACK_GAP_MM / 2" in src
+    assert "Interface_Separation={interface_separation}" in src
 
 
 # ---------- generate_all_stls ----------

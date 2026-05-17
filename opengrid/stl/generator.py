@@ -15,7 +15,9 @@ from opengrid.core.constants import TILE_THICKNESS, STACK_GAP_MM
 # 路径常量
 _THIS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _THIS_DIR.parent.parent
-WRAPPER_SCAD = _THIS_DIR / "wrapper.scad"
+# 直接调 QuackWorks 顶层 openGrid.scad —— 它自带完整入口（Full/Lite/Heavy
+# 分发 + Stack_Count 堆叠 + Stacking_Method 切换 + Interface Layer / Ironing），
+# 没必要在仓库里再维护一个 wrapper.scad。
 QUACKWORKS_SCAD = _REPO_ROOT / "vendor" / "QuackWorks" / "openGrid" / "openGrid.scad"
 
 # macOS Homebrew cask 默认安装位置，shutil.which 找不到 openscad 时的兜底
@@ -103,17 +105,30 @@ def generate_stl(
     # 原子化策略：先写 hidden tmp（.stl 后缀让 OpenSCAD 接受），成功后 os.replace 替换原文件
     tmp_path = output_path.parent / f".{output_path.stem}.tmp.stl"
 
+    # Ironing 模式下 openGrid.scad 的层间距 = Tile_Thickness + 2 × Interface_Separation。
+    # 要跟 cost_v2 的 stack_gap=0.4 对齐，Interface_Separation 必须取 STACK_GAP_MM / 2 = 0.2。
+    interface_separation = STACK_GAP_MM / 2
+
     cmd = [
         openscad,
         "-o", str(tmp_path),
+        # —— 核心几何参数 ——
+        "-D", f'Full_or_Lite="{tile_type}"',
         "-D", f"Board_Width={width}",
         "-D", f"Board_Height={height}",
         "-D", f"Stack_Count={stacks}",
-        "-D", f'Tile_Type="{tile_type}"',
         "-D", f"Tile_Size={tile_size}",
         "-D", f"Tile_Thickness={tile_thickness}",
-        "-D", f"Stack_Gap={STACK_GAP_MM}",
-        str(WRAPPER_SCAD),
+        # —— 堆叠：Ironing 模式（单材打印，跟 yaml 默认一致），Z 间距对齐 cost_v2 ——
+        "-D", 'Stacking_Method="Ironing - BETA"',
+        "-D", f"Interface_Separation={interface_separation}",
+        # —— 显式关掉装饰特性（保持跟旧 wrapper.scad 产出的形态一致；
+        #     未来要支持螺丝孔/倒角/连接孔时再扩 yaml 配置）——
+        "-D", 'Screw_Mounting="None"',
+        "-D", 'Chamfers="None"',
+        "-D", "Connector_Holes=false",
+        "-D", "Add_Adhesive_Base=false",
+        str(QUACKWORKS_SCAD),
     ]
 
     if verbose:
