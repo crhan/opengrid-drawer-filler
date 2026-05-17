@@ -74,6 +74,8 @@ uv run scripts/opengrid.py inventory undo
 
 # 生成 STL（WxHxS：宽 cells x 深 cells x 堆叠层数）
 uv run scripts/opengrid.py slicer generate 7x5x2
+uv run scripts/opengrid.py slicer generate 7x5x2 -v   # 打印 OpenSCAD 命令行，调试用
+uv run scripts/opengrid.py slicer generate 7x5x2 -f   # 已存在文件强制重生
 
 # 项目目录：把一次设计任务的方案 + STL + 计划文档放在同一个目录里管理
 uv run scripts/opengrid.py project list             # 列出已有项目

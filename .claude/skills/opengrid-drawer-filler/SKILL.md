@@ -120,7 +120,9 @@ uv run scripts/opengrid.py inventory undo
 
 ### Step 6: 生成 STL
 
-**直接遍历 Step 3 JSON 里的 `slicer_commands` 数组逐条 exec**，Step 3 已经把"哪几个尺寸要打几层"算好了：
+**直接遍历 Step 3 JSON 里的 `slicer_commands` 数组逐条 exec**，Step 3 已经把"哪几个尺寸要打几层"算好了。
+
+> 数组顺序来自 split 算法对 `need_print` 字典的迭代顺序，**不保证语义**（既不是面积降序也不是时间降序）。Agent 不要假设顺序代表打印优先级。
 
 ```bash
 # 形如：
@@ -135,11 +137,15 @@ uv run scripts/opengrid.py slicer generate 6x6x4
 - `slicer_commands == []` —— 库存全覆盖（或抽屉需打印数为 0），告诉用户"不需要打印新瓦片，可直接施工"，**跳过 Step 6**。
 - 用户问 WxHxS 的含义：W/H 是瓦片格子数，S 是垂直堆叠的 Tile 层数（一次打印盘多产出）。**不要让用户/Agent 自己从 `need_print` 计算 S** —— `slicer_commands` 已经按 Z 高度限制拆好了。
 
-STL 输出到 `opengrid_config.yaml` 中 `output.stl_dir` 配置的目录。
+STL 输出到 `opengrid_config.yaml` 中 `output.stl_dir` 配置的目录，文件名形如
+`openGrid_Full_7x5x2.stl`。已存在时跳过；`--force` 强制重生。需要看实际 OpenSCAD 命令
+（调试用）加 `-v` / `--verbose`。
 
-> **限制**：`slicer slice` 和 `slicer open` 目前是 `[未实现]`。生成 STL 后用户需手动在 OrcaSlicer/BambuStudio 里打开切片。原因：Orca CLI 在 macOS 上需要 GUI 上下文，无法无头运行。
->
-> **当前已知缺陷**：`opengrid/stl/generator.py` 是 placeholder，`slicer generate` 实际不会落 STL 文件，只打印 `生成: (None, None)`。修复在 backlog 上，CLI 这一层的契约（输入校验、输出格式）已经定好。
+依赖 OpenSCAD CLI + QuackWorks submodule + BOSL2，缺失时会报清晰错误并提示
+`/opengrid-drawer-filler-setup` skill。
+
+> **限制**：`slicer slice` 和 `slicer open` 目前是 `[未实现]`。生成 STL 后用户需手动在
+> OrcaSlicer/BambuStudio 里打开切片。原因：Orca CLI 在 macOS 上需要 GUI 上下文，无法无头运行。
 
 ## 库存管理
 
