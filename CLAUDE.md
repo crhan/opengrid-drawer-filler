@@ -36,9 +36,10 @@ opengrid-drawer-filler/
 
 ```bash
 uv sync              # 装 Python 依赖
-# 生成 STL 还要：brew install --cask openscad@snapshot
-# 以及 BOSL2 库到 ~/Library/Application Support/OpenSCAD/libraries/
 ```
+
+生成 STL 还要 OpenSCAD + BOSL2 + QuackWorks 子模块——细节走 `/opengrid-drawer-filler-setup` skill，
+不要让用户自己摸 BOSL2 装哪、放哪。
 
 ### 测试
 
@@ -51,25 +52,33 @@ uv run pytest tests/test_scheme.py::TestX::test_y      # 单测
 ### 常用命令
 
 ```bash
-# 状态：看打印机配置 + 库存
+# 状态：看打印机配置 + 库存（加 --json 给 Agent 解析）
 uv run scripts/opengrid.py status
+uv run scripts/opengrid.py status --json
 
 # 算分割
 uv run scripts/opengrid.py split 325x460
 uv run scripts/opengrid.py split 325x460 -i inventory.json   # 用库存
 uv run scripts/opengrid.py split 325x460 --json > scheme.json
+# split --json 输出里有 slicer_commands 字段，列出每条要跑的 slicer 命令，Agent 直接 exec 即可
 
 # 方案对比（生成 HTML）
 uv run scripts/opengrid.py compare a.json b.json -o cmp.html
 
 # 库存
 uv run scripts/opengrid.py inventory list
+uv run scripts/opengrid.py inventory list --json
 uv run scripts/opengrid.py inventory add 8x8:5 --reason "原因"
 uv run scripts/opengrid.py inventory deduct 8x8:2 --reason "原因"
 uv run scripts/opengrid.py inventory undo
 
-# 生成 STL
+# 生成 STL（WxHxS：宽 cells x 深 cells x 堆叠层数）
 uv run scripts/opengrid.py slicer generate 7x5x2
+
+# 项目目录：把一次设计任务的方案 + STL + 计划文档放在同一个目录里管理
+uv run scripts/opengrid.py project list             # 列出已有项目
+uv run scripts/opengrid.py project create foo 325x460   # 新建 foo 项目，附带 325x460 抽屉
+uv run scripts/opengrid.py project show foo         # 查看某项目详情
 ```
 
 ## 非显而易见的项目规范
@@ -96,7 +105,7 @@ uv run scripts/opengrid.py slicer generate 7x5x2
 - 例：`265x365` == `265×365`
 
 ### CLI 入口
-- 只有一个入口 `scripts/opengrid.py`，子命令包括 `status / split / compare / inventory / slicer / present / project`
+- 只有一个入口 `scripts/opengrid.py`，子命令包括 `status / split / compare / inventory / slicer / project`
 - `scripts/opengrid.py` 顶部有 PEP 723 内联依赖声明，`uv run` 会自动建临时 env
 - 仓库根有 `pyproject.toml`，所以 `uv sync` 后也可以直接 `python scripts/opengrid.py ...`
 

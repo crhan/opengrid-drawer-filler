@@ -27,7 +27,6 @@ def main():
     commands.slicer.add_parser(subparsers)
     commands.project.add_parser(subparsers)
     commands.status.add_parser(subparsers)
-    commands.present.add_parser(subparsers)
     add_compare_parser(subparsers)
 
     args = parser.parse_args()
