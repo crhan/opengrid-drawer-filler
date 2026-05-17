@@ -130,7 +130,11 @@ def handle_split(args):
     width, depth, copies = dims[0]
 
     printer = _build_printer_config()
-    split_result = SplitResult.compute(width, depth, copies, inventory, printer)
+    try:
+        split_result = SplitResult.compute(width, depth, copies, inventory, printer)
+    except ValueError as e:
+        print(f"错误: {e}", file=sys.stderr)
+        sys.exit(1)
     scheme = split_result
 
     if args.json and not args.output:

@@ -209,6 +209,15 @@ class SplitResult:
                 best_score = score
                 best_result = (candidate, from_inv, need_print, stacks, plates, cost_result)
 
+        # 无可行方案：抽屉尺寸太小（每边 < MIN_TILE × TILE_SIZE）或形状不可分
+        if best_result is None:
+            from .constants import MIN_TILE, TILE_SIZE
+            min_mm = MIN_TILE * TILE_SIZE
+            raise ValueError(
+                f"抽屉尺寸过小或无可行分割方案：{width}x{depth}mm。"
+                f"每边至少 {min_mm}mm（{MIN_TILE}×{MIN_TILE} cells 起）。"
+            )
+
         # 若 best_result 来自启发式（stacks 为 None），补算一次 v2
         candidate, from_inv, need_print, stacks, plates, cost_result = best_result
         if stacks is None:

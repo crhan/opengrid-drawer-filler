@@ -2,6 +2,19 @@ import pytest
 from opengrid.core.split_result import PrinterConfig, SplitResult
 
 
+def test_compute_raises_on_too_small_drawer():
+    """每边 < MIN_TILE × TILE_SIZE = 56mm 时算法层抛 ValueError（不再 TypeError）。
+
+    这是评审发现的真 bug：之前 best_result is None 走到 unpack 就崩。
+    """
+    pc = PrinterConfig(max_z=325, bed_x=256, bed_y=256, tile_thickness=6.8, max_cells_x=9, max_cells_y=9)
+    with pytest.raises(ValueError, match=r"抽屉尺寸过小"):
+        SplitResult.compute(
+            width=50, depth=50, copies=1,
+            inventory={}, printer=pc,
+        )
+
+
 def test_printer_config_defaults():
     """PrinterConfig 应有合理默认值"""
     pc = PrinterConfig(max_z=325, bed_x=256, bed_y=256, tile_thickness=6.8, max_cells_x=9, max_cells_y=9)
