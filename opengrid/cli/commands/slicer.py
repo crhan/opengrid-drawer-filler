@@ -26,17 +26,34 @@ def add_parser(subparsers):
     return parser
 
 
+def _parse_slicer_dims(text: str) -> tuple[int, int, int]:
+    """解析 slicer generate 的 WxHxS 尺寸串，失败时给清晰错误并退出。
+
+    Returns: (width, height, stacks)，三者均为正整数（单位：cells / 层）
+    """
+    dims = text.split('x')
+    if len(dims) != 3:
+        print(f"错误: 尺寸格式应为 WxHxS（宽x深x堆叠层数），如 7x5x2", file=sys.stderr)
+        print(f"  收到: {text!r}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        w, h, s = int(dims[0]), int(dims[1]), int(dims[2])
+    except ValueError:
+        print(f"错误: 宽/深/堆叠层数必须为整数，如 7x5x2", file=sys.stderr)
+        print(f"  收到: {text!r}", file=sys.stderr)
+        sys.exit(1)
+    if w <= 0 or h <= 0 or s <= 0:
+        print(f"错误: 宽/深/堆叠层数必须为正整数，收到 {w}x{h}x{s}", file=sys.stderr)
+        sys.exit(1)
+    return w, h, s
+
+
 def handle_slicer(args):
     """处理 slicer 命令"""
     cmd = args.slicer_command
 
     if cmd == 'generate':
-        # 解析尺寸
-        dims = args.dimensions.split('x')
-        if len(dims) != 3:
-            print("错误: 尺寸格式应为 WxHxS", file=sys.stderr)
-            sys.exit(1)
-        w, h, s = map(int, dims)
+        w, h, s = _parse_slicer_dims(args.dimensions)
 
         # 生成 STL
         output = stl_generator.generate_stl(w, h, s, force=args.force)

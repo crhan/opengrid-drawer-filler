@@ -1,4 +1,5 @@
 """inventory 子命令实现"""
+import json
 import sys
 from opengrid.config import load_config_or_default, get_config_path
 from opengrid.inventory import (
@@ -16,7 +17,9 @@ def add_parser(subparsers):
     sub = parser.add_subparsers(dest='inventory_command', required=True)
 
     # list
-    sub.add_parser('list', help='列出库存')
+    list_p = sub.add_parser('list', help='列出库存')
+    list_p.add_argument('-j', '--json', action='store_true',
+                        help='以 JSON 格式输出（供 Agent 解析）')
 
     # init
     sub.add_parser('init', help='初始化库存文件（创建空白库存）')
@@ -53,12 +56,21 @@ def handle_inventory(args):
     cmd = args.inventory_command
 
     if cmd == 'list':
-        print_inventory(inv_config)
+        if getattr(args, 'json', False):
+            inv = load_inventory(inv_config)
+            items = [{'size': key, 'count': inv[key]} for key in sorted(inv.keys())]
+            payload = {
+                'items': items,
+                'total_types': len(items),
+                'total_count': sum(inv.values()),
+            }
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print_inventory(inv_config)
 
     elif cmd == 'init':
         from opengrid.inventory import get_inventory_path
         inv_path = get_inventory_path(config)
-        import json
         if inv_path.exists():
             print(f"库存文件已存在: {inv_path}")
         else:
