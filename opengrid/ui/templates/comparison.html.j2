@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>openGrid 方案对比 - {{ drawer_width }}×{{ drawer_depth }}</title>
+    <title>openGrid 方案对比 - {{ drawer_title }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -107,8 +107,22 @@
             border-radius: 12px;
             padding: 16px 24px;
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 24px;
+        }
+
+        .drawer-svg {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .drawer-svg-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin: 12px 0 4px;
         }
 
         .drawer-info-item {
@@ -414,18 +428,16 @@
                 <div class="logo">OG</div>
                 <div class="header-title">
                     <h1>方案对比</h1>
-                    <p>openGrid - {{ drawer_width }}×{{ drawer_depth }} 抽屉</p>
+                    <p>openGrid - {{ drawer_title }}</p>
                 </div>
             </div>
             <div class="drawer-info">
+                {% for label, value in drawer_info %}
                 <div class="drawer-info-item">
-                    <span class="drawer-info-label">宽度</span>
-                    <span class="drawer-info-value">{{ drawer_width }}mm</span>
+                    <span class="drawer-info-label">{{ label }}</span>
+                    <span class="drawer-info-value">{{ value }}</span>
                 </div>
-                <div class="drawer-info-item">
-                    <span class="drawer-info-label">深度</span>
-                    <span class="drawer-info-value">{{ drawer_depth }}mm</span>
-                </div>
+                {% endfor %}
             </div>
         </div>
 

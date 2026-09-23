@@ -218,7 +218,7 @@ class Visualizer:
         height = total_y * cell_size + 2 * padding
 
         svg_parts = []
-        svg_header = f'<svg width="100%" height="auto" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">'
+        svg_header = f'<svg width="100%" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">'
         svg_parts.append(svg_header)
         
         # 绘制背景/抽屉轮廓
@@ -229,8 +229,9 @@ class Visualizer:
         for x_dim in x_splits:
             y_offset = padding
             for y_dim in y_splits:
-                # 确定颜色
-                key = f"{x_dim}x{y_dim}"
+                # 确定颜色（库存 key 方向无关：8x3 抽屉里的块对应库存 3x8）
+                from opengrid.core.cost import tile_key
+                key = tile_key(x_dim, y_dim)
                 if from_inv.get(key, 0) > 0:
                     color = "var(--accent-cyan)"
                     from_inv[key] -= 1

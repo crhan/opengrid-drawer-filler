@@ -226,9 +226,87 @@ def _generate_simple_html(data, svg):
     return template.render(**data, svg=svg)
 
 
+def _comparison_view(data):
+    """把 split --json 的两种输出（单抽屉 / 多抽屉）统一成对比页要的视图
+
+    Returns:
+        {
+          title, info: [(label, value)],
+          time_min, filament_g, total_tiles, unique_sizes,
+          tiles: [(w, h, count)],            # 已乘份数，按面积降序
+          from_inventory: {"6x7": n},
+          drawers: [(label, scheme_for_svg, inventory_usage_or_None)],
+        }
+    """
+    stats = data.get("stats", {})
+    inv_usage = data.get("inventory_usage") or {}
+
+    if "drawers" in data:
+        drawers = data["drawers"]
+        return {
+            "title": f"{len(drawers)} 只抽屉",
+            "info": [(d["name"], f"{d['width']}×{d['depth']}mm ×{d['copies']}") for d in drawers],
+            "time_min": round(stats.get("total_time_min", 0), 1),
+            "filament_g": round(stats.get("total_filament_g", 0), 1),
+            "total_tiles": stats.get("total_tiles", 0),
+            "unique_sizes": stats.get("unique_sizes", 0),
+            "tiles": [(t["width"], t["height"], t["count"]) for t in data.get("tiles", [])],
+            "from_inventory": inv_usage.get("from_inventory", {}),
+            "drawers": [
+                (f"{d['name']} ×{d['copies']}", {**d["scheme"], "tiles": d["tiles"]}, d.get("inventory"))
+                for d in drawers
+            ],
+        }
+
+    dims = data.get("dimensions", {})
+    copies = dims.get("copies", 1)
+    counts = {}
+    for t in data.get("tiles", []):
+        k = (t["width"], t["height"])
+        counts[k] = counts.get(k, 0) + copies
+    return {
+        "title": f"{dims.get('width', 0)}×{dims.get('depth', 0)} 抽屉",
+        "info": [("宽度", f"{dims.get('width', 0)}mm"), ("深度", f"{dims.get('depth', 0)}mm"), ("份数", str(copies))],
+        "time_min": round(stats.get("total_time_min", 0), 1),
+        "filament_g": round(stats.get("filament_main_g", 0), 1),
+        "total_tiles": sum(counts.values()),
+        "unique_sizes": stats.get("unique_sizes", len(counts)),
+        "tiles": sorted(((w, h, c) for (w, h), c in counts.items()), key=lambda t: t[0] * t[1], reverse=True),
+        "from_inventory": inv_usage.get("from_inventory", {}),
+        "drawers": [("", data.get("scheme", {}), inv_usage or None)],
+    }
+
+
+def _drawers_svg(view, with_inventory):
+    """每只抽屉一张拼接图；多抽屉时加抽屉名做小标题"""
+    from opengrid.ui.visualizer import Visualizer
+    v = Visualizer()
+    parts = []
+    for label, scheme, inv in view["drawers"]:
+        # 库存方案没用到库存时也传空 dict，保持"库存=青 / 打印=橙"的配色
+        svg = v.generate_assembly_svg(scheme, inventory_usage=(inv or {"from_inventory": {}}) if with_inventory else None)
+        if label:
+            svg = f'<div class="drawer-svg-label">{label}</div>{svg}'
+        parts.append(f'<div class="drawer-svg">{svg}</div>')
+    return "".join(parts)
+
+
+def _tiles_html(view, with_inventory):
+    from opengrid.core.cost import tile_key
+    from_inv = view["from_inventory"] if with_inventory else {}
+    result = []
+    for w, h, cnt in view["tiles"]:
+        used = from_inv.get(tile_key(w, h), 0)
+        if used:
+            result.append(f'<div class="tile-item inventory">{w}×{h} ×{used}（库存）</div>')
+        if cnt - used > 0:
+            result.append(f'<div class="tile-item print">{w}×{h} ×{cnt - used}</div>')
+    return "".join(result)
+
+
 def generate_comparison_html(scheme_no_inv, scheme_with_inv):
     """
-    生成两种方案的对比 HTML 页面
+    生成两种方案的对比 HTML 页面；单抽屉和多抽屉的 split --json 输出都支持
 
     参数:
         scheme_no_inv: 无库存方案数据 (dict)
@@ -237,125 +315,21 @@ def generate_comparison_html(scheme_no_inv, scheme_with_inv):
     返回:
         HTML 字符串
     """
-    from opengrid.ui.visualizer import Visualizer
-
-    # 错误处理
     if not scheme_no_inv or not scheme_with_inv:
         raise ValueError("方案数据不能为空")
+    if ("drawers" in scheme_no_inv) != ("drawers" in scheme_with_inv):
+        raise ValueError("两个方案一个是单抽屉、一个是多抽屉，无法对比；请用相同的尺寸参数重新 split")
 
-    # 提取尺寸
-    dims = scheme_no_inv.get("dimensions", {})
-    drawer_width = dims.get("width", 0)
-    drawer_depth = dims.get("depth", 0)
+    a = _comparison_view(scheme_no_inv)
+    b = _comparison_view(scheme_with_inv)
 
-    # 提取统计
-    stats_no_inv = scheme_no_inv.get("stats", {})
-    stats_with_inv = scheme_with_inv.get("stats", {})
+    time_saved_abs = round(a["time_min"] - b["time_min"], 1)
+    filament_saved_abs = round(a["filament_g"] - b["filament_g"], 1)
+    time_saved_pct = round(time_saved_abs / a["time_min"] * 100, 1) if a["time_min"] > 0 else 0
+    filament_saved_pct = round(filament_saved_abs / a["filament_g"] * 100, 1) if a["filament_g"] > 0 else 0
 
-    time_no_inv = round(stats_no_inv.get("total_time_min", 0), 1)
-    time_with_inv = round(stats_with_inv.get("total_time_min", 0), 1)
-    filament_no_inv = round(stats_no_inv.get("filament_main_g", 0), 2)
-    filament_with_inv = round(stats_with_inv.get("filament_main_g", 0), 2)
+    is_winner = b["time_min"] < a["time_min"]
 
-    # 计算节省百分比和绝对值
-    time_saved_pct = 0
-    filament_saved_pct = 0
-    time_saved_abs = round(time_no_inv - time_with_inv, 1)
-    filament_saved_abs = round(filament_no_inv - filament_with_inv, 2)
-
-    if time_no_inv > 0:
-        time_saved_pct = round((time_no_inv - time_with_inv) / time_no_inv * 100, 1)
-    if filament_no_inv > 0:
-        filament_saved_pct = round((filament_no_inv - filament_with_inv) / filament_no_inv * 100, 1)
-
-    # 判断是否使用库存更优
-    is_winner = time_with_inv < time_no_inv
-
-    # 生成 SVG
-    v = Visualizer()
-    scheme_no = scheme_no_inv.get("scheme", {})
-    scheme_with = scheme_with_inv.get("scheme", {})
-    inv_usage = scheme_with_inv.get("inventory_usage", {})
-
-    # 使用增强的 Visualizer 生成拼图蓝图
-    svg_no_inv = v.generate_assembly_svg(scheme_no)
-    svg_with_inv = v.generate_assembly_svg(scheme_with, inventory_usage=inv_usage)
-
-    # 如果无法生成标准 SVG（缺少 splits 数据），则回退到散件模式
-    if not svg_no_inv:
-        # 内部兜底函数保持原有散件堆放逻辑，但由于上面已经修复了 output_json，这里理论上不会触发
-        def get_fallback_svg(scheme_data, is_inventory_scheme=False):
-            if not scheme_data: return ""
-            tiles = scheme_data.get("tiles", [])
-            if not tiles: return ""
-            
-            cell_size = 20
-            padding = 20
-            gap = 5
-            max_cells_x = 11
-            svg_parts = []
-            x_offset = padding
-            y_offset = padding
-            row_height = 0
-            max_width = 0
-            all_sizes = [t["width"] * t["height"] for t in tiles]
-            from_inv = {}
-            if is_inventory_scheme and inv_usage:
-                from_inv = inv_usage.get("from_inventory", {}).copy()
-
-            for t in tiles:
-                w, h = t.get("width", 0), t.get("height", 0)
-                if x_offset + w * cell_size > max_cells_x * cell_size + padding + 10:
-                    x_offset = padding
-                    y_offset += row_height + gap
-                    row_height = 0
-                key = f"{w}x{h}"
-                if is_inventory_scheme and from_inv.get(key, 0) > 0:
-                    color = "var(--accent-cyan)"; from_inv[key] -= 1
-                elif is_inventory_scheme: color = "var(--accent-orange)"
-                else: color = v._get_color_for_size(w, h, all_sizes)
-                svg_parts.append(f'<rect x="{x_offset}" y="{y_offset}" width="{w*cell_size-2}" height="{h*cell_size-2}" rx="3" ry="3" fill="{color}" stroke="black" stroke-opacity="0.1" stroke-width="1"/>')
-                text_x = x_offset + w * cell_size // 2; text_y = y_offset + h * cell_size // 2
-                font_size = min(w, h) * 4
-                if font_size < 10: font_size = 10
-                svg_parts.append(f'<text x="{text_x}" y="{text_y}" text-anchor="middle" dominant-baseline="middle" font-size="{font_size}" font-weight="600" fill="white">{w}x{h}</text>')
-                x_offset += w * cell_size + gap
-                row_height = max(row_height, h * cell_size)
-                max_width = max(max_width, x_offset)
-
-            svg_width = max(max_width + padding, 240)
-            svg_height = y_offset + row_height + padding
-            return f'<svg width="100%" viewBox="0 0 {svg_width} {svg_height}" xmlns="http://www.w3.org/2000/svg">{"".join(svg_parts)}</svg>'
-
-        svg_no_inv = get_fallback_svg(scheme_no, False)
-        svg_with_inv = get_fallback_svg(scheme_with, True)
-
-    # 瓦片列表
-    tiles_no_inv = scheme_no_inv.get("tiles", [])
-    tiles_with_inv = scheme_with_inv.get("tiles", [])
-
-    # 构建瓦片 HTML
-    def build_tiles_html(tiles, inv_usage=None):
-        from collections import Counter
-        counts = Counter((t["width"], t["height"]) for t in tiles)
-        result = []
-        # 创建一个可变副本
-        inv_counts = {}
-        if inv_usage:
-            inv_counts = inv_usage.get("from_inventory", {}).copy()
-
-        for (w, h), cnt in sorted(counts.items(), key=lambda x: x[0][0]*x[0][1], reverse=True):
-            key = f"{w}x{h}"
-            # 在列表展示中，如果这一类中有库存，标记为库存
-            is_inv = inv_counts.get(key, 0) > 0
-            cls = "inventory" if is_inv else "print"
-            result.append(f'<div class="tile-item {cls}">{w}×{h} ×{cnt}</div>')
-        return "".join(result)
-
-    tiles_no_inv_html = build_tiles_html(tiles_no_inv)
-    tiles_with_inv_html = build_tiles_html(tiles_with_inv, inv_usage)
-
-    # 汇总卡片
     if is_winner:
         summary_html = f'''
         <div class="summary-card">
@@ -374,22 +348,21 @@ def generate_comparison_html(scheme_no_inv, scheme_with_inv):
     else:
         summary_html = ''
 
-    # 准备模板变量
     data = {
-        "drawer_width": drawer_width,
-        "drawer_depth": drawer_depth,
-        "svg_no_inventory": svg_no_inv,
-        "svg_with_inventory": svg_with_inv,
-        "time_no_inventory": time_no_inv,
-        "time_with_inventory": time_with_inv,
-        "filament_no_inventory": filament_no_inv,
-        "filament_with_inventory": filament_with_inv,
-        "tiles_no_inventory": len(tiles_no_inv),
-        "tiles_with_inventory": len(tiles_with_inv),
-        "unique_no_inventory": stats_no_inv.get("unique_sizes", 0),
-        "unique_with_inventory": stats_with_inv.get("unique_sizes", 0),
-        "tiles_no_inventory_list": tiles_no_inv_html,
-        "tiles_with_inventory_list": tiles_with_inv_html,
+        "drawer_title": a["title"],
+        "drawer_info": a["info"],
+        "svg_no_inventory": _drawers_svg(a, with_inventory=False),
+        "svg_with_inventory": _drawers_svg(b, with_inventory=True),
+        "time_no_inventory": a["time_min"],
+        "time_with_inventory": b["time_min"],
+        "filament_no_inventory": a["filament_g"],
+        "filament_with_inventory": b["filament_g"],
+        "tiles_no_inventory": a["total_tiles"],
+        "tiles_with_inventory": b["total_tiles"],
+        "unique_no_inventory": a["unique_sizes"],
+        "unique_with_inventory": b["unique_sizes"],
+        "tiles_no_inventory_list": _tiles_html(a, with_inventory=False),
+        "tiles_with_inventory_list": _tiles_html(b, with_inventory=True),
         "scheme_with_inventory_winner": "winner" if is_winner else "",
         "scheme_with_inventory_badge": "更优方案" if is_winner else "库存方案",
         "value_class_with_inventory": "green" if is_winner else "cyan",
