@@ -132,21 +132,6 @@ uv run scripts/opengrid.py project show foo         # 查看某项目详情
 
 最小化独特尺寸 → 最小化瓦片总数 → 最大化均衡度
 
-## 代码分析工具 (contextplus MCP)
-
-本项目配置了 **contextplus** MCP 服务，提供基于语义理解的代码分析能力。
-
-| 工具 | 用途 |
-|------|------|
-| `semantic_code_search` | 按自然语言意图搜索代码（不仅是精确变量名） |
-| `semantic_identifier_search` | 语义搜索函数/类/方法，返回定义行和调用链 |
-| `get_file_skeleton` | 获取文件的签名级骨架（不读完整代码体） |
-| `get_context_tree` | 项目结构树（含文件头、函数名、行范围） |
-| `get_blast_radius` | 修改/删除前查影响范围 |
-| `run_static_analysis` | 跑项目原生 linter 查未用变量、死代码、类型错误 |
-| `semantic_navigate` | 按聚类浏览代码库 |
-| `get_feature_hub` | Obsidian 风格的 wiki 链接导航 |
-
 # OpenGrid 体系与 3D 打印生产术语规范 (v1.0)
 
 ## 1. 核心词汇定义 (Core Definitions)
