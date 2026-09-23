@@ -1221,19 +1221,19 @@ class TestScenario12b:
 
 
 class TestScenario14a:
-    """场景 14a：多抽屉自然共享 tile，stacks 合计恰好 = 47（不换盘）
+    """场景 14a：多抽屉自然共享 tile，总块数恰好 = 45（不换盘）
 
-    批量模式 max_stacks = int(325 // 6.8) = 47（与单抽屉 45 不同）
-    A=504×308:23 + B=252×308:1 → 自然共享 9×11：46+1=47 stacks → 1 plate
-    与场景 14b 仅差 B 的 copies=1 vs copies=2
+    单个 Stack 层数上限 = (325 + 0.4) / (6.8 + 0.4) = 45（批量和单抽屉同一公式，
+    旧版批量用 325 // 6.8 = 47，47 层实际 338mm 超出 Z 轴）
+    A=504×308:22 + B=252×308:1 → 自然共享 9×11：44+1=45 块 → 1 plate
     """
 
     def test_natural_shared_tile_exactly_fills_one_plate(self, tmp_path):
-        """多抽屉自然共享 9×11，总 stacks=47 恰好 1 plate，无换盘惩罚"""
+        """多抽屉自然共享 9×11，总 45 块恰好 1 plate，无换盘惩罚"""
         inv_file = tmp_path / "inventory.json"
         create_empty_inventory(str(inv_file), tmp_path)
 
-        batch_mode = "504x308:23 252x308:1"
+        batch_mode = "504x308:22 252x308:1"
         plan = get_print_plan(0, 0, str(inv_file), tmp_path, batch_mode=batch_mode)
 
         tiles = plan.get('tiles', [])
@@ -1243,25 +1243,26 @@ class TestScenario14a:
         total_prints = plan.get('stats', {}).get('total_prints', -1)
 
         assert nine_eleven is not None, f"应有 9×11 tile，实际 tiles: {tiles}"
-        assert nine_eleven['stacks'] == 47, (
-            f"9×11 总 stacks 应为 47(23×2+1×1)，实际: {nine_eleven['stacks']}"
+        assert nine_eleven['count'] == 45, (
+            f"9×11 总块数应为 45(22×2+1×1)，实际: {nine_eleven['count']}"
         )
-        assert total_prints == 1, f"47 stacks 恰好 1 plate，实际: {total_prints}"
+        assert total_prints == 1, f"45 块恰好 1 plate，实际: {total_prints}"
+        assert plan['slicer_commands'] == ["slicer generate 9x11x45"]
 
 
 class TestScenario14b:
-    """场景 14b：多抽屉自然共享，stacks 合计 = 48（触发换盘）
+    """场景 14b：多抽屉自然共享，总块数 = 46（触发换盘）
 
-    A=504×308:23 + B=252×308:2 → 9×11: 46+2=48 stacks > max_stacks=47 → 2 plates
+    A=504×308:22 + B=252×308:2 → 9×11: 44+2=46 > 45 → 2 plates，均分 23+23
     仅比场景 14a 的 B copies 多 1
     """
 
     def test_one_extra_stack_triggers_second_plate(self, tmp_path):
-        """48 stacks 超出 47 上限，触发 2 plates 与换盘惩罚"""
+        """46 块超出 45 层上限，触发 2 plates 与换盘惩罚"""
         inv_file = tmp_path / "inventory.json"
         create_empty_inventory(str(inv_file), tmp_path)
 
-        batch_mode = "504x308:23 252x308:2"
+        batch_mode = "504x308:22 252x308:2"
         plan = get_print_plan(0, 0, str(inv_file), tmp_path, batch_mode=batch_mode)
 
         tiles = plan.get('tiles', [])
@@ -1271,17 +1272,18 @@ class TestScenario14b:
         total_prints = plan.get('stats', {}).get('total_prints', -1)
 
         assert nine_eleven is not None, f"应有 9×11 tile，实际 tiles: {tiles}"
-        assert nine_eleven['stacks'] == 48, (
-            f"9×11 总 stacks 应为 48(23×2+2×1)，实际: {nine_eleven['stacks']}"
+        assert nine_eleven['count'] == 46, (
+            f"9×11 总块数应为 46(22×2+2×1)，实际: {nine_eleven['count']}"
         )
-        assert total_prints == 2, f"48 stacks 需要 2 plates，实际: {total_prints}"
+        assert nine_eleven['stack_layers'] == [23, 23]
+        assert total_prints == 2, f"46 块需要 2 plates，实际: {total_prints}"
 
 
 class TestScenario14c:
     """场景 14c：两种独立 tile，其中一种溢出，plates 独立累加
 
-    A=504×308:20 → {9×11:2}，20×2=40 stacks → ceil(40/45)=1 plate
-    B=336×308:25 → {6×11:2}，25×2=50 stacks → ceil(50/45)=2 plates
+    A=504×308:20 → {9×11:2}，20×2=40 块 → 1 plate
+    B=336×308:25 → {6×11:2}，25×2=50 块 → ceil(50/45)=2 plates
     total_prints = 1+2 = 3
     """
 
@@ -1304,14 +1306,15 @@ class TestScenario14c:
 
         assert len(tiles) == 2, f"应有 2 种独立 tile，实际: {[(t['width'], t['height']) for t in tiles]}"
         assert nine_eleven is not None, "应有 9×11 tile"
-        assert nine_eleven['stacks'] == 40, (
-            f"9×11 应有 40 stacks(20×2)，实际: {nine_eleven['stacks']}"
+        assert nine_eleven['count'] == 40, (
+            f"9×11 应有 40 块(20×2)，实际: {nine_eleven['count']}"
         )
         assert six_eleven is not None, "应有 6×11 tile"
-        assert six_eleven['stacks'] == 50, (
-            f"6×11 应有 50 stacks(25×2)，实际: {six_eleven['stacks']}"
+        assert six_eleven['count'] == 50, (
+            f"6×11 应有 50 块(25×2)，实际: {six_eleven['count']}"
         )
         assert total_prints == 3, f"1+2=3 plates，实际: {total_prints}"
+        assert len(plan['slicer_commands']) == 3
 
 
 class TestNoInventoryFlag:

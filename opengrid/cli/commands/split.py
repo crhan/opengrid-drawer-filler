@@ -1,10 +1,12 @@
 # split 子命令实现：参数解析、单抽屉分割计算与输出分发
-# 批量计算逻辑已迁移至 opengrid/cli/batch.py
+# 多只抽屉（位置参数给多个尺寸，或旧的 -b）走 opengrid/cli/batch.py 的联合规划
 
+import argparse
 import sys
 import json
 from pathlib import Path
-from opengrid.cli.batch import batch_mode
+from opengrid.cli.batch import plan_batch
+from opengrid.ui.batch_view import render_batch_text
 from opengrid.cli.utils import parse_dimensions
 from opengrid.cli.formatters import print_plan, output_json
 from opengrid.core.split_result import PrinterConfig, SplitResult
@@ -62,19 +64,44 @@ def add_parser(subparsers):
         已配置好的 ArgumentParser 实例
     """
     parser = subparsers.add_parser('split', help='抽屉分割计算')
-    parser.add_argument('dimensions', nargs='*', help='抽屉尺寸，如 265x365 或 265x365:2（份数）')
-    parser.add_argument('-c', '--copies', type=int, default=1, help='打印份数')
+    parser.add_argument('dimensions', nargs='*',
+                        help='抽屉尺寸，如 265x365、265x365:2（份数）；给多个就是多抽屉联合规划')
+    parser.add_argument('-c', '--copies', type=int, default=1, help='没写 :N 的尺寸默认份数')
     parser.add_argument('-j', '--json', action='store_true',
                         help='JSON 输出到标准输出（可管道传递，与 -o 连用时输出到文件）')
     parser.add_argument('-o', '--output', help='JSON 输出文件路径（默认临时目录）')
     parser.add_argument('-H', '--html', help='生成 HTML 报告并保存到指定路径')
     parser.add_argument('-P', '--project-dir', help='生成完整项目到指定目录')
-    parser.add_argument('-b', '--batch', help='批量输入')
+    # 旧写法，保留兼容；现在直接 `split A B C` 即可
+    parser.add_argument('-b', '--batch', help=argparse.SUPPRESS)
     parser.add_argument('-i', '--inventory', help='库存文件路径')
     parser.add_argument('--no-inventory', action='store_true',
                         help='禁用库存（忽略配置文件中的 inventory_path）')
     parser.set_defaults(func=handle_split)
     return parser
+
+
+def _handle_multi(dims, inventory, args):
+    """多抽屉：plan_batch 出统一数据，按参数分发到 stdout JSON / 文件 / 文本"""
+    if args.html or args.project_dir:
+        print("错误: 多抽屉暂不支持 -H / -P，请用 --json 输出后 `compare` 生成 HTML", file=sys.stderr)
+        sys.exit(1)
+    try:
+        data = plan_batch(dims, inventory)
+    except ValueError as e:
+        print(f"错误: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    json_data = json.dumps(data, indent=2, ensure_ascii=False)
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json_data, encoding='utf-8')
+        print(f"方案已保存: {output_path}")
+    elif args.json:
+        print(json_data)
+    else:
+        render_batch_text(data)
 
 
 def handle_split(args):
@@ -112,20 +139,21 @@ def handle_split(args):
         except Exception:
             pass
 
-    if args.batch:
-        batch_mode(
-            args.batch,
-            verbose=False,
-            inventory=inventory,
-            json_output=args.json
-        )
-        return
-
-    dims = parse_dimensions(args.dimensions)
-
+    # -b "..." 是旧写法，等价于把整串当位置参数
+    raw = list(args.dimensions) + ([args.batch] if args.batch else [])
+    unparsed = []
+    dims = parse_dimensions(raw, default_copies=args.copies, unparsed=unparsed)
+    if unparsed:
+        print(f"错误: 无法识别的尺寸: {', '.join(unparsed)}（例：265x365、265x365:2、265 365）", file=sys.stderr)
+        sys.exit(1)
     if not dims:
         print("错误: 请提供尺寸参数，如 265x365 或 265x365:2", file=sys.stderr)
         sys.exit(1)
+
+    # 多只抽屉（或走了 -b）→ 联合规划，瓦片跨抽屉合并打印
+    if len(dims) > 1 or args.batch:
+        _handle_multi(dims, inventory, args)
+        return
 
     width, depth, copies = dims[0]
 

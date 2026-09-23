@@ -183,10 +183,8 @@ def calculate_stacks(
 
     均匀分配：超过最大层数时，尽量均匀分成多个 Stack
     """
-    # 计算每 Stack 最大层数
-    max_per_stack = int((max_z + stack_gap) / (tile_thickness + stack_gap))
-    if max_per_stack < 1:
-        max_per_stack = 1
+    from .grid import max_layers_per_stack
+    max_per_stack = max_layers_per_stack(max_z, tile_thickness, stack_gap)
 
     result = []
 

@@ -172,4 +172,4 @@ class TestPrintBatchPlanLargeTileCount:
                 printer_config=printer,
             )
         assert result is not None
-        assert result["total_prints"] == 3
+        assert result["stats"]["total_prints"] == 3
