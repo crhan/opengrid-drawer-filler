@@ -63,7 +63,7 @@ class TestInventoryCLIScope:
         """测试扣减库存"""
         project_inv = tmp_path / "inventory.json"
         project_inv.write_text(json.dumps({
-            "inventory": {"10x5": 8},
+            "inventory": {"5x10": 8},
             "log": []
         }))
 
@@ -73,7 +73,7 @@ class TestInventoryCLIScope:
         # 扣减库存
         result = subprocess.run(
             [sys.executable, str(PROJECT_ROOT / "scripts" / "opengrid.py"),
-             "inventory", "deduct", "10x5:3", "--reason", "test deduct"],
+             "inventory", "deduct", "5x10:3", "--reason", "test deduct"],
              capture_output=True,
             text=True,
             cwd=tmp_path
@@ -81,7 +81,7 @@ class TestInventoryCLIScope:
 
         # 验证扣减成功
         data = json.loads(project_inv.read_text())
-        assert data["inventory"].get("10x5") == 5
+        assert data["inventory"].get("5x10") == 5
 
     def test_undo_operation(self, tmp_path):
         """测试撤销操作"""

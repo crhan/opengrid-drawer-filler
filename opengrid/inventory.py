@@ -6,6 +6,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from opengrid.core.cost import tile_key, normalize_inventory
+
 
 def _resolve_path(path_str, base_dir=None):
     """解析路径：绝对路径直接返回，相对路径相对于 base_dir（默认为 cwd）
@@ -32,8 +34,8 @@ def parse_items(args):
     for arg in args:
         match = re.match(r'(\d+)x(\d+):(\d+)', arg)
         if match:
-            key = f"{match.group(1)}x{match.group(2)}"
-            items[key] = int(match.group(3))
+            key = tile_key(int(match.group(1)), int(match.group(2)))
+            items[key] = items.get(key, 0) + int(match.group(3))
         else:
             # 最后一个非格式参数作为 reason
             reason = arg
@@ -125,7 +127,7 @@ def load_inventory(config):
         dict: 库存数据
     """
     data = _load_data(config)
-    return data.get("inventory", {})
+    return normalize_inventory(data.get("inventory", {}))
 
 
 def save_inventory(inv, log_entry, config):
@@ -151,6 +153,7 @@ def add_inventory(items, reason, config):
         reason: reason for the addition
         config: 配置字典，必须包含 inventory_path
     """
+    items = normalize_inventory(items)
     inv = load_inventory(config)
     for key, count in items.items():
         inv[key] = inv.get(key, 0) + count
@@ -166,6 +169,7 @@ def deduct_inventory(items, reason, config):
         reason: reason for the deduction
         config: 配置字典，必须包含 inventory_path
     """
+    items = normalize_inventory(items)
     inv = load_inventory(config)
     for key, count in items.items():
         available = inv.get(key, 0)
@@ -200,8 +204,8 @@ def undo_last(config):
     if last_entry is None:
         raise ValueError("没有可撤销的操作")
 
-    inv = data["inventory"]
-    items = last_entry["items"]
+    inv = normalize_inventory(data["inventory"])
+    items = normalize_inventory(last_entry["items"])
 
     if last_entry["action"] == "add":
         for key, count in items.items():
@@ -261,20 +265,22 @@ def format_inventory_for_display(inv=None):
 
    库存为空
 
-   共 0 种尺寸, 0 stack"""
+   共 0 种尺寸, 0 块"""
 
     # 格式化库存项为表格
     lines = ["┌──────────┬──────────┐"]
-    lines.append("│ 瓦片尺寸  │   数量   │")
+    # 列宽都是 10 个显示列；"瓦片尺寸" 4 个汉字占 8 列。尺寸用 ASCII x，
+    # × (U+00D7) 在 CJK 终端里是歧义宽度字符，会把表格撑歪
+    lines.append("│ 瓦片尺寸 │   数量   │")
     lines.append("├──────────┼──────────┤")
 
     for key in sorted(inv.keys(), key=lambda x: (int(x.split('x')[0]) * int(x.split('x')[1])), reverse=True):
         try:
             w, h = key.split('x')
             count = inv[key]
-            lines.append(f"│ {w:>6}×{h:<5} │   {count:>3}    │")
+            lines.append(f"│ {w + 'x' + h:^8} │   {count:>3}    │")
         except (ValueError, AttributeError):
-            lines.append(f"│ [无效: {key:<5}] │   {inv[key]:>3}    │")
+            lines.append(f"│ {key:^8} │   {inv[key]:>3}    │")
 
     lines.append("└──────────┴──────────┘")
 
@@ -287,7 +293,7 @@ def format_inventory_for_display(inv=None):
 
 {chr(10).join(lines)}
 
-共 **{unique} 种尺寸**, **{total} stack** (可用)"""
+共 **{unique} 种尺寸**, **{total} 块** (可用)"""
 
 
 def get_inventory_match(tiles, copies, inv):
@@ -305,9 +311,10 @@ def get_inventory_match(tiles, copies, inv):
             "match_score": 3
         }
     """
+    inv = normalize_inventory(inv)
     tile_counts = {}
     for w, h in tiles:
-        key = f"{w}x{h}"
+        key = tile_key(w, h)
         tile_counts[key] = tile_counts.get(key, 0) + 1
 
     from_inventory = {}

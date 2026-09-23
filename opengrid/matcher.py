@@ -1,4 +1,5 @@
 """Inventory matching algorithm"""
+from opengrid.core.cost import tile_key, normalize_inventory
 
 
 def get_inventory_match(tiles, copies, inv):
@@ -16,9 +17,10 @@ def get_inventory_match(tiles, copies, inv):
             "match_score": 3
         }
     """
+    inv = normalize_inventory(inv)
     tile_counts = {}
     for w, h in tiles:
-        key = f"{w}x{h}"
+        key = tile_key(w, h)
         tile_counts[key] = tile_counts.get(key, 0) + 1
 
     from_inventory = {}

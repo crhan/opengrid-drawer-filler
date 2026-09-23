@@ -16,6 +16,25 @@ from .cost_v2 import (
 )
 
 
+def tile_key(w: int, h: int) -> str:
+    """瓦片的方向无关 key：小边在前（6x8 而非 8x6）。6×8 旋转 90° 就是 8×6，是同一块。"""
+    return f"{min(w, h)}x{max(w, h)}"
+
+
+def normalize_inventory(inventory: Optional[dict]) -> dict:
+    """把库存 key 统一成 tile_key 形式，同尺寸不同方向的条目合并。
+
+    inventory.json 里可能存着 "7x6" 这种大边在前的 key（用户按自己习惯录入），
+    不归一化的话 "6x7" 的需求永远匹配不上它。
+    """
+    result: dict[str, int] = {}
+    for key, count in (inventory or {}).items():
+        w, h = map(int, key.split("x"))
+        k = tile_key(w, h)
+        result[k] = result.get(k, 0) + count
+    return result
+
+
 def _match_inventory(
     tiles: list[tuple[int, int]],
     inventory: dict,
@@ -34,10 +53,10 @@ def _match_inventory(
         - from_inventory: 从库存取的瓦片 {"6x8": 1, ...}
         - need_print: 仍需打印的瓦片 {"6x8": 2, ...}
     """
-    # 规格化：小边在前（6x8 而非 8x6）
+    inventory = normalize_inventory(inventory)
     tile_counts: dict[str, int] = {}
     for w, h in tiles:
-        key = f"{min(w, h)}x{max(w, h)}"
+        key = tile_key(w, h)
         tile_counts[key] = tile_counts.get(key, 0) + 1
 
     from_inventory: dict[str, int] = {}
@@ -45,7 +64,7 @@ def _match_inventory(
 
     for key, count_per_copy in tile_counts.items():
         needed = count_per_copy * copies
-        available = inventory.get(key, 0) if inventory else 0
+        available = inventory.get(key, 0)
         used = min(needed, available)
 
         if used > 0:

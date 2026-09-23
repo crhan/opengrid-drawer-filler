@@ -66,11 +66,11 @@ class TestInventoryOperationsWithConfig:
         config = {"inventory_path": str(inv_file)}
 
         # 添加库存
-        add_inventory({"7x5": 5}, reason="test", config=config)
+        add_inventory({"5x7": 5}, reason="test", config=config)
 
         # 验证库存已添加
         inv = load_inventory(config)
-        assert inv.get("7x5") == 5
+        assert inv.get("5x7") == 5
 
     def test_deduct_inventory_with_config(self, tmp_path):
         """测试库存扣减使用配置驱动路径"""
@@ -78,16 +78,16 @@ class TestInventoryOperationsWithConfig:
 
         # 创建库存文件
         inv_file = tmp_path / "deduct_test.json"
-        inv_file.write_text(json.dumps({"inventory": {"7x5": 10}, "log": []}))
+        inv_file.write_text(json.dumps({"inventory": {"5x7": 10}, "log": []}))
 
         config = {"inventory_path": str(inv_file)}
 
         # 扣减库存
-        deduct_inventory({"7x5": 3}, reason="test deduct", config=config)
+        deduct_inventory({"5x7": 3}, reason="test deduct", config=config)
 
         # 验证扣减成功
         inv = load_inventory(config)
-        assert inv.get("7x5") == 7
+        assert inv.get("5x7") == 7
 
     def test_undo_with_config(self, tmp_path):
         """测试撤销操作使用配置驱动路径"""
@@ -122,18 +122,18 @@ class TestInventoryOperationsWithConfig:
 
         # 配置1添加库存
         config1 = {"inventory_path": str(inv1)}
-        add_inventory({"7x5": 10}, reason="test1", config=config1)
+        add_inventory({"5x7": 10}, reason="test1", config=config1)
 
         # 配置2添加库存
         config2 = {"inventory_path": str(inv2)}
-        add_inventory({"10x5": 5}, reason="test2", config=config2)
+        add_inventory({"5x10": 5}, reason="test2", config=config2)
 
         # 验证两者完全独立
         inv1_data = load_inventory(config1)
         inv2_data = load_inventory(config2)
 
-        assert inv1_data.get("7x5") == 10
-        assert inv1_data.get("10x5") is None
+        assert inv1_data.get("5x7") == 10
+        assert inv1_data.get("5x10") is None
 
-        assert inv2_data.get("10x5") == 5
-        assert inv2_data.get("7x5") is None
+        assert inv2_data.get("5x10") == 5
+        assert inv2_data.get("5x7") is None
