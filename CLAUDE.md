@@ -60,6 +60,7 @@ uv run scripts/opengrid.py status --json
 uv run scripts/opengrid.py split 325x460
 uv run scripts/opengrid.py split 325x460 -i inventory.json   # 用库存
 uv run scripts/opengrid.py split 325x460 --json > scheme.json
+uv run scripts/opengrid.py split 225x255:2 325x460 --json   # 多只抽屉：联合规划，输出 drawers[] 结构
 # split --json 输出里有 slicer_commands 字段，列出每条要跑的 slicer 命令，Agent 直接 exec 即可
 
 # 方案对比（生成 HTML）
@@ -105,6 +106,11 @@ uv run scripts/opengrid.py project show foo         # 查看某项目详情
 ### 尺寸解析
 - 支持两种乘号：`x` 和 `×`（U+00D7）等效
 - 例：`265x365` == `265×365`
+- 瓦片/库存 key 方向无关，统一 `tile_key()` 小边在前（`6x7`）；库存读入时 `normalize_inventory()` 归一化
+
+### Stack 层数上限
+- 唯一公式 `opengrid/core/grid.py::max_layers_per_stack`：`(max_z + 0.4) / (6.8 + 0.4)`，H2D 为 45 层
+- 成本估算、批量合并、`slicer generate` 校验都走它；别再写 `max_z // thickness`（47 层会超出 Z 轴）
 
 ### CLI 入口
 - 只有一个入口 `scripts/opengrid.py`，子命令包括 `status / split / compare / inventory / slicer / project`
@@ -125,7 +131,7 @@ uv run scripts/opengrid.py project show foo         # 查看某项目详情
 |------|----|------|
 | `TILE_SIZE` | 28 mm | 网格单元格大小 |
 | `MAX_X`, `MAX_Y` | 10, 11 | 单块瓦片最大尺寸 |
-| `FULL_THICKNESS` | 7.2 mm | 单层厚度 |
+| `TILE_THICKNESS["Full"]` + `STACK_GAP_MM` | 6.8 + 0.4 mm | 单层裸厚 + 层间隙（层间距 7.2mm） |
 | `MAX_Z` | 325 mm | 打印机 Z 轴限制 |
 
 ### 算法优先级

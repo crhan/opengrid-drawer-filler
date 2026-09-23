@@ -57,7 +57,10 @@ JSON 输出含 `printer / output / opengrid / inventory.{items, total_types, tot
 | `225 255` | 空格分隔也行 |
 | `225x255:2 325x460` | 多种尺寸混合批量 |
 
-**多种尺寸时按出现顺序命名**：抽屉 A、抽屉 B、抽屉 C…… 后续展示统一用抽屉名，避免 `265x365` 这种数字串反复出现增加阅读负担。
+多个尺寸直接全部作为位置参数传给 `split`，脚本会**联合规划**（瓦片跨抽屉合并打印、库存全局分配）。
+无法识别的词或太小无法分割的抽屉会直接报错退出（exit 1），不会静默丢掉。
+
+**多种尺寸时脚本按出现顺序命名**：`drawers[].name` 就是 抽屉A、抽屉B、抽屉C…… 后续展示统一用这个名字，避免 `265x365` 这种数字串反复出现增加阅读负担。
 
 ### Step 3: 算方案
 
@@ -65,20 +68,33 @@ JSON 输出含 `printer / output / opengrid / inventory.{items, total_types, tot
 
 ```bash
 # 方案 A：不用库存（追求最优切割、最少种类）
-uv run scripts/opengrid.py split 225x255:2 --no-inventory --json > scheme_a.json
+uv run scripts/opengrid.py split 225x255:2 325x460 --no-inventory --json > scheme_a.json
 
 # 方案 B：用库存（追求最少打印、节省耗材）
-uv run scripts/opengrid.py split 225x255:2 --json > scheme_b.json
+uv run scripts/opengrid.py split 225x255:2 325x460 --json > scheme_b.json
 ```
 
 库存为空时只算方案 A 即可（B 会跟 A 完全一样，对比没意义）。
 
-JSON 结构包含 `dimensions / grid / tiles / prints / stats / cost / inventory_usage / slicer_commands`：
+JSON 结构随抽屉数不同（用有没有 `drawers` 字段区分）：
+
+**单只抽屉**：`dimensions / grid / tiles / prints / stats / cost / inventory_usage / slicer_commands`
 
 - `stats.total_time_min` / `stats.filament_main_g` —— 给用户看的总览
 - `cost.total_cost` / `cost.plate_count` —— 时间/盘数细节
-- `inventory_usage.from_inventory` / `need_print` —— 库存覆盖明细，用来给方案 B 算"节省了多少"
+
+**多只抽屉**：`drawers / tiles / stats / inventory_usage / slicer_commands`
+
+- `drawers[]` —— 每只抽屉的 `name`（抽屉A…）、尺寸、份数、`scheme` 分割、每份 `tiles`、`inventory`（本抽屉分到的库存 / 需打印，已乘份数）
+- `tiles[]` —— 跨抽屉合并后每种瓦片：`count` 总块数、`from_inventory`、`to_print`、`prints` 盘数、`stack_layers` 每盘层数、`sources` 来自哪些抽屉
+- `stats.total_time_min` / `stats.total_filament_g` / `stats.total_prints` —— 总览
+
+**两种都有**：
+
+- `inventory_usage.from_inventory` / `need_print` / `total_from_inventory` / `total_need_print` —— 库存覆盖明细，用来给方案 B 算"节省了多少"；Step 5 扣库存就按 `from_inventory` 扣
 - **`slicer_commands`** —— 一个数组，每条是可直接 exec 的 `slicer generate WxHxS` 命令。Step 6 直接用，**不要再人脑算 stack 层数**。
+
+库存 key 与方向无关，统一写成小边在前（`6x7`，不是 `7x6`）；CLI 两种写法都接受。
 
 ### Step 4: 展示并让用户选
 
@@ -98,7 +114,8 @@ JSON 结构包含 `dimensions / grid / tiles / prints / stats / cost / inventory
 [Q] 退出
 ```
 
-用户要看可视化对比时，用 `compare` 子命令（会自动在浏览器打开，调试或远程会话加 `--no-open`）：
+用户要看可视化对比时，用 `compare` 子命令（会自动在浏览器打开，调试或远程会话加 `--no-open`；
+已存在的输出文件要加 `-f` 覆盖）。单抽屉和多抽屉的 JSON 都支持，但两个文件必须用同一组尺寸算出来：
 
 ```bash
 uv run scripts/opengrid.py compare scheme_a.json scheme_b.json -o comparison.html
