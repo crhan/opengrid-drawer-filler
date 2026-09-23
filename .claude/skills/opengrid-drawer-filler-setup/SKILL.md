@@ -18,9 +18,9 @@ compatibility: macOS + Homebrew；Python/uv 由 pyproject.toml 处理，本 skil
 
 | 依赖 | 位置 | 校验命令 |
 |------|------|---------|
-| OpenSCAD | `/opt/homebrew/bin/openscad` | `which openscad` |
+| OpenSCAD | macOS `/opt/homebrew/bin/openscad`；Linux nightly AppImage 放进 PATH | `which openscad` |
 | QuackWorks SCAD 源码 | `vendor/QuackWorks/openGrid/openGrid.scad` | `ls vendor/QuackWorks/openGrid/openGrid.scad` |
-| BOSL2 库 | `~/Library/Application Support/OpenSCAD/libraries/BOSL2/` | `ls "$HOME/Library/Application Support/OpenSCAD/libraries/BOSL2/std.scad"` |
+| BOSL2 库 | `<User Library Path>/BOSL2/`（macOS `~/Library/Application Support/OpenSCAD/libraries`，Linux `~/.local/share/OpenSCAD/libraries`） | `openscad --info \| grep "User Library Path"`，再 `ls <该路径>/BOSL2/std.scad` |
 
 ## 一键安装
 
@@ -35,25 +35,31 @@ compatibility: macOS + Homebrew；Python/uv 由 pyproject.toml 处理，本 skil
 ### 1. OpenSCAD
 
 ```bash
+# macOS
 brew install --cask openscad@snapshot
+# Linux：从 https://openscad.org/downloads.html#snapshots 下 nightly AppImage，chmod +x 后放进 PATH（如 ~/.local/bin/openscad）
 ```
 
-为什么用 `@snapshot`：稳定版本对 BOSL2 的部分函数支持不全，openGrid.scad 的某些特性需要 nightly。
+为什么用 snapshot/nightly：稳定版本对 BOSL2 的部分函数支持不全，openGrid.scad 的某些特性需要 nightly。
 
 ### 2. QuackWorks submodule
 
 ```bash
-git submodule update --init --recursive
+git submodule update --init
 ```
 
 仓库根有 `.gitmodules` 声明 `vendor/QuackWorks → AndyLevesque/QuackWorks`。首次 clone 不会自动拉，必须显式 init。已经 init 过的话这条命令是 no-op。
 
+**不要加 `--recursive`**：QuackWorks 上游有个嵌套子模块 `MultiConnectOpenSCAD` 没写进它的 `.gitmodules`，递归 init 会 `fatal: No url found for submodule path`。openGrid.scad 只依赖 BOSL2，用不到它。
+
 ### 3. BOSL2 库
 
-BOSL2 装在 OpenSCAD 的全局 libraries 目录（系统级共享），不放在仓库里：
+BOSL2 装在 OpenSCAD 的 User Library Path（系统级共享），不放在仓库里。路径因平台而异，以 `openscad --info` 为准：
 
 ```bash
-BOSL2_DIR="$HOME/Library/Application Support/OpenSCAD/libraries/BOSL2"
+# 无头环境下 openscad --info 退出码是 1，但输出正常
+LIB_DIR=$(openscad --info 2>/dev/null | sed -n 's/^User Library Path: //p')
+BOSL2_DIR="$LIB_DIR/BOSL2"
 mkdir -p "$(dirname "$BOSL2_DIR")"
 git clone https://github.com/BelfrySCAD/BOSL2 "$BOSL2_DIR"
 ```
@@ -63,7 +69,7 @@ git clone https://github.com/BelfrySCAD/BOSL2 "$BOSL2_DIR"
 ## 验证
 
 ```bash
-# 试渲染一个 1x1 lite tile，输出 ~20KB STL 才算 OK
+# 试渲染一个 1x1 lite tile，输出非空（约 100KB）STL 才算 OK
 openscad -o /tmp/test.stl \
   -D 'Full_or_Lite="Lite"' -D 'Board_Width=1' -D 'Board_Height=1' \
   vendor/QuackWorks/openGrid/openGrid.scad

@@ -45,7 +45,7 @@ def _check_quackworks() -> None:
     if not QUACKWORKS_SCAD.exists():
         raise FileNotFoundError(
             f"QuackWorks submodule 未初始化：{QUACKWORKS_SCAD}\n"
-            "请运行 `git submodule update --init --recursive` 或 /opengrid-drawer-filler-setup skill。"
+            "请运行 `git submodule update --init` 或 /opengrid-drawer-filler-setup skill。"
         )
 
 

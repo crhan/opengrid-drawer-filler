@@ -45,14 +45,8 @@ cat inventory.json                          # 看实际文件
 
 **Q: `slicer generate` 报 OpenSCAD 找不到？**
 
-```bash
-# macOS:
-brew install --cask openscad@snapshot
-
-# 还要装 BOSL2 库
-git clone https://github.com/revarwin/BOSL2 \
-  "$HOME/Library/Application Support/OpenSCAD/libraries/BOSL2"
-```
+直接跑 `./scripts/setup.sh`（macOS / Linux 都支持），或走 `/opengrid-drawer-filler-setup` skill。
+BOSL2 要装在 `openscad --info` 报告的 User Library Path 下，不是固定的 macOS 路径。
 
 **Q: `slicer slice` 或 `slicer open` 报未实现？**
 

@@ -34,11 +34,10 @@ uv sync
 生成 STL 还需要 **OpenSCAD + BOSL2 库**。最省心的办法是让 Claude Code 调 `/opengrid-drawer-filler-setup` skill 一键搞定；手动装也行：
 
 ```bash
-brew install --cask openscad@snapshot
-git submodule update --init --recursive   # 拉 QuackWorks SCAD 源码
-# 再从 https://github.com/BelfrySCAD/BOSL2 把 BOSL2 装到
-# ~/Library/Application Support/OpenSCAD/libraries/BOSL2/
+./scripts/setup.sh   # 幂等：检查 OpenSCAD、init QuackWorks 子模块、把 BOSL2 装进 OpenSCAD 的 User Library Path
 ```
+
+OpenSCAD 本身要先装好：macOS `brew install --cask openscad@snapshot`；Linux 用官方 nightly AppImage 放进 PATH。
 
 ## 常用命令
 
