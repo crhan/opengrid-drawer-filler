@@ -156,6 +156,8 @@ uv run scripts/opengrid.py slicer 3mf 6x6x4
 - 用户问 WxHxS 的含义：W/H 是瓦片格子数，S 是垂直堆叠的 Tile 层数（一次打印盘多产出）。**不要让用户/Agent 自己从 `need_print` 计算 S** —— `slicer_commands` 已经按 Z 高度限制拆好了。
 - stderr 出现 `警告:` —— 通常是瓦片太大、盘面放不下擦料塔，要转告用户在 BambuStudio 里手动挪一下擦料塔。
 - 只要 STL 不要 3MF：把命令里的 `3mf` 换成 `generate`。
+- 螺丝孔默认读 `opengrid.screw_mounting`（当前 `Corners`，四角各一个 M4 沉头孔）；单次要改就在命令后加
+  `--screws None|Corners|Everywhere`。带孔的文件名有后缀，如 `openGrid_Full_4x10x2_screwCorners.3mf`。
 
 输出到 `opengrid_config.yaml` 中 `output.stl_dir` 配置的目录，文件名形如
 `openGrid_Full_7x5x2.stl` / `openGrid_Full_7x5x2.3mf`。已存在时跳过；`--force` 两者都强制重生。
@@ -204,6 +206,7 @@ opengrid:
   stacking_method: Ironing
   interface_separation: 0.2
   tile_size: 28
+  screw_mounting: Corners # 螺丝孔 None / Corners（四角）/ Everywhere（每个格点），M4 沉头
 ```
 
 打印机预设和瓦片参数详见 [references/CONFIG.md](references/CONFIG.md)。

@@ -16,6 +16,11 @@ from opengrid.stl import generator
 
 # ---------- 公共 fixture ----------
 
+@pytest.fixture(autouse=True)
+def isolated_config(monkeypatch):
+    """不读仓库里的 opengrid_config.yaml（用户可能开了螺丝孔等），默认空配置"""
+    monkeypatch.setattr(generator, "load_config_or_default", lambda: {"opengrid": {}})
+
 @pytest.fixture
 def tmp_stl_dir(tmp_path, monkeypatch):
     """把 _resolve_stl_dir 重定向到 tmp_path，避免污染用户家目录。"""
@@ -371,3 +376,41 @@ def test_real_openscad_smoke_all_tile_types(tmp_path, monkeypatch, tile_type, ti
     assert path.exists()
     assert path.stat().st_size > 0
     assert path.name == f"openGrid_{tile_type}_2x2x1.stl"
+
+
+# ---------- 螺丝孔 ----------
+
+def _capture_run(monkeypatch):
+    cmds = []
+
+    def _run(cmd, **kw):
+        cmds.append(cmd)
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"solid fake\n")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    return cmds
+
+
+def test_screw_mounting_from_config(tmp_stl_dir, fake_openscad, monkeypatch):
+    monkeypatch.setattr(generator, "load_config_or_default",
+                        lambda: {"opengrid": {"screw_mounting": "Corners"}})
+    cmds = _capture_run(monkeypatch)
+    path, _ = generator.generate_stl(4, 10, 2)
+    assert 'Screw_Mounting="Corners"' in cmds[0]
+    # 有孔版本文件名带后缀，不会被无孔的缓存文件挡住
+    assert path.name == "openGrid_Full_4x10x2_screwCorners.stl"
+
+
+def test_screw_mounting_override_beats_config(tmp_stl_dir, fake_openscad, monkeypatch):
+    monkeypatch.setattr(generator, "load_config_or_default",
+                        lambda: {"opengrid": {"screw_mounting": "Corners"}})
+    cmds = _capture_run(monkeypatch)
+    path, _ = generator.generate_stl(4, 10, 2, screw_mounting="None")
+    assert 'Screw_Mounting="None"' in cmds[0]
+    assert path.name == "openGrid_Full_4x10x2.stl"
+
+
+def test_screw_mounting_rejects_unknown(tmp_stl_dir, fake_openscad):
+    with pytest.raises(ValueError, match="screw_mounting"):
+        generator.generate_stl(4, 10, 2, screw_mounting="Custom")

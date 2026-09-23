@@ -26,6 +26,11 @@ _DEFAULT_OPENSCAD_MACOS = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
 # 单次 OpenSCAD 调用超时（秒）。复杂瓦片 + 多层堆叠 ~几十秒
 _OPENSCAD_TIMEOUT = 120
 
+# openGrid.scad 的 Screw_Mounting 取值里，不需要额外参数就能用的三种。
+# Corners = 四角各一个孔（上游默认）；Everywhere = 每个内部格点一个孔。
+# 孔型用上游默认：M4 沉头（孔径 4.1 / 头径 7.2 / 90°）。
+SCREW_MOUNTING_CHOICES = ("None", "Corners", "Everywhere")
+
 
 def _find_openscad() -> str:
     """先 PATH，找不到回 macOS 默认位置。都没有就给清晰的 setup 提示。"""
@@ -56,6 +61,17 @@ def _resolve_stl_dir() -> Path:
     return Path(os.path.expanduser(raw)).resolve()
 
 
+def resolve_screw_mounting(override: str | None = None) -> str:
+    """命令行 --screws 优先，否则读 opengrid_config.yaml 的 opengrid.screw_mounting（缺省 None）"""
+    value = override
+    if value is None:
+        value = load_config_or_default().get("opengrid", {}).get("screw_mounting", "None")
+    value = str(value)
+    if value not in SCREW_MOUNTING_CHOICES:
+        raise ValueError(f"screw_mounting 只支持 {' / '.join(SCREW_MOUNTING_CHOICES)}，收到: {value}")
+    return value
+
+
 def _resolve_tile_config() -> tuple[str, int, float]:
     """从 config 取 tile_type / tile_size / tile_thickness。"""
     config = load_config_or_default()
@@ -71,6 +87,7 @@ def generate_stl(
     stacks: int = 1,
     verbose: bool = False,
     force: bool = False,
+    screw_mounting: str | None = None,
 ) -> tuple[Path, str]:
     """生成一块 W×H cells 的 openGrid 瓦片 STL，垂直堆叠 stacks 层。
 
@@ -80,6 +97,7 @@ def generate_stl(
         stacks: 垂直堆叠层数（≥1）
         verbose: 打印 OpenSCAD 命令行 + warnings
         force: 已存在文件强制重生
+        screw_mounting: None / Corners / Everywhere；不传则读配置
 
     Returns:
         (output_path, status)，status ∈ {"generated", "skipped"}
@@ -92,10 +110,13 @@ def generate_stl(
     _check_quackworks()
     openscad = _find_openscad()
     tile_type, tile_size, tile_thickness = _resolve_tile_config()
+    screws = resolve_screw_mounting(screw_mounting)
 
     out_dir = _resolve_stl_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    output_path = out_dir / f"openGrid_{tile_type}_{width}x{height}x{stacks}.stl"
+    # 带螺丝孔的文件名加后缀，跟无孔版本的缓存区分开（已存在会被跳过）
+    suffix = "" if screws == "None" else f"_screw{screws}"
+    output_path = out_dir / f"openGrid_{tile_type}_{width}x{height}x{stacks}{suffix}.stl"
 
     if output_path.exists() and not force:
         if verbose:
@@ -122,9 +143,8 @@ def generate_stl(
         # —— 堆叠：Ironing 模式（单材打印，跟 yaml 默认一致），Z 间距对齐 cost_v2 ——
         "-D", 'Stacking_Method="Ironing - BETA"',
         "-D", f"Interface_Separation={interface_separation}",
-        # —— 显式关掉装饰特性（保持跟旧 wrapper.scad 产出的形态一致；
-        #     未来要支持螺丝孔/倒角/连接孔时再扩 yaml 配置）——
-        "-D", 'Screw_Mounting="None"',
+        # —— 螺丝孔来自配置 / --screws；其余装饰特性显式关掉 ——
+        "-D", f'Screw_Mounting="{screws}"',
         "-D", 'Chamfers="None"',
         "-D", "Connector_Holes=false",
         "-D", "Add_Adhesive_Base=false",

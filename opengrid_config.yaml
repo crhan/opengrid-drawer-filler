@@ -22,3 +22,4 @@ opengrid:
   stacking_method: Ironing  # Ironing / Interface
   interface_separation: 0.2 # mm
   tile_size: 28             # 网格单元大小 mm
+  screw_mounting: Corners   # 螺丝孔 None / Corners（四角）/ Everywhere（每个格点）；M4 沉头
