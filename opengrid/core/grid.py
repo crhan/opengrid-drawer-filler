@@ -20,7 +20,7 @@ def max_layers_per_stack(max_z: float, tile_thickness: float, stack_gap: float =
     → n ≤ (max_z + stack_gap) / (tile_thickness + stack_gap)
 
     tile_thickness 是单块瓦片裸厚（Full 6.8mm），不含层间隙。
-    这是唯一的层数上限公式：成本估算、批量合并、slicer generate 校验都走这里，
+    这是唯一的层数上限公式：成本估算、批量合并、slicer generate/3mf 校验都走这里，
     否则会出现"算的是 47 层、实际 47 层有 338mm 超出 Z 轴"这类不一致。
     """
     return max(1, int((max_z + stack_gap) / (tile_thickness + stack_gap)))

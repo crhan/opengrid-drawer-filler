@@ -1247,7 +1247,7 @@ class TestScenario14a:
             f"9×11 总块数应为 45(22×2+1×1)，实际: {nine_eleven['count']}"
         )
         assert total_prints == 1, f"45 块恰好 1 plate，实际: {total_prints}"
-        assert plan['slicer_commands'] == ["slicer generate 9x11x45"]
+        assert plan['slicer_commands'] == ["slicer 3mf 9x11x45"]
 
 
 class TestScenario14b:

@@ -77,6 +77,7 @@ uv run scripts/opengrid.py inventory undo
 uv run scripts/opengrid.py slicer generate 7x5x2
 uv run scripts/opengrid.py slicer generate 7x5x2 -v   # 打印 OpenSCAD 命令行，调试用
 uv run scripts/opengrid.py slicer generate 7x5x2 -f   # 已存在文件强制重生
+uv run scripts/opengrid.py slicer 3mf 7x5x2           # STL + 带 H2D 打印预设的 BambuStudio 项目 3MF（split 的 slicer_commands 就是这个）
 
 # 项目目录：把一次设计任务的方案 + STL + 计划文档放在同一个目录里管理
 uv run scripts/opengrid.py project list             # 列出已有项目

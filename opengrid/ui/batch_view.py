@@ -94,7 +94,7 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
           drawers: [...],                 # 每只抽屉的分割方案 + 库存分摊（已乘份数）
           tiles: [{width, height, count, from_inventory, to_print, prints, stack_layers}],
           stats: {unique_sizes, total_tiles, total_time_min, total_filament_g, total_prints},
-          slicer_commands: ["slicer generate WxHxS", ...],
+          slicer_commands: ["slicer 3mf WxHxS", ...],
           inventory_usage: {...}          # 仅传了库存时
         }
     """
@@ -177,7 +177,7 @@ def build_batch_data(batch_results, merged_tiles, inventory=None, drawer_names=N
         },
         # 每个 Stack 一条，Agent 逐条 exec 即可（顺序无语义）
         "slicer_commands": [
-            f"slicer generate {s.tile.w}x{s.tile.h}x{s.count}" for s in stacks
+            f"slicer 3mf {s.tile.w}x{s.tile.h}x{s.count}" for s in stacks
         ],
     }
 
@@ -249,6 +249,6 @@ def render_batch_text(data):
     print(f"总耗材: ~{stats['total_filament_g']:.0f}g")
     print(f"总打印时间: ~{format_time(stats['total_time_min'])}")
     if data['slicer_commands']:
-        print("\n生成 STL:")
+        print("\n生成 STL + 3MF:")
         for cmd in data['slicer_commands']:
             print(f"  uv run scripts/opengrid.py {cmd}")

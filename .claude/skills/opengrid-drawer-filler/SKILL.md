@@ -1,6 +1,6 @@
 ---
 name: opengrid-drawer-filler
-description: 计算抽屉最优 openGrid 瓦片（28mm 网格）分割方案，可选生成 STL 文件用于 3D 打印。当用户提到抽屉铺满、瓦片分割、给抽屉做收纳、抽屉底板 3D 打印、"我有个 XxY mm 抽屉怎么打"、"帮我算抽屉怎么切"、OpenGrid 库存查询/增减、批量算多个抽屉、方案对比等场景时使用此技能——即便用户没明确说 "OpenGrid" 也要主动触发。
+description: 计算抽屉最优 openGrid 瓦片（28mm 网格）分割方案，可选生成 STL 和带 H2D 打印预设的 BambuStudio 项目 3MF 用于 3D 打印。当用户提到抽屉铺满、瓦片分割、给抽屉做收纳、抽屉底板 3D 打印、"我有个 XxY mm 抽屉怎么打"、"帮我算抽屉怎么切"、OpenGrid 库存查询/增减、批量算多个抽屉、方案对比等场景时使用此技能——即便用户没明确说 "OpenGrid" 也要主动触发。
 compatibility: 需要 Python 3.14+，uv；生成 STL 还需 OpenSCAD 和 BOSL2
 ---
 
@@ -28,7 +28,7 @@ flowchart TD
     E --> F
     F --> G{用户选了?}
     G -- 方案B --> H[Step 5: 询问是否扣库存]
-    G -- 方案A --> I[Step 6: 生成 STL]
+    G -- 方案A --> I[Step 6: 生成 STL + 3MF]
     H --> I
 ```
 
@@ -92,7 +92,7 @@ JSON 结构随抽屉数不同（用有没有 `drawers` 字段区分）：
 **两种都有**：
 
 - `inventory_usage.from_inventory` / `need_print` / `total_from_inventory` / `total_need_print` —— 库存覆盖明细，用来给方案 B 算"节省了多少"；Step 5 扣库存就按 `from_inventory` 扣
-- **`slicer_commands`** —— 一个数组，每条是可直接 exec 的 `slicer generate WxHxS` 命令。Step 6 直接用，**不要再人脑算 stack 层数**。
+- **`slicer_commands`** —— 一个数组，每条是可直接 exec 的 `slicer 3mf WxHxS` 命令。Step 6 直接用，**不要再人脑算 stack 层数**。
 
 库存 key 与方向无关，统一写成小边在前（`6x7`，不是 `7x6`）；CLI 两种写法都接受。
 
@@ -135,34 +135,43 @@ uv run scripts/opengrid.py inventory deduct 7x5:2 --reason "施工 225x255 抽�
 uv run scripts/opengrid.py inventory undo
 ```
 
-### Step 6: 生成 STL
+### Step 6: 生成 STL + 3MF
 
 **直接遍历 Step 3 JSON 里的 `slicer_commands` 数组逐条 exec**，Step 3 已经把"哪几个尺寸要打几层"算好了。
+每条 `slicer 3mf WxHxS` 做两件事：用 OpenSCAD 生成 STL，再打包成带打印预设的 BambuStudio 项目 3MF（未切片）。
 
 > 数组顺序来自 split 算法对 `need_print` 字典的迭代顺序，**不保证语义**（既不是面积降序也不是时间降序）。Agent 不要假设顺序代表打印优先级。
 
 ```bash
 # 形如：
-# ["slicer generate 3x8x2", "slicer generate 6x6x4"]
+# ["slicer 3mf 3x8x2", "slicer 3mf 6x6x4"]
 # Agent 把每条按字面 exec 就行
-uv run scripts/opengrid.py slicer generate 3x8x2
-uv run scripts/opengrid.py slicer generate 6x6x4
+uv run scripts/opengrid.py slicer 3mf 3x8x2
+uv run scripts/opengrid.py slicer 3mf 6x6x4
 ```
 
 边界情况：
 
 - `slicer_commands == []` —— 库存全覆盖（或抽屉需打印数为 0），告诉用户"不需要打印新瓦片，可直接施工"，**跳过 Step 6**。
 - 用户问 WxHxS 的含义：W/H 是瓦片格子数，S 是垂直堆叠的 Tile 层数（一次打印盘多产出）。**不要让用户/Agent 自己从 `need_print` 计算 S** —— `slicer_commands` 已经按 Z 高度限制拆好了。
+- stderr 出现 `警告:` —— 通常是瓦片太大、盘面放不下擦料塔，要转告用户在 BambuStudio 里手动挪一下擦料塔。
+- 只要 STL 不要 3MF：把命令里的 `3mf` 换成 `generate`。
 
-STL 输出到 `opengrid_config.yaml` 中 `output.stl_dir` 配置的目录，文件名形如
-`openGrid_Full_7x5x2.stl`。已存在时跳过；`--force` 强制重生。需要看实际 OpenSCAD 命令
-（调试用）加 `-v` / `--verbose`。
+输出到 `opengrid_config.yaml` 中 `output.stl_dir` 配置的目录，文件名形如
+`openGrid_Full_7x5x2.stl` / `openGrid_Full_7x5x2.3mf`。已存在时跳过；`--force` 两者都强制重生。
+需要看实际 OpenSCAD 命令（调试用）加 `-v` / `--verbose`。
+
+**3MF 里的打印配方**（模板 `opengrid/stl/templates/h2d_pla_support.project_settings.config`，
+取自 2026-02-20 实际打印成功的项目）：H2D 0.4 + `Opengrid堆叠打印` 工艺，耗材 1 = Bambu PLA Basic
+（本体 + 普通支撑），耗材 2 = Bambu Support For PLA/PETG（**支撑接触面**，跟 PLA 不粘，堆叠层能掰开），
+开擦料塔；瓦片放双喷嘴公共区域左下角，擦料塔自动放到旁边空位。用户在 BambuStudio 打开后
+核对 AMS 槽位 → 切片 → 打印。模板只适配 H2D，其他机型只出 STL 并警告。
 
 依赖 OpenSCAD CLI + QuackWorks submodule + BOSL2，缺失时会报清晰错误并提示
 `/opengrid-drawer-filler-setup` skill。
 
-> **限制**：`slicer slice` 和 `slicer open` 目前是 `[未实现]`。生成 STL 后用户需手动在
-> OrcaSlicer/BambuStudio 里打开切片。原因：Orca CLI 在 macOS 上需要 GUI 上下文，无法无头运行。
+> **限制**：3MF 是**未切片**的项目文件，没有 G-code，不能直接发给打印机。`slicer slice` / `slicer open`
+> 仍是 `[未实现]`（切片器 CLI 需要图形界面，无头环境跑不了）。
 
 ## 库存管理
 

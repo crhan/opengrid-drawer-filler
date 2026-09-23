@@ -93,10 +93,10 @@ def output_json(width: int, depth: int, result: Any, copies: int = 1, inventory:
             'filament_support_g': result.cost.total_filament_g * 0.3,  # 估算
         }
 
-        # slicer 命令串：每个 Stack 直接映射为一条 `slicer generate WxHxS`。
+        # slicer 命令串：每个 Stack 直接映射为一条 `slicer 3mf WxHxS`（生成 STL + 打包项目 3MF）。
         # 让 Agent 跳过 stack 推导逻辑，直接 exec。
         slicer_commands = [
-            f"slicer generate {stack.tile.w}x{stack.tile.h}x{stack.count}"
+            f"slicer 3mf {stack.tile.w}x{stack.tile.h}x{stack.count}"
             for stack in result.stacks
         ]
 

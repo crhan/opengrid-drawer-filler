@@ -1,13 +1,22 @@
 # Slicer 集成
 
-## Orca Slicer CLI
+## 现状：自动生成项目 3MF（未切片）
 
-**注意**: Orca Slicer CLI 在 macOS 上需要显示上下文（OpenGL），无法无头运行。
+`uv run scripts/opengrid.py slicer 3mf WxHxS` 纯 Python 把 STL 打包成 BambuStudio 项目 3MF，
+预设取自模板 `opengrid/stl/templates/h2d_pla_support.project_settings.config`（H2D + Opengrid堆叠打印 +
+PLA 本体 / Support For PLA/PETG 接触面）。实现见 `opengrid/stl/threemf.py`。
 
-**当前限制**: CLI 需要 GUI 环境运行，无法在服务器/无界面环境使用。
+打开后在 BambuStudio 里点切片即可，不用再手动选预设、耗材。
 
-## 替代方案
+## 更新模板
 
-1. **直接打开 STL**: 在 OrcaSlicer/BambuStudio 中打开生成的 STL
-2. **手动排版**: 在 slicer 中手动排列模型并选择预设
-3. **使用 3MF 模板**: 手动创建包含预设的 3MF 项目，后续复用
+模板来自打印机实际打过的项目：ha-bambulab 集成会把每次打印的 `.gcode.3mf` 缓存在
+`~/config/homeassistant/www/media/ha-bambulab/*/prints/`，从里面挑一个效果好的，取出
+`Metadata/project_settings.config` 覆盖模板即可；同时把 `threemf.py` 的 `_APP_VERSION`
+改成该文件 `version` 字段（数组形状随 BambuStudio 版本变，必须一致）。
+
+也可以在 BambuStudio 里另存一个项目 3MF，取同一个文件。
+
+## 切片（未实现）
+
+BambuStudio / OrcaSlicer CLI 需要图形上下文（OpenGL），无头环境跑不了，所以 3MF 里不含 G-code。

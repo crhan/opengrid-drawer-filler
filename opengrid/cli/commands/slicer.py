@@ -16,6 +16,12 @@ def add_parser(subparsers):
     gen_p.add_argument('-f', '--force', action='store_true', help='强制重新生成（覆盖已有文件）')
     gen_p.add_argument('-v', '--verbose', action='store_true', help='打印 OpenSCAD 命令行和 stderr')
 
+    # 3mf
+    tmf_p = sub.add_parser('3mf', help='生成 STL 并打包成带打印预设的 BambuStudio 项目 3MF（未切片）')
+    tmf_p.add_argument('dimensions', help='尺寸 WxHxS，同 generate；直接用 split 输出的 slicer_commands 里的参数')
+    tmf_p.add_argument('-f', '--force', action='store_true', help='STL 和 3MF 都强制重新生成')
+    tmf_p.add_argument('-v', '--verbose', action='store_true', help='打印 OpenSCAD 命令行和 stderr')
+
     # slice
     slice_p = sub.add_parser('slice', help='[未实现] 切片 STL')
     slice_p.add_argument('file', help='STL 文件')
@@ -86,30 +92,57 @@ def _parse_slicer_dims(text: str) -> tuple[int, int, int]:
     return w, h, s
 
 
+def _generate_stl_or_exit(args):
+    w, h, s = _parse_slicer_dims(args.dimensions)
+    try:
+        output, status = stl_generator.generate_stl(
+            w, h, s,
+            verbose=getattr(args, 'verbose', False),
+            force=args.force,
+        )
+    except FileNotFoundError as e:
+        print(f"错误: {e}", file=sys.stderr)
+        sys.exit(2)
+    except RuntimeError as e:
+        print(f"错误: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if status == "skipped":
+        print(f"跳过（已存在）: {output}")
+    else:
+        print(f"生成: {output}")
+    return output
+
+
 def handle_slicer(args):
     """处理 slicer 命令"""
     cmd = args.slicer_command
 
     if cmd == 'generate':
-        w, h, s = _parse_slicer_dims(args.dimensions)
+        _generate_stl_or_exit(args)
 
+    elif cmd == '3mf':
+        from opengrid.config import load_config_or_default
+        from opengrid.stl.threemf import build_3mf, TEMPLATE_PRINTER
+        stl = _generate_stl_or_exit(args)
+        model = load_config_or_default().get('printer', {}).get('model', '')
+        if model != TEMPLATE_PRINTER:
+            # 3MF 模板里的机型/预设只对 H2D 有效；别的机型打出来的项目会错配，只给 STL
+            print(f"警告: 3MF 模板只适配 {TEMPLATE_PRINTER}，当前打印机 {model}，跳过 3MF，请手动导入 STL",
+                  file=sys.stderr)
+            return
+        out = stl.with_suffix('.3mf')
+        if out.exists() and not args.force:
+            print(f"跳过（已存在）: {out}")
+            return
         try:
-            output, status = stl_generator.generate_stl(
-                w, h, s,
-                verbose=getattr(args, 'verbose', False),
-                force=args.force,
-            )
-        except FileNotFoundError as e:
-            print(f"错误: {e}", file=sys.stderr)
-            sys.exit(2)
-        except RuntimeError as e:
+            warnings = build_3mf(stl, out)
+        except ValueError as e:
             print(f"错误: {e}", file=sys.stderr)
             sys.exit(1)
-
-        if status == "skipped":
-            print(f"跳过（已存在）: {output}")
-        else:
-            print(f"生成: {output}")
+        print(f"生成: {out}")
+        for w in warnings:
+            print(f"警告: {w}", file=sys.stderr)
 
     elif cmd == 'slice':
         # TODO: 实现切片逻辑
